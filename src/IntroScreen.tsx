@@ -274,18 +274,20 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Deterministic camera shake: Pure function of time since impact
+     * PHASE 4: Deterministic camera shake - Pure function of time since impact
      * Uses sinusoidal combination for stable, FPS-independent shake
+     * No accumulation, no drift, works correctly at any framerate
      */
     function getCameraShake(timeSinceImpact: number): { x: number; y: number } {
       if (timeSinceImpact < 0 || timeSinceImpact > 0.5) {
         return { x: 0, y: 0 };
       }
 
-      // Exponential amplitude decay
+      // PHASE 4: Exponential amplitude decay (k=10 for rapid falloff)
       const amplitude = 0.8 * Math.exp(-timeSinceImpact * 10);
 
-      // Combination of incommensurate frequencies for natural feel
+      // PHASE 4: Combination of incommensurate frequencies for natural feel
+      // Using prime-like frequencies to avoid repetition patterns
       const shake1 = Math.sin(timeSinceImpact * 17.3);
       const shake2 = Math.sin(timeSinceImpact * 23.7);
       const shake3 = Math.sin(timeSinceImpact * 31.1);
@@ -1289,7 +1291,9 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     // ============================================================================
 
     /**
-     * BLUEPRINT 9.1 & 12: Emit explosion debris particles with quality scaling
+     * PHASE 4: Emit explosion debris particles with strict count consistency
+     * Spec: 360 total particles = 120 directions × 3 particles per direction
+     * Quality scaling: HIGH = 360 particles (1.0x), LOW = 180 particles (0.5x)
      */
     function emitDebrisParticles() {
       const impactPoint = new THREE.Vector3(0, -8, 10);
@@ -1299,9 +1303,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         [0.4, 0.9, 0.5]  // Green
       ];
 
-      // Scale burst count by quality (120 bursts of 3 particles = 360 at high quality)
+      // PHASE 4: Scale burst count by quality (120 directions at high, 60 at low)
       const burstCount = Math.floor(120 * qualityConfig.particleScale);
       for (let burst = 0; burst < burstCount; burst++) {
+        // PHASE 4: Evenly distributed radial directions (360° / burstCount)
         const angle = (burst * (360 / burstCount)) * Math.PI / 180;
 
         for (let p = 0; p < 3; p++) {
@@ -1672,22 +1677,26 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         glowMaterial.uniforms.time.value = introElapsed;
       }
 
-      // PHASE 5: Enhanced impact with better timing and flash effects
+      // PHASE 4: Impact explosion with precise timing windows
       if (phase.name === 'impact') {
-        // Explosive growth with ease-out curve for realistic physics
+        // PHASE 4: Strict time windows for controlled sequence
+        // 0-120ms: Explosive burst with visible comet
+        // 120-500ms: Bloom decay, shake decay, debris expansion
+
         if (phase.phaseT < 0.24) {
           const t = phase.phaseT / 0.24;
-          // Ease-out cubic: 1 - (1-t)³
+          // PHASE 4: Ease-out cubic for realistic explosion physics
           const easeOut = 1.0 - Math.pow(1.0 - t, 3.0);
           const explosionScale = 1.0 + (6.0 - 1.0) * easeOut;
           comet.scale.set(explosionScale, explosionScale, explosionScale);
 
-          // Increase comet glow opacity during explosion
+          // PHASE 4: Enhance comet glow during explosion
           if (glowMaterial.uniforms) {
-            const explosionGlow = easeOut * 0.6;
-            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.8 + explosionGlow);
+            const explosionGlow = easeOut * 0.7;
+            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.85 + explosionGlow);
           }
         } else {
+          // Hide comet after explosion burst
           comet.visible = false;
         }
 
