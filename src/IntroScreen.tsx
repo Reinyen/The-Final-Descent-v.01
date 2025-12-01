@@ -525,6 +525,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const starTwinkleSeeds = new Float32Array(starCount);
     const starAbsorptionScales = new Float32Array(starCount);
     const starOriginalPositions = new Float32Array(starCount * 3);
+    const starRippleOffsets = new Float32Array(starCount * 3); // Ripple distortion (separate from physics position)
 
     // PHASE 2: Create high-quality star texture (64x64 for crisp rendering)
     const starCanvas = document.createElement('canvas');
@@ -613,6 +614,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     starGeometry.setAttribute('baseSize', new THREE.BufferAttribute(starBaseSizes, 1));
     starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
     starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
+    starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOffsets, 3));
 
     // ============================================================================
     // PHASE 3 & 4: STARFIELD SHADER (LINEAR COLOR OUTPUT)
@@ -641,6 +643,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         attribute float twinkleSeed;
         attribute float absorptionScale;
         attribute vec3 color;
+        attribute vec3 rippleOffset;
 
         uniform float time;
         uniform float baseOpacity;
@@ -656,6 +659,9 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         void main() {
           vColor = color;
 
+          // Apply ripple offset to position (physics updates position, ripples add distortion)
+          vec3 finalPosition = position + rippleOffset;
+
           // PHASE 4: Twinkle with controlled range [0.8, 1.0] (never exceeds 1.0!)
           // Reduced amplitude (0.1 instead of 0.25) for subtlety
           float twinkle = sin(time * 1.5 + twinkleSeed * 0.5) * 0.1 + 0.9;
@@ -664,8 +670,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           float sizeMultiplier = twinkle * absorptionScale;
           float brightnessMultiplier = twinkle * absorptionScale * starIntensity;
 
-          // Transform to view space
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          // Transform to view space using final position (physics + ripple offset)
+          vec4 mvPosition = modelViewMatrix * vec4(finalPosition, 1.0);
           float viewDistance = -mvPosition.z;
 
           // PHASE 4: Depth cueing - distant stars smaller and dimmer (subtle)
@@ -767,7 +773,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
      * Optimized to eliminate per-frame Vector3 allocations using scratch vectors
      */
     function updateRippleEffects(introElapsed: number) {
-      const positions = starGeometry.attributes.position.array as Float32Array;
+      const rippleOffsets = starGeometry.attributes.rippleOffset.array as Float32Array;
       const basePositions = starGeometry.attributes.basePosition.array as Float32Array;
       const colors = starGeometry.attributes.color.array as Float32Array;
       const baseColors = starGeometry.attributes.baseColor.array as Float32Array;
@@ -781,10 +787,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         }
       }
 
-      // If no active ripples, reset all stars to base colors and positions
+      // If no active ripples, reset all stars to base colors and zero ripple offsets
       if (activeRipples.length === 0) {
         let needsColorReset = false;
-        let needsPositionReset = false;
+        let needsOffsetReset = false;
         for (let i = 0; i < starCount; i++) {
           const i3 = i * 3;
           // Reset colors
@@ -794,19 +800,19 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             colors[i3 + 2] = baseColors[i3 + 2];
             needsColorReset = true;
           }
-          // Reset positions
-          if (positions[i3] !== basePositions[i3] || positions[i3 + 1] !== basePositions[i3 + 1] || positions[i3 + 2] !== basePositions[i3 + 2]) {
-            positions[i3] = basePositions[i3];
-            positions[i3 + 1] = basePositions[i3 + 1];
-            positions[i3 + 2] = basePositions[i3 + 2];
-            needsPositionReset = true;
+          // Reset ripple offsets to zero (not position!)
+          if (rippleOffsets[i3] !== 0 || rippleOffsets[i3 + 1] !== 0 || rippleOffsets[i3 + 2] !== 0) {
+            rippleOffsets[i3] = 0;
+            rippleOffsets[i3 + 1] = 0;
+            rippleOffsets[i3 + 2] = 0;
+            needsOffsetReset = true;
           }
         }
         if (needsColorReset) {
           starGeometry.attributes.color.needsUpdate = true;
         }
-        if (needsPositionReset) {
-          starGeometry.attributes.position.needsUpdate = true;
+        if (needsOffsetReset) {
+          starGeometry.attributes.rippleOffset.needsUpdate = true;
         }
         return;
       }
@@ -885,12 +891,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           colorChanged = true;
         }
 
-        // PHASE 9: Apply position distortion (warps star positions like ripples in water)
+        // PHASE 9: Apply ripple offset distortion (warps star positions like ripples in water)
         const distortionLength = Math.sqrt(totalDistortionX * totalDistortionX + totalDistortionY * totalDistortionY + totalDistortionZ * totalDistortionZ);
         if (distortionLength > 0.001) {
-          positions[i3] = basePosX + totalDistortionX;
-          positions[i3 + 1] = basePosY + totalDistortionY;
-          positions[i3 + 2] = basePosZ + totalDistortionZ;
+          rippleOffsets[i3] = totalDistortionX;
+          rippleOffsets[i3 + 1] = totalDistortionY;
+          rippleOffsets[i3 + 2] = totalDistortionZ;
           positionChanged = true;
         }
       }
@@ -899,7 +905,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         starGeometry.attributes.color.needsUpdate = true;
       }
       if (positionChanged) {
-        starGeometry.attributes.position.needsUpdate = true;
+        starGeometry.attributes.rippleOffset.needsUpdate = true;
       }
     }
 
@@ -1365,7 +1371,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       },
       vertexShader: `
         attribute float size;
-        attribute vec3 color;
         varying vec3 vColor;
 
         uniform float pixelRatio;
@@ -2187,9 +2192,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           renderer.render(scene, camera);
         }
       } else {
-        // TEMP TEST: Bypass composer, render directly
-        renderer.render(scene, camera);
-        // composer.render();
+        // Normal mode: use composer with all passes enabled
+        composer.render();
       }
 
       if (frameCount === 1) {
