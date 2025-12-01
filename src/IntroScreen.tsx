@@ -507,15 +507,15 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const crackPass = new ShaderPass(crackShader);
     composer.addPass(crackPass);
 
-    // PHASE 1: UnrealBloomPass with AGGRESSIVE THRESHOLD for selective bloom
+    // CRITICAL FIX: UnrealBloomPass with balanced threshold to prevent whiteout
     // Applied AFTER crack shader to enhance glowing effects on cracks
-    // CRITICAL FIX: Raised threshold from 0.3 to 0.85 to prevent starfield blooming
-    // Only very bright elements (comet, crack highlights, accretion) will bloom
+    // Base strength: 0.8 (very conservative to prevent whiteout)
+    // Threshold: 0.6 (allows bright elements to bloom without washing out scene)
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.5 * qualityConfig.bloomStrengthScale, // REDUCED base from 2.0 to 1.5
-      0.4, // radius (reduced from 0.5 for tighter glow)
-      0.85  // threshold (RAISED from 0.3 to 0.85 for selective bloom)
+      0.8 * qualityConfig.bloomStrengthScale, // DRASTICALLY REDUCED from 1.5
+      0.4, // radius (tighter glow)
+      0.6  // threshold (balanced - not too high, not too low)
     );
     composer.addPass(bloomPass);
 
@@ -1705,47 +1705,47 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           const explosionScale = 1.0 + (6.0 - 1.0) * easeOut;
           comet.scale.set(explosionScale, explosionScale, explosionScale);
 
-          // PHASE 4: Enhance comet glow during explosion
+          // CRITICAL FIX: Moderate comet glow during explosion (prevent whiteout)
           if (glowMaterial.uniforms) {
-            const explosionGlow = easeOut * 0.7;
-            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.85 + explosionGlow);
+            const explosionGlow = easeOut * 0.4; // REDUCED from 0.7 to 0.4
+            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.7 + explosionGlow);
           }
         } else {
           // Hide comet after explosion burst
           comet.visible = false;
         }
 
-        // PHASE 1 FIX: Controlled bloom spike (SIGNIFICANTLY REDUCED to prevent whiteout)
-        // Base strength is now 1.5 (set at bloom pass creation)
-        // Peak reduced from 6.0 to 2.5 for controlled flash
-        let bloomStrength = 1.5;
+        // CRITICAL FIX: DRASTICALLY reduced bloom spike to prevent whiteout
+        // Base strength is now 0.8 (set at bloom pass creation)
+        // Peak: 1.2 (was 2.5) - just enough for impact flash without washing out
+        let bloomStrength = 0.8;
         if (!prefersReducedMotion) {
           if (phase.phaseT < 0.04) {
-            // Instant flash in first 20ms - REDUCED from 6.0 to 2.5
-            bloomStrength = 2.5;
+            // Instant flash in first 20ms - DRASTICALLY REDUCED to 1.2
+            bloomStrength = 1.2;
           } else if (phase.phaseT < 0.2) {
             // Rapid decay to medium bloom (20-100ms)
             const t = (phase.phaseT - 0.04) / 0.16;
-            bloomStrength = 2.5 - (2.5 - 2.0) * t; // 2.5 -> 2.0
+            bloomStrength = 1.2 - (1.2 - 1.0) * t; // 1.2 -> 1.0
           } else if (phase.phaseT < 0.6) {
             // Exponential decay to base (100-300ms)
             const t = (phase.phaseT - 0.2) / 0.4;
-            bloomStrength = 2.0 * Math.exp(-t * 1.5); // Gentler decay
-            bloomStrength = Math.max(bloomStrength, 1.5); // Floor at base
+            bloomStrength = 1.0 * Math.exp(-t * 1.2);
+            bloomStrength = Math.max(bloomStrength, 0.8); // Floor at base
           } else {
-            bloomStrength = 1.5;
+            bloomStrength = 0.8;
           }
         } else {
-          // Reduced motion: gentler bloom spike
+          // Reduced motion: even gentler bloom spike
           if (phase.phaseT < 0.2) {
-            bloomStrength = 2.0;
+            bloomStrength = 1.0;
           } else {
-            bloomStrength = 1.5;
+            bloomStrength = 0.8;
           }
         }
         bloomPass.strength = bloomStrength * qualityConfig.bloomStrengthScale;
       } else {
-        bloomPass.strength = 1.5 * qualityConfig.bloomStrengthScale; // Reset to base
+        bloomPass.strength = 0.8 * qualityConfig.bloomStrengthScale; // Reset to base
       }
 
       // CRATER_SETTLE: Black hole formation + reality cracks + title

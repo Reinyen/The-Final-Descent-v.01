@@ -125,14 +125,20 @@ Total duration: **6.5 seconds** + idle loop
 
 ### Bloom Configuration
 
-**Problem Solved:** Original bloom peak of 6.0 caused complete whiteout.
+**Problem Solved:** Original bloom peak of 6.0 caused complete whiteout. Even after initial reduction to 2.5, screen still went white during impact.
 
-**Solution:**
-- Base strength: 1.5 (reduced from 2.0)
-- Peak strength: 2.5 (reduced from 6.0)
-- Threshold: 0.85 (raised from 0.3)
+**Final Solution:**
+- Base strength: 0.8 (drastically reduced from original 2.0)
+- Peak strength: 1.2 (reduced from original 6.0, then 2.5)
+- Threshold: 0.6 (balanced for both LDR and HDR pipelines)
 
-**Result:** Only very bright elements bloom (comet, crack highlights, accretion glow). Stars and background do not wash out.
+**Impact Timeline:**
+- 0-40ms: Spike from 0.8 → 1.2 (gentle flash)
+- 40-200ms: Decay 1.2 → 1.0
+- 200-300ms: Exponential decay 1.0 → 0.8
+- After 300ms: Base 0.8
+
+**Result:** Impact flash is visible but not blinding. Black hole and reality cracks appear correctly at 4.5s. No whiteout, no washing out.
 
 ### Starfield Shader
 
@@ -322,10 +328,12 @@ In COMPLETE phase (6.5s+), memory should be stable:
 ## 🎨 Visual Tuning Guide
 
 ### Want MORE intense impact flash?
-Increase bloom peak (line ~1603):
+Increase bloom peak (line ~1724):
 ```typescript
-bloomStrength = 3.0; // Was 2.5
+bloomStrength = 1.5; // Was 1.2 (CAUTION: higher values cause whiteout)
 ```
+
+**Warning:** Values above 1.5 may cause whiteout. The current value of 1.2 is carefully balanced.
 
 ### Want LONGER camera shake?
 Increase duration check (line ~282):
