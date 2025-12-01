@@ -1359,20 +1359,42 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         glowMaterial.uniforms.time.value = introElapsed;
       }
 
-      // IMPACT: Explosion + camera shake + bloom spike
+      // PHASE 5: Enhanced impact with better timing and flash effects
       if (phase.name === 'impact') {
-        // Explosive growth in first 100ms (0-0.2 of phase)
-        if (phase.phaseT < 0.2) {
-          const explosionProgress = phase.phaseT / 0.2;
-          const explosionScale = 1.0 + (5.0 - 1.0) * explosionProgress;
+        // Explosive growth with ease-out curve for realistic physics
+        if (phase.phaseT < 0.24) {
+          const t = phase.phaseT / 0.24;
+          // Ease-out cubic: 1 - (1-t)³
+          const easeOut = 1.0 - Math.pow(1.0 - t, 3.0);
+          const explosionScale = 1.0 + (6.0 - 1.0) * easeOut;
           comet.scale.set(explosionScale, explosionScale, explosionScale);
+
+          // Increase comet glow opacity during explosion
+          if (glowMaterial.uniforms) {
+            const explosionGlow = easeOut * 0.6;
+            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.8 + explosionGlow);
+          }
         } else {
           comet.visible = false;
         }
 
-        // Bloom spike (quick rise, then decay)
-        const spikeProgress = Math.min(phase.phaseT / 0.16, 1.0); // Spike in first 80ms
-        bloomPass.strength = 2.0 + (6.0 - 2.0) * (1.0 - spikeProgress);
+        // Multi-stage bloom spike with impact flash
+        let bloomStrength = 2.0;
+        if (phase.phaseT < 0.04) {
+          // Instant flash in first 20ms (0-0.04 of 0.5s phase)
+          bloomStrength = 12.0;
+        } else if (phase.phaseT < 0.2) {
+          // Rapid decay to high bloom (20-100ms)
+          const t = (phase.phaseT - 0.04) / 0.16;
+          bloomStrength = 12.0 - (12.0 - 8.0) * t;
+        } else if (phase.phaseT < 0.6) {
+          // Exponential decay to base (100-300ms)
+          const t = (phase.phaseT - 0.2) / 0.4;
+          bloomStrength = 8.0 * Math.exp(-t * 3.0);
+        } else {
+          bloomStrength = 2.0;
+        }
+        bloomPass.strength = bloomStrength;
       } else {
         bloomPass.strength = 2.0; // Reset to base
       }
