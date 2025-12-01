@@ -98,11 +98,20 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     composerEnabled: true,
     bloomEnabled: true,
     fxaaEnabled: true,
+    outputPassEnabled: true,
+    crackPassEnabled: true, // Future: for Phase 6
     starsEnabled: true,
     cometEnabled: true,
     particlesEnabled: true,
     blackHoleEnabled: true,
-    renderTargetType: 'detecting...' as string
+    uiEnabled: true,
+    parityMode: false, // Golden parity: composer with ONLY RenderPass
+    timeFrozen: false,
+    scrubbedTime: 0,
+    renderTargetType: 'detecting...' as string,
+    renderSize: { width: 0, height: 0 },
+    toneMapping: 'unknown' as string,
+    outputColorSpace: 'unknown' as string
   });
 
   // PHASE 6: Keyboard accessibility handler
@@ -157,6 +166,41 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           break;
         case '7':
           setDiagnostics(prev => ({ ...prev, blackHoleEnabled: !prev.blackHoleEnabled }));
+          break;
+        case '8':
+          setDiagnostics(prev => ({ ...prev, outputPassEnabled: !prev.outputPassEnabled }));
+          break;
+        case '9':
+          setDiagnostics(prev => ({ ...prev, crackPassEnabled: !prev.crackPassEnabled }));
+          break;
+        case '0':
+          setDiagnostics(prev => ({ ...prev, uiEnabled: !prev.uiEnabled }));
+          break;
+        case 'p':
+          // Toggle parity mode (golden reference: RenderPass only)
+          setDiagnostics(prev => ({ ...prev, parityMode: !prev.parityMode }));
+          break;
+        case 'f':
+          // Freeze/unfreeze time
+          setDiagnostics(prev => ({ ...prev, timeFrozen: !prev.timeFrozen }));
+          break;
+        case ',':
+        case '<':
+          // Scrub time backward (0.1s steps)
+          setDiagnostics(prev => ({
+            ...prev,
+            scrubbedTime: Math.max(0, prev.scrubbedTime - 0.1),
+            timeFrozen: true
+          }));
+          break;
+        case '.':
+        case '>':
+          // Scrub time forward (0.1s steps)
+          setDiagnostics(prev => ({
+            ...prev,
+            scrubbedTime: Math.min(10, prev.scrubbedTime + 0.1),
+            timeFrozen: true
+          }));
           break;
       }
     };
@@ -309,19 +353,37 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     // PHASE 1: HDR RENDER TARGET DETECTION & SETUP
     // ============================================================================
 
-    // Detect HDR support (half-float render targets)
+    // PHASE 1: Enhanced HDR support detection with diagnostic data
     const supportsHDR = renderer.capabilities.isWebGL2;
-    let renderTargetType: string = 'LDR';
+    let renderTargetType: string = 'LDR (UnsignedByte)';
+    let actualHDRSupport = false;
 
     if (supportsHDR) {
       const halfFloatExt = renderer.extensions.get('EXT_color_buffer_half_float');
       if (halfFloatExt) {
         renderTargetType = 'HDR (HalfFloat)';
+        actualHDRSupport = true;
+      } else {
+        renderTargetType = 'LDR (WebGL2, no HalfFloat ext)';
       }
     }
 
-    // Update diagnostic state with render target type
-    setDiagnostics(prev => ({ ...prev, renderTargetType }));
+    // PHASE 1: Gather comprehensive diagnostic data
+    const toneMappingNames = ['NoToneMapping', 'LinearToneMapping', 'ReinhardToneMapping',
+                               'CineonToneMapping', 'ACESFilmicToneMapping', 'CustomToneMapping'];
+    const toneMapping = toneMappingNames[renderer.toneMapping] || 'Unknown';
+    const outputColorSpaceName = renderer.outputColorSpace === THREE.SRGBColorSpace ? 'sRGB' :
+                                   renderer.outputColorSpace === THREE.LinearSRGBColorSpace ? 'Linear-sRGB' :
+                                   'Unknown';
+
+    // Update diagnostic state with comprehensive pipeline info
+    setDiagnostics(prev => ({
+      ...prev,
+      renderTargetType,
+      renderSize: { width: window.innerWidth, height: window.innerHeight },
+      toneMapping,
+      outputColorSpace: outputColorSpaceName
+    }));
 
     // ============================================================================
     // BLUEPRINT 1.2: POST-PROCESSING PIPELINE (DOCUMENTED ORDER)
@@ -334,8 +396,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     // 4. Output: Tone mapping and color space conversion
     // ============================================================================
 
-    // Create composer with HDR render targets if supported
-    const composer = new EffectComposer(renderer, supportsHDR ?
+    // PHASE 1: Create composer with HDR render targets ONLY if extension available
+    const composer = new EffectComposer(renderer, actualHDRSupport ?
       new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
         type: THREE.HalfFloatType,
         colorSpace: THREE.LinearSRGBColorSpace
@@ -1636,7 +1698,13 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       const rawDelta = clock.getDelta();
       const deltaTime = Math.min(rawDelta, 1 / 30); // Clamp to 30fps max step
 
-      introElapsed += deltaTime;
+      // PHASE 1: Time freeze/scrub support for diagnostics
+      if (debugMode && diagnostics.timeFrozen) {
+        introElapsed = diagnostics.scrubbedTime;
+      } else {
+        introElapsed += deltaTime;
+      }
+
       const phase = getPhaseInfo(introElapsed);
 
       // Update shader time uniforms (use introElapsed for consistency)
@@ -1856,14 +1924,25 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         glassParticles.visible = diagnostics.particlesEnabled;
         blackHoleGroup.visible = blackHoleGroup.visible && diagnostics.blackHoleEnabled; // Respect phase visibility
 
-        // Control post-processing passes
-        bloomPass.enabled = diagnostics.bloomEnabled;
-        fxaaPass.enabled = diagnostics.fxaaEnabled;
+        // PHASE 1: Control post-processing passes
+        if (diagnostics.parityMode) {
+          // Golden parity mode: ONLY RenderPass (all other passes disabled)
+          bloomPass.enabled = false;
+          fxaaPass.enabled = false;
+          outputPass.enabled = false;
+        } else {
+          // Normal diagnostic mode: individual pass toggles
+          bloomPass.enabled = diagnostics.bloomEnabled;
+          fxaaPass.enabled = diagnostics.fxaaEnabled;
+          outputPass.enabled = diagnostics.outputPassEnabled;
+          // crackPass toggle will be added in Phase 6
+        }
 
         // Render with or without composer
         if (diagnostics.composerEnabled) {
           composer.render();
         } else {
+          // Direct renderer path (bypass composer entirely)
           renderer.render(scene, camera);
         }
       } else {
@@ -1955,81 +2034,132 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       <div ref={containerRef} className="absolute inset-0" />
 
       {/* PHASE 1: Enhanced Debug HUD with Diagnostics */}
-      {debugMode && (
+      {debugMode && diagnostics.uiEnabled && (
         <div className="absolute top-4 left-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none">
-          <div className="font-bold text-green-400 mb-2">DEBUG MODE (Press D for Diagnostics)</div>
+          <div className="font-bold text-green-400 mb-2">DEBUG MODE (Press D for Controls)</div>
           <div>Phase: {debugState.phase}</div>
-          <div>Elapsed: {debugState.elapsed.toFixed(2)}s</div>
+          <div className={diagnostics.timeFrozen ? 'text-yellow-400' : ''}>
+            Elapsed: {debugState.elapsed.toFixed(2)}s {diagnostics.timeFrozen ? '(FROZEN - F/,/.)' : ''}
+          </div>
           <div>FPS: {debugState.fps}</div>
           <div>Pulled Stars: {debugState.pulledStars}</div>
           <div>Active Particles: {debugState.activeParticles}</div>
-          <div>Quality: {activeQuality}</div>
-          <div>DPR: {Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax).toFixed(2)}</div>
-          <div>Render Target: {diagnostics.renderTargetType}</div>
-          <div>Reduced Motion: {prefersReducedMotion ? 'Yes' : 'No'}</div>
+          <div className="mt-2 pt-2 border-t border-gray-700">
+            <div className="font-bold text-blue-400 mb-1">Pipeline Info:</div>
+            <div>Quality: {activeQuality}</div>
+            <div>DPR: {Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax).toFixed(2)}</div>
+            <div>Render Size: {diagnostics.renderSize.width}x{diagnostics.renderSize.height}</div>
+            <div>RT Type: {diagnostics.renderTargetType}</div>
+            <div>Tone Map: {diagnostics.toneMapping}</div>
+            <div>Output CS: {diagnostics.outputColorSpace}</div>
+            <div>Reduced Motion: {prefersReducedMotion ? 'Yes' : 'No'}</div>
+          </div>
+          {diagnostics.parityMode && (
+            <div className="mt-2 pt-2 border-t border-yellow-600">
+              <div className="font-bold text-yellow-400">⚠ PARITY MODE (Press P)</div>
+              <div className="text-yellow-300 text-xs">RenderPass only - compare to direct render</div>
+            </div>
+          )}
         </div>
       )}
 
       {/* PHASE 1: Diagnostic Controls Panel */}
-      {debugMode && diagnostics.showPanel && (
-        <div className="absolute top-4 right-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none">
+      {debugMode && diagnostics.showPanel && diagnostics.uiEnabled && (
+        <div className="absolute top-4 right-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none max-h-screen overflow-y-auto">
           <div className="font-bold text-cyan-400 mb-2">DIAGNOSTICS</div>
           <div className="text-gray-400 mb-2">Press keys to toggle:</div>
-          <div className={diagnostics.composerEnabled ? 'text-green-400' : 'text-red-400'}>
-            [1] Composer: {diagnostics.composerEnabled ? 'ON' : 'OFF'}
+
+          <div className="mb-2 pb-2 border-b border-gray-700">
+            <div className="text-purple-400 font-bold mb-1">Rendering:</div>
+            <div className={diagnostics.composerEnabled ? 'text-green-400' : 'text-red-400'}>
+              [1] Composer: {diagnostics.composerEnabled ? 'ON' : 'OFF (direct render)'}
+            </div>
+            <div className={diagnostics.parityMode ? 'text-yellow-400' : 'text-gray-500'}>
+              [P] Parity Mode: {diagnostics.parityMode ? 'ON (RenderPass only)' : 'OFF'}
+            </div>
           </div>
-          <div className={diagnostics.bloomEnabled ? 'text-green-400' : 'text-red-400'}>
-            [2] Bloom: {diagnostics.bloomEnabled ? 'ON' : 'OFF'}
+
+          <div className="mb-2 pb-2 border-b border-gray-700">
+            <div className="text-purple-400 font-bold mb-1">Post-Processing:</div>
+            <div className={diagnostics.bloomEnabled ? 'text-green-400' : 'text-red-400'}>
+              [2] Bloom: {diagnostics.bloomEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.fxaaEnabled ? 'text-green-400' : 'text-red-400'}>
+              [3] FXAA: {diagnostics.fxaaEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.outputPassEnabled ? 'text-green-400' : 'text-red-400'}>
+              [8] OutputPass: {diagnostics.outputPassEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.crackPassEnabled ? 'text-gray-500' : 'text-gray-600'}>
+              [9] CrackPass: {diagnostics.crackPassEnabled ? 'ON' : 'OFF'} (Phase 6)
+            </div>
           </div>
-          <div className={diagnostics.fxaaEnabled ? 'text-green-400' : 'text-red-400'}>
-            [3] FXAA: {diagnostics.fxaaEnabled ? 'ON' : 'OFF'}
+
+          <div className="mb-2 pb-2 border-b border-gray-700">
+            <div className="text-purple-400 font-bold mb-1">Scene Objects:</div>
+            <div className={diagnostics.starsEnabled ? 'text-green-400' : 'text-red-400'}>
+              [4] Stars: {diagnostics.starsEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.cometEnabled ? 'text-green-400' : 'text-red-400'}>
+              [5] Comet: {diagnostics.cometEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.particlesEnabled ? 'text-green-400' : 'text-red-400'}>
+              [6] Particles: {diagnostics.particlesEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.blackHoleEnabled ? 'text-green-400' : 'text-red-400'}>
+              [7] Black Hole: {diagnostics.blackHoleEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.uiEnabled ? 'text-green-400' : 'text-red-400'}>
+              [0] UI: {diagnostics.uiEnabled ? 'ON' : 'OFF'}
+            </div>
           </div>
-          <div className={diagnostics.starsEnabled ? 'text-green-400' : 'text-red-400'}>
-            [4] Stars: {diagnostics.starsEnabled ? 'ON' : 'OFF'}
-          </div>
-          <div className={diagnostics.cometEnabled ? 'text-green-400' : 'text-red-400'}>
-            [5] Comet: {diagnostics.cometEnabled ? 'ON' : 'OFF'}
-          </div>
-          <div className={diagnostics.particlesEnabled ? 'text-green-400' : 'text-red-400'}>
-            [6] Particles: {diagnostics.particlesEnabled ? 'ON' : 'OFF'}
-          </div>
-          <div className={diagnostics.blackHoleEnabled ? 'text-green-400' : 'text-red-400'}>
-            [7] Black Hole: {diagnostics.blackHoleEnabled ? 'ON' : 'OFF'}
+
+          <div className="mb-2">
+            <div className="text-purple-400 font-bold mb-1">Time Control:</div>
+            <div className={diagnostics.timeFrozen ? 'text-yellow-400' : 'text-gray-500'}>
+              [F] Freeze: {diagnostics.timeFrozen ? 'FROZEN' : 'Running'}
+            </div>
+            <div className="text-gray-400 text-xs ml-4">
+              [,] / [.] Scrub ±0.1s
+            </div>
           </div>
         </div>
       )}
 
       {/* Title Text - PHASE 6: Added semantic heading and aria-live */}
-      <div
-        className={`absolute top-[30%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-opacity duration-600 ${
-          showTitle ? 'opacity-100' : 'opacity-0'
-        }`}
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <h1
-          className={`font-rajdhani font-bold text-5xl tracking-[0.25em] text-white text-center ${
-            titleGlitch ? 'animate-glitch' : showTitle ? 'animate-glitch-in' : ''
+      {(!debugMode || diagnostics.uiEnabled) && (
+        <div
+          className={`absolute top-[30%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-opacity duration-600 ${
+            showTitle ? 'opacity-100' : 'opacity-0'
           }`}
-          style={{
-            textShadow: `
-              2px 0 0 rgba(255, 0, 255, 0.7),
-              -2px 0 0 rgba(0, 255, 255, 0.7),
-              0 0 40px rgba(150, 100, 200, 0.8)
-            `
-          }}
+          aria-live="polite"
+          aria-atomic="true"
         >
-          THE FINAL DESCENT
-        </h1>
-      </div>
+          <h1
+            className={`font-rajdhani font-bold text-5xl tracking-[0.25em] text-white text-center ${
+              titleGlitch ? 'animate-glitch' : showTitle ? 'animate-glitch-in' : ''
+            }`}
+            style={{
+              textShadow: `
+                2px 0 0 rgba(255, 0, 255, 0.7),
+                -2px 0 0 rgba(0, 255, 255, 0.7),
+                0 0 40px rgba(150, 100, 200, 0.8)
+              `
+            }}
+          >
+            THE FINAL DESCENT
+          </h1>
+        </div>
+      )}
 
       {/* PHASE 6: Enhanced button with accessibility and focus states */}
-      <div
-        className={`absolute top-[66%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-opacity duration-500 ${
-          showButton ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
-        <button
+      {(!debugMode || diagnostics.uiEnabled) && (
+        <div
+          className={`absolute top-[66%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-opacity duration-500 ${
+            showButton ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <button
           ref={buttonRef}
           className={`font-rajdhani font-semibold text-base tracking-[0.2em] text-white bg-transparent border-none px-4 py-2 cursor-pointer transition-all duration-200 hover:scale-110 focus:scale-110 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-60 ${
             buttonGlitch ? 'animate-glitch' : showButton ? 'animate-glitch-in' : ''
@@ -2051,7 +2181,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         >
           BEGIN THE DESCENT
         </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
