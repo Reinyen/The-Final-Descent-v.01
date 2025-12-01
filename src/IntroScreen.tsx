@@ -13,6 +13,48 @@ type AnimationPhase = 'fade_in' | 'comet_approach' | 'impact' | 'crater_settle' 
 
 interface IntroScreenProps {
   onBegin?: () => void;
+  quality?: 'high' | 'low' | 'auto'; // BLUEPRINT 12: Quality tier configuration
+  debugMode?: boolean; // BLUEPRINT 14: Debug HUD toggle
+}
+
+// BLUEPRINT 12: Quality tier configuration
+interface QualityConfig {
+  particleScale: number;      // Multiplier for particle counts
+  bloomStrengthScale: number; // Multiplier for bloom intensity
+  pixelRatioMax: number;      // Max device pixel ratio
+  enableGlassParticles: boolean; // Whether to emit glass dust
+}
+
+const QUALITY_CONFIGS: Record<'high' | 'low', QualityConfig> = {
+  high: {
+    particleScale: 1.0,
+    bloomStrengthScale: 1.0,
+    pixelRatioMax: 2.0,
+    enableGlassParticles: true
+  },
+  low: {
+    particleScale: 0.5,
+    bloomStrengthScale: 0.7,
+    pixelRatioMax: 1.5,
+    enableGlassParticles: false
+  }
+};
+
+/**
+ * BLUEPRINT 12.2: Auto-detect quality based on device capabilities
+ */
+function detectQuality(): 'high' | 'low' {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const pixelRatio = window.devicePixelRatio;
+  const totalPixels = width * height * Math.min(pixelRatio, 2);
+
+  // Low-end devices: small screens or low pixel counts
+  if (totalPixels < 1920 * 1080 || pixelRatio < 1.5) {
+    return 'low';
+  }
+
+  return 'high';
 }
 
 /**
@@ -23,13 +65,31 @@ interface IntroScreenProps {
  *
  * @param {Function} onBegin - Callback triggered when user clicks begin button
  */
-export default function IntroScreen({ onBegin }: IntroScreenProps) {
+export default function IntroScreen({ onBegin, quality = 'auto', debugMode = false }: IntroScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [showTitle, setShowTitle] = useState(false);
   const [showButton, setShowButton] = useState(false);
   const [titleGlitch, setTitleGlitch] = useState(false);
   const [buttonGlitch, setButtonGlitch] = useState(false);
+
+  // BLUEPRINT 11.3: Track initialization and glitch timeouts for cleanup
+  const initializedRef = useRef(false);
+  const glitchTimeoutsRef = useRef<Set<number>>(new Set());
+
+  // BLUEPRINT 12 & 13: Quality and accessibility configuration
+  const activeQuality = quality === 'auto' ? detectQuality() : quality;
+  const qualityConfig = QUALITY_CONFIGS[activeQuality];
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // BLUEPRINT 14: Debug state tracking
+  const [debugState, setDebugState] = useState({
+    phase: 'fade_in' as AnimationPhase,
+    elapsed: 0,
+    fps: 0,
+    pulledStars: 0,
+    activeParticles: 0
+  });
 
   // PHASE 6: Keyboard accessibility handler
   useEffect(() => {
@@ -54,6 +114,13 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // BLUEPRINT 11.3: StrictMode safety - prevent double initialization
+    if (initializedRef.current) {
+      console.warn('[IntroScreen] Already initialized, skipping duplicate effect (StrictMode)');
+      return;
+    }
+    initializedRef.current = true;
+
     // ============================================================================
     // SCENE SETUP
     // ============================================================================
@@ -66,10 +133,16 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     );
     camera.position.set(0, 0, 30);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    // BLUEPRINT 1.1: Renderer configuration (LDR pipeline with post-AA)
+    const renderer = new THREE.WebGLRenderer({
+      alpha: false,
+      antialias: false // Using FXAA post-processing instead
+    });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax));
     renderer.setClearColor(0x000000);
+    // LDR color pipeline - keep all values in [0,1] range in shaders
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     containerRef.current.appendChild(renderer.domElement);
 
     // ============================================================================
@@ -193,8 +266,17 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     }
 
     // ============================================================================
-    // POST-PROCESSING PIPELINE
-    // Order: Render → Crack → Bloom → FXAA
+    // BLUEPRINT 1.2: POST-PROCESSING PIPELINE (DOCUMENTED ORDER)
+    // Order: RenderPass → CrackEffect → UnrealBloom → FXAA
+    //
+    // Rationale (Option A from Blueprint):
+    // 1. RenderPass: Render scene to buffer
+    // 2. CrackEffect: Modify scene color with reality cracks and distortions
+    // 3. UnrealBloom: Bloom both underlying scene AND crack highlights (hot edges glow)
+    // 4. FXAA: Final anti-aliasing pass for smooth edges
+    //
+    // This order allows cracks to participate in bloom, creating the desired
+    // "reality-breaking glow" aesthetic where crack edges emit light.
     // ============================================================================
     const composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, camera);
@@ -338,11 +420,11 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     const crackPass = new ShaderPass(crackShader);
     composer.addPass(crackPass);
 
-    // UnrealBloomPass
+    // BLUEPRINT 1.2 & 12: UnrealBloomPass with quality scaling
     // Applied AFTER crack shader to enhance glowing effects on cracks
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      2.0, // strength
+      2.0 * qualityConfig.bloomStrengthScale, // strength scaled by quality
       0.5, // radius
       0.3  // threshold
     );
@@ -358,13 +440,15 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     composer.addPass(fxaaPass);
 
     // ============================================================================
-    // STARFIELD SYSTEM (3000 stars)
+    // BLUEPRINT 4: STARFIELD SYSTEM (GPU-optimized with per-star attributes)
     // ============================================================================
     const starCount = 3000;
     const starGeometry = new THREE.BufferGeometry();
     const starPositions = new Float32Array(starCount * 3);
     const starColors = new Float32Array(starCount * 3);
-    const starSizes = new Float32Array(starCount);
+    const starBaseSizes = new Float32Array(starCount);
+    const starTwinkleSeeds = new Float32Array(starCount);
+    const starAbsorptionScales = new Float32Array(starCount);
     const starOriginalPositions = new Float32Array(starCount * 3);
 
     // Create star texture (32x32 radial gradient)
@@ -414,15 +498,24 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         starColors[i3 + 2] = 0.8;
       }
 
-      // Base size (0.5 - 2.0)
-      starSizes[i] = 0.5 + Math.random() * 1.5;
+      // BLUEPRINT 4.1: Per-star attributes for GPU-based animation
+      // Base size (0.5 - 2.0) - immutable
+      starBaseSizes[i] = 0.5 + Math.random() * 1.5;
+
+      // Twinkle seed for deterministic GPU animation
+      starTwinkleSeeds[i] = Math.random() * 100.0;
+
+      // Absorption scale (1.0 = normal, decreases when pulled into black hole)
+      starAbsorptionScales[i] = 1.0;
     }
 
     starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
     starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-    starGeometry.setAttribute('size', new THREE.BufferAttribute(starSizes, 1));
+    starGeometry.setAttribute('baseSize', new THREE.BufferAttribute(starBaseSizes, 1));
+    starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
+    starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
 
-    // PHASE 2: GPU-based starfield shader with hardware twinkling
+    // BLUEPRINT 4.2: GPU-based starfield shader with per-vertex attributes
     const starMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0.0 },
@@ -430,7 +523,9 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         baseOpacity: { value: 1.0 }
       },
       vertexShader: `
-        attribute float size;
+        attribute float baseSize;
+        attribute float twinkleSeed;
+        attribute float absorptionScale;
         attribute vec3 color;
 
         uniform float time;
@@ -442,15 +537,14 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         void main() {
           vColor = color;
 
-          // GPU-based twinkling: deterministic per-star using position as seed
-          float starSeed = position.x * 12.9898 + position.y * 78.233 + position.z * 37.719;
-          float twinkle = sin(time * 2.5 + starSeed) * 0.3 + 0.85;
+          // BLUEPRINT 4.2: GPU-based twinkling using per-star seed
+          float twinkle = sin(time * 2.5 + twinkleSeed * 0.5) * 0.3 + 0.85;
 
-          // Apply twinkling to size
-          float finalSize = size * twinkle;
+          // BLUEPRINT 4.3: Apply absorption scale (modified on CPU during black hole pull)
+          float finalSize = baseSize * twinkle * absorptionScale;
 
-          // Calculate alpha based on opacity
-          vAlpha = baseOpacity * twinkle;
+          // Calculate alpha based on opacity and absorption
+          vAlpha = baseOpacity * twinkle * absorptionScale;
 
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           gl_PointSize = finalSize * (300.0 / -mvPosition.z);
@@ -1011,12 +1105,17 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     let activeDebrisCount = 0;
     let activeGlassCount = 0;
 
+    // BLUEPRINT 14: FPS tracking for debug HUD
+    let lastFpsUpdate = 0;
+    let frameCount = 0;
+    let currentFps = 60;
+
     // ============================================================================
     // PARTICLE EMISSION FUNCTIONS
     // ============================================================================
 
     /**
-     * Emit explosion debris particles in 360° burst
+     * BLUEPRINT 9.1 & 12: Emit explosion debris particles with quality scaling
      */
     function emitDebrisParticles() {
       const impactPoint = new THREE.Vector3(0, -8, 10);
@@ -1026,9 +1125,10 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         [0.4, 0.9, 0.5]  // Green
       ];
 
-      // 120 bursts of 3 particles = 360 particles
-      for (let burst = 0; burst < 120; burst++) {
-        const angle = (burst * 3) * Math.PI / 180; // Every 3 degrees
+      // Scale burst count by quality (120 bursts of 3 particles = 360 at high quality)
+      const burstCount = Math.floor(120 * qualityConfig.particleScale);
+      for (let burst = 0; burst < burstCount; burst++) {
+        const angle = (burst * (360 / burstCount)) * Math.PI / 180;
 
         for (let p = 0; p < 3; p++) {
           if (activeDebrisCount >= debrisCount) break;
@@ -1199,20 +1299,20 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     }
 
     /**
-     * PHASE 3: Screen-space star-pulling physics system
+     * BLUEPRINT 8: Screen-space star-pulling physics system with GPU absorption
      * Pulls stars toward black hole in screen space for visually consistent effect
      */
     function updateStarPulling(deltaTime: number, camera: THREE.Camera) {
       const blackHolePos = new THREE.Vector3(0, -8, 10);
       const positions = starGeometry.attributes.position.array as Float32Array;
-      const sizes = starGeometry.attributes.size.array as Float32Array;
+      const absorptionScales = starGeometry.attributes.absorptionScale.array as Float32Array;
 
       // Project black hole to screen space once
       const blackHoleScreen = blackHolePos.clone();
       blackHoleScreen.project(camera);
 
       let positionChanged = false;
-      let sizeChanged = false;
+      let absorptionChanged = false;
 
       pulledStars.forEach(starIndex => {
         const i3 = starIndex * 3;
@@ -1237,12 +1337,13 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         const screenDirX = (blackHoleScreen.x - starScreen.x) / (screenDist + 0.001);
         const screenDirY = (blackHoleScreen.y - starScreen.y) / (screenDist + 0.001);
 
-        // Pull strength based on screen distance (inverse-square falloff)
+        // BLUEPRINT 8.1: Pull force with clamped velocity
         const pullStrength = deltaTime * 0.08 / (screenDist * screenDist + 0.01);
+        const clampedPullStrength = Math.min(pullStrength, 0.05); // Clamp max velocity
 
         // Apply pull in screen space
-        starScreen.x += screenDirX * pullStrength;
-        starScreen.y += screenDirY * pullStrength;
+        starScreen.x += screenDirX * clampedPullStrength;
+        starScreen.y += screenDirY * clampedPullStrength;
         // Keep original Z depth in screen space
 
         // Unproject back to world space
@@ -1257,20 +1358,28 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         // World-space distance for absorption effect
         const worldDist = starPos.distanceTo(blackHolePos);
 
-        // PHASE 1 FIX: Time-based absorption shrink (exponential decay)
+        // BLUEPRINT 8.3: Time-based absorption via GPU attribute
         if (worldDist < 3) {
-          // Continuous decay: exp(-k * dt) where k=3.0 matches ~0.95 at 60fps
-          sizes[starIndex] *= Math.exp(-3.0 * deltaTime);
-          sizeChanged = true;
+          // Exponential decay: exp(-k * dt) where k=3.0
+          absorptionScales[starIndex] *= Math.exp(-3.0 * deltaTime);
+          absorptionChanged = true;
+
+          // BLUEPRINT 8.3: Mark as absorbed when scale is very small
+          if (absorptionScales[starIndex] < 0.05) {
+            // Move star far away (effectively removed)
+            positions[i3] = 10000;
+            positions[i3 + 1] = 10000;
+            positions[i3 + 2] = -10000;
+          }
         }
       });
 
-      // PHASE 3: Only update buffers if changes were made
+      // Only update buffers if changes were made
       if (positionChanged) {
         starGeometry.attributes.position.needsUpdate = true;
       }
-      if (sizeChanged) {
-        starGeometry.attributes.size.needsUpdate = true;
+      if (absorptionChanged) {
+        starGeometry.attributes.absorptionScale.needsUpdate = true;
       }
     }
 
@@ -1399,23 +1508,32 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           comet.visible = false;
         }
 
-        // Multi-stage bloom spike with impact flash - REDUCED to prevent white-out
+        // BLUEPRINT 13: Multi-stage bloom spike (reduced for accessibility)
         let bloomStrength = 2.0;
-        if (phase.phaseT < 0.04) {
-          // Instant flash in first 20ms - REDUCED from 12.0 to 6.0
-          bloomStrength = 6.0;
-        } else if (phase.phaseT < 0.2) {
-          // Rapid decay to high bloom (20-100ms)
-          const t = (phase.phaseT - 0.04) / 0.16;
-          bloomStrength = 6.0 - (6.0 - 4.5) * t; // 6.0 -> 4.5
-        } else if (phase.phaseT < 0.6) {
-          // Exponential decay to base (100-300ms)
-          const t = (phase.phaseT - 0.2) / 0.4;
-          bloomStrength = 4.5 * Math.exp(-t * 2.5); // Reduced multiplier
+        if (!prefersReducedMotion) {
+          if (phase.phaseT < 0.04) {
+            // Instant flash in first 20ms - REDUCED from 12.0 to 6.0
+            bloomStrength = 6.0;
+          } else if (phase.phaseT < 0.2) {
+            // Rapid decay to high bloom (20-100ms)
+            const t = (phase.phaseT - 0.04) / 0.16;
+            bloomStrength = 6.0 - (6.0 - 4.5) * t; // 6.0 -> 4.5
+          } else if (phase.phaseT < 0.6) {
+            // Exponential decay to base (100-300ms)
+            const t = (phase.phaseT - 0.2) / 0.4;
+            bloomStrength = 4.5 * Math.exp(-t * 2.5); // Reduced multiplier
+          } else {
+            bloomStrength = 2.0;
+          }
         } else {
-          bloomStrength = 2.0;
+          // Reduced motion: gentler bloom spike
+          if (phase.phaseT < 0.2) {
+            bloomStrength = 3.0;
+          } else {
+            bloomStrength = 2.0;
+          }
         }
-        bloomPass.strength = bloomStrength;
+        bloomPass.strength = bloomStrength * qualityConfig.bloomStrengthScale;
       } else {
         bloomPass.strength = 2.0; // Reset to base
       }
@@ -1430,8 +1548,8 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           crackPass.uniforms.intensity.value = phase.phaseT;
           crackPass.uniforms.crackPhase.value = phase.phaseT;
 
-          // Emit glass particles (first 600ms = 60% of phase)
-          if (phase.phaseT < 0.6) {
+          // BLUEPRINT 12: Emit glass particles (first 600ms = 60% of phase) if enabled
+          if (phase.phaseT < 0.6 && qualityConfig.enableGlassParticles) {
             emitGlassParticles();
           }
 
@@ -1440,7 +1558,8 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
             setShowTitle(true);
             // FIXED: Trigger immediate glitch on reveal for dramatic effect
             setTitleGlitch(true);
-            setTimeout(() => setTitleGlitch(false), 300);
+            const timeout = setTimeout(() => setTitleGlitch(false), 300);
+            glitchTimeoutsRef.current.add(timeout);
             // Set timer to allow next glitch soon after
             lastTitleGlitchTime = introElapsed - 1.5;
           }
@@ -1465,7 +1584,8 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           setShowButton(true);
           // FIXED: Trigger immediate glitch on reveal for dramatic effect
           setButtonGlitch(true);
-          setTimeout(() => setButtonGlitch(false), 300);
+          const timeout = setTimeout(() => setButtonGlitch(false), 300);
+          glitchTimeoutsRef.current.add(timeout);
           // Set timer to allow next glitch soon after
           lastButtonGlitchTime = introElapsed - 1.5;
         }
@@ -1477,8 +1597,8 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
 
       // PHASE 2: Star twinkling now handled by GPU shader (removed CPU loop)
 
-      // Deterministic camera shake
-      if (phase.name === 'impact') {
+      // BLUEPRINT 13: Deterministic camera shake (reduced if prefers-reduced-motion)
+      if (phase.name === 'impact' && !prefersReducedMotion) {
         const timeSinceImpact = introElapsed - phase.phaseStart;
         const shake = getCameraShake(timeSinceImpact);
         camera.position.x = cameraBasePosition.x + shake.x;
@@ -1492,18 +1612,38 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         lastTitleGlitchTime = introElapsed;
         setTitleGlitch(true);
         // Schedule glitch-off after 300ms to match animation duration
-        setTimeout(() => setTitleGlitch(false), 300);
+        const timeout = setTimeout(() => setTitleGlitch(false), 300);
+        glitchTimeoutsRef.current.add(timeout);
       }
 
       if (showButton && shouldGlitch(introElapsed, lastButtonGlitchTime, 56.78)) {
         lastButtonGlitchTime = introElapsed;
         setButtonGlitch(true);
         // Schedule glitch-off after 300ms to match animation duration
-        setTimeout(() => setButtonGlitch(false), 300);
+        const timeout = setTimeout(() => setButtonGlitch(false), 300);
+        glitchTimeoutsRef.current.add(timeout);
       }
 
       // Update particles
       updateParticles(deltaTime);
+
+      // BLUEPRINT 14: Update debug state
+      if (debugMode) {
+        frameCount++;
+        if (introElapsed - lastFpsUpdate >= 0.5) {
+          currentFps = Math.round(frameCount / (introElapsed - lastFpsUpdate));
+          frameCount = 0;
+          lastFpsUpdate = introElapsed;
+
+          setDebugState({
+            phase: phase.name,
+            elapsed: introElapsed,
+            fps: currentFps,
+            pulledStars: pulledStars.size,
+            activeParticles: activeDebrisCount + activeGlassCount
+          });
+        }
+      }
 
       // Render
       composer.render();
@@ -1534,13 +1674,15 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     window.addEventListener('resize', handleResize);
 
     // ============================================================================
-    // CLEANUP
+    // BLUEPRINT 11.2: COMPREHENSIVE CLEANUP
     // ============================================================================
 
     return () => {
       window.removeEventListener('resize', handleResize);
 
-      // PHASE 1: No more setTimeout-based glitches to clean up
+      // Clear all glitch timeouts
+      glitchTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
+      glitchTimeoutsRef.current.clear();
 
       // Dispose geometries
       starGeometry.dispose();
@@ -1567,12 +1709,16 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
       // Dispose textures
       starTexture.dispose();
 
-      // Dispose renderer
+      // Dispose renderer and render targets
+      composer.dispose?.(); // Dispose composer if method exists
       renderer.dispose();
 
-      if (containerRef.current) {
+      if (containerRef.current && renderer.domElement.parentNode === containerRef.current) {
         containerRef.current.removeChild(renderer.domElement);
       }
+
+      // Reset initialization flag for potential remount
+      initializedRef.current = false;
     };
   }, []);
 
@@ -1580,6 +1726,19 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     <div className="relative w-full h-full">
       {/* Three.js canvas container */}
       <div ref={containerRef} className="absolute inset-0" />
+
+      {/* BLUEPRINT 14: Debug HUD */}
+      {debugMode && (
+        <div className="absolute top-4 left-4 bg-black bg-opacity-75 text-white font-mono text-xs p-3 rounded pointer-events-none z-50">
+          <div>Phase: {debugState.phase}</div>
+          <div>Elapsed: {debugState.elapsed.toFixed(2)}s</div>
+          <div>FPS: {debugState.fps}</div>
+          <div>Pulled Stars: {debugState.pulledStars}</div>
+          <div>Active Particles: {debugState.activeParticles}</div>
+          <div>Quality: {activeQuality}</div>
+          <div>Reduced Motion: {prefersReducedMotion ? 'Yes' : 'No'}</div>
+        </div>
+      )}
 
       {/* Title Text - PHASE 6: Added semantic heading and aria-live */}
       <div
