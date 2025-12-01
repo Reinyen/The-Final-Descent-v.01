@@ -231,7 +231,20 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     );
     camera.position.set(0, 0, 30);
 
-    // BLUEPRINT 1.1: Renderer configuration (LDR pipeline with post-AA)
+    // ============================================================================
+    // PHASE 3: RENDERER CONFIGURATION (LINEAR WORKFLOW)
+    // ============================================================================
+    /**
+     * PHASE 3: Renderer settings for linear color workflow
+     *
+     * - toneMapping: Default is NoToneMapping (correct - OutputPass handles it)
+     * - outputColorSpace: SRGBColorSpace (linear → sRGB for direct render)
+     * - When using composer: OutputPass applies sRGB conversion instead
+     *
+     * This ensures color-correct rendering in both paths:
+     * 1. Direct render: renderer applies linear → sRGB
+     * 2. Composer render: OutputPass applies linear → sRGB
+     */
     const renderer = new THREE.WebGLRenderer({
       alpha: false,
       antialias: false // Using FXAA post-processing instead
@@ -239,8 +252,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax));
     renderer.setClearColor(0x000000);
-    // LDR color pipeline - keep all values in [0,1] range in shaders
+
+    // PHASE 3: Linear workflow - no tone mapping on renderer (OutputPass handles it)
+    // renderer.toneMapping defaults to THREE.NoToneMapping (0) - correct!
+    // PHASE 3: Output color space conversion (linear → sRGB gamma)
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+
     containerRef.current.appendChild(renderer.domElement);
 
     // ============================================================================
@@ -553,7 +570,18 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
     starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
 
-    // PHASE 2: Enhanced GPU-based starfield shader with pixel-perfect sizing
+    // ============================================================================
+    // PHASE 3 & 4: STARFIELD SHADER (LINEAR COLOR OUTPUT)
+    // ============================================================================
+    /**
+     * PHASE 3: Shader outputs LINEAR color values (no gamma encoding)
+     * - Color buffer values are linear (0.95, 1.0, etc.)
+     * - No pow(color, 1.0/2.2) or other gamma correction in shader
+     * - Output transform applied by OutputPass only
+     *
+     * PHASE 4: Starfield sizing will be recalibrated for crisp pinpoints
+     * (Current sizing produces 7-27px blobs - to be fixed)
+     */
     const starMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0.0 },
