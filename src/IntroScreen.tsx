@@ -827,37 +827,43 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           baseColor = mix(baseColor, lightGray, noise2 * 0.5);
           baseColor = mix(baseColor, tan, noise3 * 0.3);
 
-          // PHASE 4: Improved atmospheric heat effect with smooth transitions
-          if (heatIntensity > 0.0) {
+          // PHASE 3: Improved atmospheric heat effect with smooth transitions
+          if (heatIntensity > 0.01) { // Small epsilon to avoid unnecessary calculations
             vec3 viewDir = normalize(cameraPosition - vWorldPosition);
-            float fresnel = pow(1.0 - dot(viewDir, vNormal), 1.5);
+            float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 1.8); // Sharper fresnel
 
-            // Smooth heat intensity curve (ease-in-out cubic)
-            float smoothHeat = heatIntensity * heatIntensity * (3.0 - 2.0 * heatIntensity);
+            // PHASE 3: Smooth heat intensity curve (smoothstep for C2 continuity)
+            float smoothHeat = smoothstep(0.0, 1.0, heatIntensity);
+            smoothHeat = smoothHeat * smoothHeat * (3.0 - 2.0 * smoothHeat); // Double smoothstep
 
-            // Multi-stage heat color gradient
-            vec3 earlyHeat = vec3(1.0, 0.4, 0.1);     // Orange
-            vec3 midHeat = vec3(1.0, 0.2, 0.05);       // Deep orange-red
-            vec3 lateHeat = vec3(0.6, 0.15, 0.7);      // Purple plasma
-            vec3 extremeHeat = vec3(0.4, 0.3, 0.9);    // Blue-violet (hottest)
+            // Multi-stage heat color gradient with smooth transitions
+            vec3 earlyHeat = vec3(1.0, 0.45, 0.15);    // Warm orange
+            vec3 midHeat = vec3(1.0, 0.25, 0.08);      // Deep orange-red
+            vec3 lateHeat = vec3(0.7, 0.2, 0.8);       // Purple plasma
+            vec3 extremeHeat = vec3(0.5, 0.35, 1.0);   // Blue-violet (hottest)
 
+            // PHASE 3: Use smoothstep for color transitions to avoid banding
             vec3 heatColor;
             if (smoothHeat < 0.33) {
-              heatColor = mix(earlyHeat, midHeat, smoothHeat / 0.33);
+              float t = smoothstep(0.0, 0.33, smoothHeat);
+              heatColor = mix(earlyHeat, midHeat, t);
             } else if (smoothHeat < 0.66) {
-              heatColor = mix(midHeat, lateHeat, (smoothHeat - 0.33) / 0.33);
+              float t = smoothstep(0.33, 0.66, smoothHeat);
+              heatColor = mix(midHeat, lateHeat, t);
             } else {
-              heatColor = mix(lateHeat, extremeHeat, (smoothHeat - 0.66) / 0.34);
+              float t = smoothstep(0.66, 1.0, smoothHeat);
+              heatColor = mix(lateHeat, extremeHeat, t);
             }
 
             // Emissive hotspots (turbulent noise-driven bright spots)
             float hotspotNoise = snoise(vPosition * 8.0 + time * 1.5) * 0.5 + 0.5;
-            float hotspots = pow(hotspotNoise, 3.0) * smoothHeat;
-            vec3 emissive = heatColor * hotspots * 2.0;
+            float hotspots = pow(hotspotNoise, 4.0) * smoothHeat; // Increased pow for sharper spots
+            vec3 emissive = heatColor * hotspots * 1.8;
 
-            // Combine base with heat glow and emissive hotspots
-            baseColor = mix(baseColor, heatColor, fresnel * smoothHeat * 0.8);
-            baseColor += emissive;
+            // PHASE 3: Combine base with heat glow and emissive hotspots
+            float heatMix = fresnel * smoothHeat * 0.75;
+            baseColor = mix(baseColor, heatColor, heatMix);
+            baseColor += emissive * 0.9; // Slightly reduced emissive to avoid over-bloom
           }
 
           gl_FragColor = vec4(baseColor, 1.0);
@@ -1239,6 +1245,46 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     let currentFps = 60;
 
     // ============================================================================
+    // PHASE 3: SHADER PREWARM (prevents first-frame hitch)
+    // ============================================================================
+
+    /**
+     * Warm up shaders by rendering offscreen once
+     * This triggers shader compilation before they're visible to the user
+     */
+    function prewarmShaders() {
+      // Temporarily show comet offscreen for one render
+      const originalCometPos = comet.position.clone();
+      const originalCometVisible = comet.visible;
+
+      comet.position.set(10000, 10000, -10000); // Far offscreen
+      comet.visible = true;
+
+      // Set non-zero heat for full shader path compilation
+      cometMaterial.uniforms.heatIntensity.value = 0.5;
+      glowMaterial.uniforms.heatIntensity.value = 0.5;
+
+      // Render once (forces shader compilation)
+      renderer.render(scene, camera);
+
+      // Restore original state
+      comet.position.copy(originalCometPos);
+      comet.visible = originalCometVisible;
+      cometMaterial.uniforms.heatIntensity.value = 0.0;
+      glowMaterial.uniforms.heatIntensity.value = 0.0;
+
+      // Also prewarm crack shader (render crack pass once)
+      crackPass.uniforms.intensity.value = 0.5;
+      crackPass.uniforms.crackPhase.value = 0.5;
+      composer.render();
+      crackPass.uniforms.intensity.value = 0.0;
+      crackPass.uniforms.crackPhase.value = 0.0;
+    }
+
+    // Prewarm shaders before starting animation
+    prewarmShaders();
+
+    // ============================================================================
     // PARTICLE EMISSION FUNCTIONS
     // ============================================================================
 
@@ -1595,23 +1641,32 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
       // COMET_APPROACH: Falling comet with heat buildup
       if (phase.name === 'comet_approach') {
-        const eased = phase.phaseT * phase.phaseT; // Quadratic ease-in
+        const eased = phase.phaseT * phase.phaseT; // Quadratic ease-in for acceleration
 
-        // Position
+        // PHASE 3: Trajectory tuned for ~60° from vertical approach angle
+        // Vertical drop: 48 units (40 to -8)
+        // Forward motion: 50 units (-30 to 20) for dramatic diagonal approach
+        // This creates tan⁻¹(50/48) ≈ 46° from vertical (compromise for visual impact)
         const startPos = new THREE.Vector3(0, 40, -30);
-        const endPos = new THREE.Vector3(0, -8, 10);
+        const endPos = new THREE.Vector3(0, -8, 20); // Increased Z from 10 to 20 for steeper angle
         comet.position.lerpVectors(startPos, endPos, eased);
 
-        // Scale
+        // PHASE 3: Size grows smoothly from tiny to full scale
         const scale = 0.01 + (1.0 - 0.01) * phase.phaseT;
         comet.scale.set(scale, scale, scale);
 
-        // Rotation (accumulate over time, not reset)
+        // PHASE 3: Rotation uses deltaTime for frame-rate independence
         comet.rotation.x += 1.8 * deltaTime;
         comet.rotation.y += 1.3 * deltaTime;
 
-        // PHASE 4: Smooth heat transition with cubic ease-in-out
-        const heatIntensity = phase.phaseT * 0.8;
+        // PHASE 3: Smooth cubic heat transition (ease-in-out)
+        // Heat starts building gradually, then accelerates
+        const t = phase.phaseT;
+        const cubicEase = t < 0.5
+          ? 4 * t * t * t
+          : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        const heatIntensity = cubicEase * 0.85; // Max 0.85 to avoid over-brightness
+
         cometMaterial.uniforms.heatIntensity.value = heatIntensity;
         glowMaterial.uniforms.heatIntensity.value = heatIntensity;
         glowMaterial.uniforms.time.value = introElapsed;
