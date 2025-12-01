@@ -600,7 +600,7 @@ useEffect(() => {
       starBaseColors[i3 + 2] = starColors[i3 + 2];
     }
 
-const starRippleOffsets = new Float32Array(starCount * 3); // ✅ additive warp (starts at 0)
+// starRippleOffsets is already declared above (keep only ONE declaration in the file)
 
 starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
 starGeometry.setAttribute('basePosition', new THREE.BufferAttribute(starOriginalPositions, 3));
@@ -609,7 +609,8 @@ starGeometry.setAttribute('baseColor', new THREE.BufferAttribute(starBaseColors,
 starGeometry.setAttribute('baseSize', new THREE.BufferAttribute(starBaseSizes, 1));
 starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
 starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
-starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOffsets, 3)); // ✅ new
+starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOffsets, 3));
+
 
 
     // ============================================================================
