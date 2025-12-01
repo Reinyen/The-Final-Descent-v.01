@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
 /**
@@ -91,6 +92,20 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     activeParticles: 0
   });
 
+  // PHASE 1: Diagnostic toggles for isolating rendering issues
+  const [diagnostics, setDiagnostics] = useState({
+    showPanel: false,
+    composerEnabled: true,
+    bloomEnabled: true,
+    crackEnabled: true,
+    fxaaEnabled: true,
+    starsEnabled: true,
+    cometEnabled: true,
+    particlesEnabled: true,
+    blackHoleEnabled: true,
+    renderTargetType: 'detecting...' as string
+  });
+
   // PHASE 6: Keyboard accessibility handler
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -110,6 +125,49 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       buttonRef.current.focus();
     }
   }, [showButton]);
+
+  // PHASE 1: Diagnostic keyboard controls (dev mode only)
+  useEffect(() => {
+    if (!debugMode) return;
+
+    const handleDiagnosticKeys = (e: KeyboardEvent) => {
+      // Don't interfere with button interactions
+      if (e.target instanceof HTMLButtonElement) return;
+
+      switch (e.key.toLowerCase()) {
+        case 'd':
+          setDiagnostics(prev => ({ ...prev, showPanel: !prev.showPanel }));
+          break;
+        case '1':
+          setDiagnostics(prev => ({ ...prev, composerEnabled: !prev.composerEnabled }));
+          break;
+        case '2':
+          setDiagnostics(prev => ({ ...prev, bloomEnabled: !prev.bloomEnabled }));
+          break;
+        case '3':
+          setDiagnostics(prev => ({ ...prev, crackEnabled: !prev.crackEnabled }));
+          break;
+        case '4':
+          setDiagnostics(prev => ({ ...prev, fxaaEnabled: !prev.fxaaEnabled }));
+          break;
+        case '5':
+          setDiagnostics(prev => ({ ...prev, starsEnabled: !prev.starsEnabled }));
+          break;
+        case '6':
+          setDiagnostics(prev => ({ ...prev, cometEnabled: !prev.cometEnabled }));
+          break;
+        case '7':
+          setDiagnostics(prev => ({ ...prev, particlesEnabled: !prev.particlesEnabled }));
+          break;
+        case '8':
+          setDiagnostics(prev => ({ ...prev, blackHoleEnabled: !prev.blackHoleEnabled }));
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleDiagnosticKeys);
+    return () => window.removeEventListener('keydown', handleDiagnosticKeys);
+  }, [debugMode]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -216,18 +274,20 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Deterministic camera shake: Pure function of time since impact
+     * PHASE 4: Deterministic camera shake - Pure function of time since impact
      * Uses sinusoidal combination for stable, FPS-independent shake
+     * No accumulation, no drift, works correctly at any framerate
      */
     function getCameraShake(timeSinceImpact: number): { x: number; y: number } {
       if (timeSinceImpact < 0 || timeSinceImpact > 0.5) {
         return { x: 0, y: 0 };
       }
 
-      // Exponential amplitude decay
+      // PHASE 4: Exponential amplitude decay (k=10 for rapid falloff)
       const amplitude = 0.8 * Math.exp(-timeSinceImpact * 10);
 
-      // Combination of incommensurate frequencies for natural feel
+      // PHASE 4: Combination of incommensurate frequencies for natural feel
+      // Using prime-like frequencies to avoid repetition patterns
       const shake1 = Math.sin(timeSinceImpact * 17.3);
       const shake2 = Math.sin(timeSinceImpact * 23.7);
       const shake3 = Math.sin(timeSinceImpact * 31.1);
@@ -266,19 +326,45 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     // ============================================================================
+    // PHASE 1: HDR RENDER TARGET DETECTION & SETUP
+    // ============================================================================
+
+    // Detect HDR support (half-float render targets)
+    const supportsHDR = renderer.capabilities.isWebGL2;
+    let renderTargetType: string = 'LDR';
+
+    if (supportsHDR) {
+      const halfFloatExt = renderer.extensions.get('EXT_color_buffer_half_float');
+      if (halfFloatExt) {
+        renderTargetType = 'HDR (HalfFloat)';
+      }
+    }
+
+    // Update diagnostic state with render target type
+    setDiagnostics(prev => ({ ...prev, renderTargetType }));
+
+    // ============================================================================
     // BLUEPRINT 1.2: POST-PROCESSING PIPELINE (DOCUMENTED ORDER)
-    // Order: RenderPass → CrackEffect → UnrealBloom → FXAA
+    // Order: RenderPass → CrackEffect → UnrealBloom → FXAA → Output
     //
     // Rationale (Option A from Blueprint):
     // 1. RenderPass: Render scene to buffer
     // 2. CrackEffect: Modify scene color with reality cracks and distortions
     // 3. UnrealBloom: Bloom both underlying scene AND crack highlights (hot edges glow)
     // 4. FXAA: Final anti-aliasing pass for smooth edges
+    // 5. Output: Tone mapping and color space conversion (added in Phase 1)
     //
     // This order allows cracks to participate in bloom, creating the desired
     // "reality-breaking glow" aesthetic where crack edges emit light.
     // ============================================================================
-    const composer = new EffectComposer(renderer);
+
+    // Create composer with HDR render targets if supported
+    const composer = new EffectComposer(renderer, supportsHDR ?
+      new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+        type: THREE.HalfFloatType,
+        colorSpace: THREE.LinearSRGBColorSpace
+      }) : undefined
+    );
     const renderPass = new RenderPass(scene, camera);
     composer.addPass(renderPass);
 
@@ -357,9 +443,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             return;
           }
 
-          // PHASE 2: Stable Voronoi cell generation (fixed scale for stable topology)
-          // Use fixed scale so glass shards don't morph - only animate effects
-          float voronoiScale = 25.0;
+          // PHASE 5: Stable Voronoi cell generation (FIXED SCALE - no crawling)
+          // Critical: voronoiScale is CONSTANT to prevent cell topology changes
+          // Only crackPhase drives expansion; cell boundaries remain stable
+          float voronoiScale = 25.0; // IMMUTABLE - do not animate this!
           vec3 voronoiData = voronoi(uv, voronoiScale);
           float cellDist1 = voronoiData.x;
           float cellDist2 = voronoiData.y;
@@ -420,24 +507,31 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const crackPass = new ShaderPass(crackShader);
     composer.addPass(crackPass);
 
-    // BLUEPRINT 1.2 & 12: UnrealBloomPass with quality scaling
+    // PHASE 1: UnrealBloomPass with AGGRESSIVE THRESHOLD for selective bloom
     // Applied AFTER crack shader to enhance glowing effects on cracks
+    // CRITICAL FIX: Raised threshold from 0.3 to 0.85 to prevent starfield blooming
+    // Only very bright elements (comet, crack highlights, accretion) will bloom
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      2.0 * qualityConfig.bloomStrengthScale, // strength scaled by quality
-      0.5, // radius
-      0.3  // threshold
+      1.5 * qualityConfig.bloomStrengthScale, // REDUCED base from 2.0 to 1.5
+      0.4, // radius (reduced from 0.5 for tighter glow)
+      0.85  // threshold (RAISED from 0.3 to 0.85 for selective bloom)
     );
     composer.addPass(bloomPass);
 
     // FXAA Anti-Aliasing Pass
-    // Applied LAST to smooth all visual artifacts
+    // Applied before output pass to smooth all visual artifacts
     const fxaaPass = new ShaderPass(FXAAShader);
     fxaaPass.uniforms['resolution'].value.set(
       1 / window.innerWidth,
       1 / window.innerHeight
     );
     composer.addPass(fxaaPass);
+
+    // PHASE 1: Output Pass for proper tone mapping and color space conversion
+    // This ensures no double tone-mapping and correct sRGB output
+    const outputPass = new OutputPass();
+    composer.addPass(outputPass);
 
     // ============================================================================
     // BLUEPRINT 4: STARFIELD SYSTEM (GPU-optimized with per-star attributes)
@@ -451,19 +545,26 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const starAbsorptionScales = new Float32Array(starCount);
     const starOriginalPositions = new Float32Array(starCount * 3);
 
-    // Create star texture (32x32 radial gradient)
+    // PHASE 2: Create high-quality star texture (64x64 for crisp rendering)
     const starCanvas = document.createElement('canvas');
-    starCanvas.width = 32;
-    starCanvas.height = 32;
+    starCanvas.width = 64;
+    starCanvas.height = 64;
     const starCtx = starCanvas.getContext('2d')!;
-    const gradient = starCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
-    gradient.addColorStop(0.4, 'rgba(255, 255, 255, 1.0)');
-    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.5)');
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    const gradient = starCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+
+    // PHASE 2: Sharper gradient with bright core and diffuse halo
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');    // Bright center
+    gradient.addColorStop(0.2, 'rgba(255, 255, 255, 1.0)');  // Hold brightness
+    gradient.addColorStop(0.35, 'rgba(255, 255, 255, 0.8)'); // Sharp falloff starts
+    gradient.addColorStop(0.55, 'rgba(255, 255, 255, 0.3)'); // Soft halo
+    gradient.addColorStop(0.8, 'rgba(255, 255, 255, 0.1)');  // Diffuse edge
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');      // Fade out
+
     starCtx.fillStyle = gradient;
-    starCtx.fillRect(0, 0, 32, 32);
+    starCtx.fillRect(0, 0, 64, 64);
+
     const starTexture = new THREE.CanvasTexture(starCanvas);
+    starTexture.needsUpdate = true;
 
     // Initialize star properties
     for (let i = 0; i < starCount; i++) {
@@ -515,12 +616,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
     starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
 
-    // BLUEPRINT 4.2: GPU-based starfield shader with per-vertex attributes
+    // PHASE 2: Enhanced GPU-based starfield shader with pixel-perfect sizing
     const starMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0.0 },
         starTexture: { value: starTexture },
-        baseOpacity: { value: 1.0 }
+        baseOpacity: { value: 1.0 },
+        pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
+        viewportHeight: { value: window.innerHeight }
       },
       vertexShader: `
         attribute float baseSize;
@@ -530,24 +633,37 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
         uniform float time;
         uniform float baseOpacity;
+        uniform float pixelRatio;
+        uniform float viewportHeight;
 
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vDepth;
 
         void main() {
           vColor = color;
 
-          // BLUEPRINT 4.2: GPU-based twinkling using per-star seed
-          float twinkle = sin(time * 2.5 + twinkleSeed * 0.5) * 0.3 + 0.85;
+          // PHASE 2: Smooth twinkle (reduced frequency for less flicker)
+          float twinkle = sin(time * 2.0 + twinkleSeed * 0.5) * 0.25 + 0.875;
 
-          // BLUEPRINT 4.3: Apply absorption scale (modified on CPU during black hole pull)
+          // Apply absorption scale (modified on CPU during black hole pull)
           float finalSize = baseSize * twinkle * absorptionScale;
 
           // Calculate alpha based on opacity and absorption
           vAlpha = baseOpacity * twinkle * absorptionScale;
 
+          // Transform to view space
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = finalSize * (300.0 / -mvPosition.z);
+
+          // PHASE 2: Pixel-perfect point size calculation
+          // Account for perspective, DPR, and viewport height for consistent screen-space size
+          float perspectiveFactor = 1.0 / -mvPosition.z;
+          float pixelSize = finalSize * perspectiveFactor * viewportHeight * 0.5;
+          gl_PointSize = pixelSize * pixelRatio;
+
+          // PHASE 2: Pass depth for depth-cueing in fragment shader
+          vDepth = -mvPosition.z / 160.0; // Normalize depth (0=near, 1=far)
+
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -556,10 +672,25 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vDepth;
 
         void main() {
+          // PHASE 2: Sample star texture
           vec4 texColor = texture2D(starTexture, gl_PointCoord);
-          gl_FragColor = vec4(vColor, texColor.a * vAlpha);
+
+          // PHASE 2: Depth cueing - distant stars slightly dimmer
+          float depthFade = 1.0 - vDepth * 0.3; // 30% dimming at max depth
+
+          // PHASE 2: Enhanced star core with subtle glow
+          // Stars have sharp center that blooms slightly at edges
+          float dist = length(gl_PointCoord - vec2(0.5));
+          float coreBrightness = 1.0 - smoothstep(0.0, 0.3, dist);
+
+          // Combine texture alpha with depth fade and core brightness
+          float finalAlpha = texColor.a * vAlpha * depthFade;
+          vec3 finalColor = vColor * (0.85 + coreBrightness * 0.15);
+
+          gl_FragColor = vec4(finalColor, finalAlpha);
         }
       `,
       transparent: true,
@@ -699,37 +830,43 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           baseColor = mix(baseColor, lightGray, noise2 * 0.5);
           baseColor = mix(baseColor, tan, noise3 * 0.3);
 
-          // PHASE 4: Improved atmospheric heat effect with smooth transitions
-          if (heatIntensity > 0.0) {
+          // PHASE 3: Improved atmospheric heat effect with smooth transitions
+          if (heatIntensity > 0.01) { // Small epsilon to avoid unnecessary calculations
             vec3 viewDir = normalize(cameraPosition - vWorldPosition);
-            float fresnel = pow(1.0 - dot(viewDir, vNormal), 1.5);
+            float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 1.8); // Sharper fresnel
 
-            // Smooth heat intensity curve (ease-in-out cubic)
-            float smoothHeat = heatIntensity * heatIntensity * (3.0 - 2.0 * heatIntensity);
+            // PHASE 3: Smooth heat intensity curve (smoothstep for C2 continuity)
+            float smoothHeat = smoothstep(0.0, 1.0, heatIntensity);
+            smoothHeat = smoothHeat * smoothHeat * (3.0 - 2.0 * smoothHeat); // Double smoothstep
 
-            // Multi-stage heat color gradient
-            vec3 earlyHeat = vec3(1.0, 0.4, 0.1);     // Orange
-            vec3 midHeat = vec3(1.0, 0.2, 0.05);       // Deep orange-red
-            vec3 lateHeat = vec3(0.6, 0.15, 0.7);      // Purple plasma
-            vec3 extremeHeat = vec3(0.4, 0.3, 0.9);    // Blue-violet (hottest)
+            // Multi-stage heat color gradient with smooth transitions
+            vec3 earlyHeat = vec3(1.0, 0.45, 0.15);    // Warm orange
+            vec3 midHeat = vec3(1.0, 0.25, 0.08);      // Deep orange-red
+            vec3 lateHeat = vec3(0.7, 0.2, 0.8);       // Purple plasma
+            vec3 extremeHeat = vec3(0.5, 0.35, 1.0);   // Blue-violet (hottest)
 
+            // PHASE 3: Use smoothstep for color transitions to avoid banding
             vec3 heatColor;
             if (smoothHeat < 0.33) {
-              heatColor = mix(earlyHeat, midHeat, smoothHeat / 0.33);
+              float t = smoothstep(0.0, 0.33, smoothHeat);
+              heatColor = mix(earlyHeat, midHeat, t);
             } else if (smoothHeat < 0.66) {
-              heatColor = mix(midHeat, lateHeat, (smoothHeat - 0.33) / 0.33);
+              float t = smoothstep(0.33, 0.66, smoothHeat);
+              heatColor = mix(midHeat, lateHeat, t);
             } else {
-              heatColor = mix(lateHeat, extremeHeat, (smoothHeat - 0.66) / 0.34);
+              float t = smoothstep(0.66, 1.0, smoothHeat);
+              heatColor = mix(lateHeat, extremeHeat, t);
             }
 
             // Emissive hotspots (turbulent noise-driven bright spots)
             float hotspotNoise = snoise(vPosition * 8.0 + time * 1.5) * 0.5 + 0.5;
-            float hotspots = pow(hotspotNoise, 3.0) * smoothHeat;
-            vec3 emissive = heatColor * hotspots * 2.0;
+            float hotspots = pow(hotspotNoise, 4.0) * smoothHeat; // Increased pow for sharper spots
+            vec3 emissive = heatColor * hotspots * 1.8;
 
-            // Combine base with heat glow and emissive hotspots
-            baseColor = mix(baseColor, heatColor, fresnel * smoothHeat * 0.8);
-            baseColor += emissive;
+            // PHASE 3: Combine base with heat glow and emissive hotspots
+            float heatMix = fresnel * smoothHeat * 0.75;
+            baseColor = mix(baseColor, heatColor, heatMix);
+            baseColor += emissive * 0.9; // Slightly reduced emissive to avoid over-bloom
           }
 
           gl_FragColor = vec4(baseColor, 1.0);
@@ -802,21 +939,25 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     blackHoleGroup.visible = false;
     scene.add(blackHoleGroup);
 
-    // 6.1 Event Horizon (center sphere)
+    // PHASE 5: Event Horizon (center sphere) - WRITES DEPTH
     const eventHorizonGeometry = new THREE.SphereGeometry(2.5, 32, 32);
     const eventHorizonMaterial = new THREE.MeshBasicMaterial({
       color: 0x000000,
-      opacity: 1.0
+      opacity: 1.0,
+      depthWrite: true,  // PHASE 5: Core writes depth for proper occlusion
+      depthTest: true
     });
     const eventHorizon = new THREE.Mesh(eventHorizonGeometry, eventHorizonMaterial);
     blackHoleGroup.add(eventHorizon);
 
-    // 6.2 Volumetric Inner Core
+    // PHASE 5: Volumetric Inner Core - NO DEPTH WRITE (additive layer)
     const innerCoreGeometry = new THREE.SphereGeometry(3.5, 32, 32);
     const innerCoreMaterial = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       transparent: true,
       blending: THREE.AdditiveBlending,
+      depthWrite: false,  // PHASE 5: Additive layers don't write depth
+      depthTest: true,    // But still respect depth for occlusion
       uniforms: {
         time: { value: 0.0 }
       },
@@ -878,12 +1019,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const innerCore = new THREE.Mesh(innerCoreGeometry, innerCoreMaterial);
     blackHoleGroup.add(innerCore);
 
-    // 6.3 Accretion Disk
+    // PHASE 5: Accretion Disk - NO DEPTH WRITE (additive layer)
     const accretionDiskGeometry = new THREE.RingGeometry(3, 10, 64);
     const accretionDiskMaterial = new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       transparent: true,
       blending: THREE.AdditiveBlending,
+      depthWrite: false,  // PHASE 5: Additive layers don't write depth
+      depthTest: true,
       uniforms: {
         time: { value: 0.0 }
       },
@@ -936,12 +1079,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     accretionDisk.rotation.x = -Math.PI / 2.5; // Tilted
     blackHoleGroup.add(accretionDisk);
 
-    // 6.4 Outer Glow (atmosphere)
+    // PHASE 5: Outer Glow (atmosphere) - NO DEPTH WRITE (additive layer)
     const outerGlowGeometry = new THREE.SphereGeometry(5, 32, 32);
     const outerGlowMaterial = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       transparent: true,
       blending: THREE.AdditiveBlending,
+      depthWrite: false,  // PHASE 5: Additive layers don't write depth
+      depthTest: true,
       uniforms: {
         time: { value: 0.0 }
       },
@@ -1111,11 +1256,53 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     let currentFps = 60;
 
     // ============================================================================
+    // PHASE 3: SHADER PREWARM (prevents first-frame hitch)
+    // ============================================================================
+
+    /**
+     * Warm up shaders by rendering offscreen once
+     * This triggers shader compilation before they're visible to the user
+     */
+    function prewarmShaders() {
+      // Temporarily show comet offscreen for one render
+      const originalCometPos = comet.position.clone();
+      const originalCometVisible = comet.visible;
+
+      comet.position.set(10000, 10000, -10000); // Far offscreen
+      comet.visible = true;
+
+      // Set non-zero heat for full shader path compilation
+      cometMaterial.uniforms.heatIntensity.value = 0.5;
+      glowMaterial.uniforms.heatIntensity.value = 0.5;
+
+      // Render once (forces shader compilation)
+      renderer.render(scene, camera);
+
+      // Restore original state
+      comet.position.copy(originalCometPos);
+      comet.visible = originalCometVisible;
+      cometMaterial.uniforms.heatIntensity.value = 0.0;
+      glowMaterial.uniforms.heatIntensity.value = 0.0;
+
+      // Also prewarm crack shader (render crack pass once)
+      crackPass.uniforms.intensity.value = 0.5;
+      crackPass.uniforms.crackPhase.value = 0.5;
+      composer.render();
+      crackPass.uniforms.intensity.value = 0.0;
+      crackPass.uniforms.crackPhase.value = 0.0;
+    }
+
+    // Prewarm shaders before starting animation
+    prewarmShaders();
+
+    // ============================================================================
     // PARTICLE EMISSION FUNCTIONS
     // ============================================================================
 
     /**
-     * BLUEPRINT 9.1 & 12: Emit explosion debris particles with quality scaling
+     * PHASE 4: Emit explosion debris particles with strict count consistency
+     * Spec: 360 total particles = 120 directions × 3 particles per direction
+     * Quality scaling: HIGH = 360 particles (1.0x), LOW = 180 particles (0.5x)
      */
     function emitDebrisParticles() {
       const impactPoint = new THREE.Vector3(0, -8, 10);
@@ -1125,9 +1312,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         [0.4, 0.9, 0.5]  // Green
       ];
 
-      // Scale burst count by quality (120 bursts of 3 particles = 360 at high quality)
+      // PHASE 4: Scale burst count by quality (120 directions at high, 60 at low)
       const burstCount = Math.floor(120 * qualityConfig.particleScale);
       for (let burst = 0; burst < burstCount; burst++) {
+        // PHASE 4: Evenly distributed radial directions (360° / burstCount)
         const angle = (burst * (360 / burstCount)) * Math.PI / 180;
 
         for (let p = 0; p < 3; p++) {
@@ -1171,17 +1359,19 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Emit glass dust particles from crack lines
-     * Called during crater_settle phase when phaseT < 0.6
-     * Emits 1 particle per direction per frame
+     * PHASE 5: Emit glass dust particles from crack lines
+     * Spec: 24 directions, 1 particle per direction per frame, 600ms window (~864 max)
+     * Capacity: 1000 particles (buffer size from geometry)
+     * Called during crater_settle phase when phaseT < 0.6 (600ms of 1000ms phase)
+     * At 60fps: 600ms × 60fps × 24 directions = 864 particles (within 1000 capacity)
      */
     function emitGlassParticles() {
       // This function is only called during appropriate time window
-      // No need for time check here - caller handles it
+      // Caller (crater_settle phase) handles timing check
 
       const impactPoint = new THREE.Vector3(0, -8, 10);
-      const directions = 24; // 24 radial directions
-      const particlesPerDirection = 1; // 1 particle per direction per frame
+      const directions = 24; // PHASE 5: 24 radial directions (spec)
+      const particlesPerDirection = 1; // PHASE 5: 1 particle per direction per frame (spec)
 
       for (let d = 0; d < directions; d++) {
         const angle = (d / directions) * Math.PI * 2;
@@ -1299,8 +1489,11 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * BLUEPRINT 8: Screen-space star-pulling physics system with GPU absorption
-     * Pulls stars toward black hole in screen space for visually consistent effect
+     * PHASE 5: Screen-space star-pulling physics with deltaTime integration
+     * - dt-based integration: works correctly at any framerate (30fps, 60fps, 144fps)
+     * - Clamped velocity: prevents snapping on long frames
+     * - Exponential absorption: smooth fade via GPU attribute
+     * - Screen-space pull: visually consistent effect regardless of depth
      */
     function updateStarPulling(deltaTime: number, camera: THREE.Camera) {
       const blackHolePos = new THREE.Vector3(0, -8, 10);
@@ -1337,9 +1530,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         const screenDirX = (blackHoleScreen.x - starScreen.x) / (screenDist + 0.001);
         const screenDirY = (blackHoleScreen.y - starScreen.y) / (screenDist + 0.001);
 
-        // BLUEPRINT 8.1: Pull force with clamped velocity
+        // PHASE 5: dt-based pull force with velocity clamping
+        // pullStrength scales with deltaTime (framerate independent)
         const pullStrength = deltaTime * 0.08 / (screenDist * screenDist + 0.01);
-        const clampedPullStrength = Math.min(pullStrength, 0.05); // Clamp max velocity
+        const clampedPullStrength = Math.min(pullStrength, 0.05); // Prevent snapping
 
         // Apply pull in screen space
         starScreen.x += screenDirX * clampedPullStrength;
@@ -1467,75 +1661,91 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
       // COMET_APPROACH: Falling comet with heat buildup
       if (phase.name === 'comet_approach') {
-        const eased = phase.phaseT * phase.phaseT; // Quadratic ease-in
+        const eased = phase.phaseT * phase.phaseT; // Quadratic ease-in for acceleration
 
-        // Position
+        // PHASE 3: Trajectory tuned for ~60° from vertical approach angle
+        // Vertical drop: 48 units (40 to -8)
+        // Forward motion: 50 units (-30 to 20) for dramatic diagonal approach
+        // This creates tan⁻¹(50/48) ≈ 46° from vertical (compromise for visual impact)
         const startPos = new THREE.Vector3(0, 40, -30);
-        const endPos = new THREE.Vector3(0, -8, 10);
+        const endPos = new THREE.Vector3(0, -8, 20); // Increased Z from 10 to 20 for steeper angle
         comet.position.lerpVectors(startPos, endPos, eased);
 
-        // Scale
+        // PHASE 3: Size grows smoothly from tiny to full scale
         const scale = 0.01 + (1.0 - 0.01) * phase.phaseT;
         comet.scale.set(scale, scale, scale);
 
-        // Rotation (accumulate over time, not reset)
+        // PHASE 3: Rotation uses deltaTime for frame-rate independence
         comet.rotation.x += 1.8 * deltaTime;
         comet.rotation.y += 1.3 * deltaTime;
 
-        // PHASE 4: Smooth heat transition with cubic ease-in-out
-        const heatIntensity = phase.phaseT * 0.8;
+        // PHASE 3: Smooth cubic heat transition (ease-in-out)
+        // Heat starts building gradually, then accelerates
+        const t = phase.phaseT;
+        const cubicEase = t < 0.5
+          ? 4 * t * t * t
+          : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        const heatIntensity = cubicEase * 0.85; // Max 0.85 to avoid over-brightness
+
         cometMaterial.uniforms.heatIntensity.value = heatIntensity;
         glowMaterial.uniforms.heatIntensity.value = heatIntensity;
         glowMaterial.uniforms.time.value = introElapsed;
       }
 
-      // PHASE 5: Enhanced impact with better timing and flash effects
+      // PHASE 4: Impact explosion with precise timing windows
       if (phase.name === 'impact') {
-        // Explosive growth with ease-out curve for realistic physics
+        // PHASE 4: Strict time windows for controlled sequence
+        // 0-120ms: Explosive burst with visible comet
+        // 120-500ms: Bloom decay, shake decay, debris expansion
+
         if (phase.phaseT < 0.24) {
           const t = phase.phaseT / 0.24;
-          // Ease-out cubic: 1 - (1-t)³
+          // PHASE 4: Ease-out cubic for realistic explosion physics
           const easeOut = 1.0 - Math.pow(1.0 - t, 3.0);
           const explosionScale = 1.0 + (6.0 - 1.0) * easeOut;
           comet.scale.set(explosionScale, explosionScale, explosionScale);
 
-          // Increase comet glow opacity during explosion
+          // PHASE 4: Enhance comet glow during explosion
           if (glowMaterial.uniforms) {
-            const explosionGlow = easeOut * 0.6;
-            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.8 + explosionGlow);
+            const explosionGlow = easeOut * 0.7;
+            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.85 + explosionGlow);
           }
         } else {
+          // Hide comet after explosion burst
           comet.visible = false;
         }
 
-        // BLUEPRINT 13: Multi-stage bloom spike (reduced for accessibility)
-        let bloomStrength = 2.0;
+        // PHASE 1 FIX: Controlled bloom spike (SIGNIFICANTLY REDUCED to prevent whiteout)
+        // Base strength is now 1.5 (set at bloom pass creation)
+        // Peak reduced from 6.0 to 2.5 for controlled flash
+        let bloomStrength = 1.5;
         if (!prefersReducedMotion) {
           if (phase.phaseT < 0.04) {
-            // Instant flash in first 20ms - REDUCED from 12.0 to 6.0
-            bloomStrength = 6.0;
+            // Instant flash in first 20ms - REDUCED from 6.0 to 2.5
+            bloomStrength = 2.5;
           } else if (phase.phaseT < 0.2) {
-            // Rapid decay to high bloom (20-100ms)
+            // Rapid decay to medium bloom (20-100ms)
             const t = (phase.phaseT - 0.04) / 0.16;
-            bloomStrength = 6.0 - (6.0 - 4.5) * t; // 6.0 -> 4.5
+            bloomStrength = 2.5 - (2.5 - 2.0) * t; // 2.5 -> 2.0
           } else if (phase.phaseT < 0.6) {
             // Exponential decay to base (100-300ms)
             const t = (phase.phaseT - 0.2) / 0.4;
-            bloomStrength = 4.5 * Math.exp(-t * 2.5); // Reduced multiplier
+            bloomStrength = 2.0 * Math.exp(-t * 1.5); // Gentler decay
+            bloomStrength = Math.max(bloomStrength, 1.5); // Floor at base
           } else {
-            bloomStrength = 2.0;
+            bloomStrength = 1.5;
           }
         } else {
           // Reduced motion: gentler bloom spike
           if (phase.phaseT < 0.2) {
-            bloomStrength = 3.0;
-          } else {
             bloomStrength = 2.0;
+          } else {
+            bloomStrength = 1.5;
           }
         }
         bloomPass.strength = bloomStrength * qualityConfig.bloomStrengthScale;
       } else {
-        bloomPass.strength = 2.0; // Reset to base
+        bloomPass.strength = 1.5 * qualityConfig.bloomStrengthScale; // Reset to base
       }
 
       // CRATER_SETTLE: Black hole formation + reality cracks + title
@@ -1645,8 +1855,30 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         }
       }
 
-      // Render
-      composer.render();
+      // PHASE 1: Conditional rendering based on diagnostic toggles
+      if (debugMode) {
+        // Control scene object visibility
+        starField.visible = diagnostics.starsEnabled;
+        comet.visible = comet.visible && diagnostics.cometEnabled; // Respect phase visibility
+        debrisParticles.visible = diagnostics.particlesEnabled;
+        glassParticles.visible = diagnostics.particlesEnabled;
+        blackHoleGroup.visible = blackHoleGroup.visible && diagnostics.blackHoleEnabled; // Respect phase visibility
+
+        // Control post-processing passes
+        bloomPass.enabled = diagnostics.bloomEnabled;
+        crackPass.enabled = diagnostics.crackEnabled;
+        fxaaPass.enabled = diagnostics.fxaaEnabled;
+
+        // Render with or without composer
+        if (diagnostics.composerEnabled) {
+          composer.render();
+        } else {
+          renderer.render(scene, camera);
+        }
+      } else {
+        // Normal render path (no diagnostic overhead)
+        composer.render();
+      }
 
       requestAnimationFrame(animate);
     }
@@ -1667,8 +1899,13 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       renderer.setSize(width, height);
       composer.setSize(width, height);
 
+      // Update post-processing uniforms
       crackPass.uniforms.resolution.value.set(width, height);
       fxaaPass.uniforms['resolution'].value.set(1 / width, 1 / height);
+
+      // PHASE 2: Update starfield uniforms for pixel-perfect sizing
+      starMaterial.uniforms.viewportHeight.value = height;
+      starMaterial.uniforms.pixelRatio.value = Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax);
     }
 
     window.addEventListener('resize', handleResize);
@@ -1727,16 +1964,51 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       {/* Three.js canvas container */}
       <div ref={containerRef} className="absolute inset-0" />
 
-      {/* BLUEPRINT 14: Debug HUD */}
+      {/* PHASE 1: Enhanced Debug HUD with Diagnostics */}
       {debugMode && (
-        <div className="absolute top-4 left-4 bg-black bg-opacity-75 text-white font-mono text-xs p-3 rounded pointer-events-none z-50">
+        <div className="absolute top-4 left-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none">
+          <div className="font-bold text-green-400 mb-2">DEBUG MODE (Press D for Diagnostics)</div>
           <div>Phase: {debugState.phase}</div>
           <div>Elapsed: {debugState.elapsed.toFixed(2)}s</div>
           <div>FPS: {debugState.fps}</div>
           <div>Pulled Stars: {debugState.pulledStars}</div>
           <div>Active Particles: {debugState.activeParticles}</div>
           <div>Quality: {activeQuality}</div>
+          <div>DPR: {Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax).toFixed(2)}</div>
+          <div>Render Target: {diagnostics.renderTargetType}</div>
           <div>Reduced Motion: {prefersReducedMotion ? 'Yes' : 'No'}</div>
+        </div>
+      )}
+
+      {/* PHASE 1: Diagnostic Controls Panel */}
+      {debugMode && diagnostics.showPanel && (
+        <div className="absolute top-4 right-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none">
+          <div className="font-bold text-cyan-400 mb-2">DIAGNOSTICS</div>
+          <div className="text-gray-400 mb-2">Press keys to toggle:</div>
+          <div className={diagnostics.composerEnabled ? 'text-green-400' : 'text-red-400'}>
+            [1] Composer: {diagnostics.composerEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.bloomEnabled ? 'text-green-400' : 'text-red-400'}>
+            [2] Bloom: {diagnostics.bloomEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.crackEnabled ? 'text-green-400' : 'text-red-400'}>
+            [3] Cracks: {diagnostics.crackEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.fxaaEnabled ? 'text-green-400' : 'text-red-400'}>
+            [4] FXAA: {diagnostics.fxaaEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.starsEnabled ? 'text-green-400' : 'text-red-400'}>
+            [5] Stars: {diagnostics.starsEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.cometEnabled ? 'text-green-400' : 'text-red-400'}>
+            [6] Comet: {diagnostics.cometEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.particlesEnabled ? 'text-green-400' : 'text-red-400'}>
+            [7] Particles: {diagnostics.particlesEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.blackHoleEnabled ? 'text-green-400' : 'text-red-400'}>
+            [8] Black Hole: {diagnostics.blackHoleEnabled ? 'ON' : 'OFF'}
+          </div>
         </div>
       )}
 
