@@ -98,11 +98,20 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     composerEnabled: true,
     bloomEnabled: true,
     fxaaEnabled: true,
+    outputPassEnabled: true,
+    crackPassEnabled: true, // Future: for Phase 6
     starsEnabled: true,
     cometEnabled: true,
     particlesEnabled: true,
     blackHoleEnabled: true,
-    renderTargetType: 'detecting...' as string
+    uiEnabled: true,
+    parityMode: false, // Golden parity: composer with ONLY RenderPass
+    timeFrozen: false,
+    scrubbedTime: 0,
+    renderTargetType: 'detecting...' as string,
+    renderSize: { width: 0, height: 0 },
+    toneMapping: 'unknown' as string,
+    outputColorSpace: 'unknown' as string
   });
 
   // PHASE 6: Keyboard accessibility handler
@@ -158,6 +167,41 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         case '7':
           setDiagnostics(prev => ({ ...prev, blackHoleEnabled: !prev.blackHoleEnabled }));
           break;
+        case '8':
+          setDiagnostics(prev => ({ ...prev, outputPassEnabled: !prev.outputPassEnabled }));
+          break;
+        case '9':
+          setDiagnostics(prev => ({ ...prev, crackPassEnabled: !prev.crackPassEnabled }));
+          break;
+        case '0':
+          setDiagnostics(prev => ({ ...prev, uiEnabled: !prev.uiEnabled }));
+          break;
+        case 'p':
+          // Toggle parity mode (golden reference: RenderPass only)
+          setDiagnostics(prev => ({ ...prev, parityMode: !prev.parityMode }));
+          break;
+        case 'f':
+          // Freeze/unfreeze time
+          setDiagnostics(prev => ({ ...prev, timeFrozen: !prev.timeFrozen }));
+          break;
+        case ',':
+        case '<':
+          // Scrub time backward (0.1s steps)
+          setDiagnostics(prev => ({
+            ...prev,
+            scrubbedTime: Math.max(0, prev.scrubbedTime - 0.1),
+            timeFrozen: true
+          }));
+          break;
+        case '.':
+        case '>':
+          // Scrub time forward (0.1s steps)
+          setDiagnostics(prev => ({
+            ...prev,
+            scrubbedTime: Math.min(10, prev.scrubbedTime + 0.1),
+            timeFrozen: true
+          }));
+          break;
       }
     };
 
@@ -187,7 +231,20 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     );
     camera.position.set(0, 0, 30);
 
-    // BLUEPRINT 1.1: Renderer configuration (LDR pipeline with post-AA)
+    // ============================================================================
+    // PHASE 3: RENDERER CONFIGURATION (LINEAR WORKFLOW)
+    // ============================================================================
+    /**
+     * PHASE 3: Renderer settings for linear color workflow
+     *
+     * - toneMapping: Default is NoToneMapping (correct - OutputPass handles it)
+     * - outputColorSpace: SRGBColorSpace (linear → sRGB for direct render)
+     * - When using composer: OutputPass applies sRGB conversion instead
+     *
+     * This ensures color-correct rendering in both paths:
+     * 1. Direct render: renderer applies linear → sRGB
+     * 2. Composer render: OutputPass applies linear → sRGB
+     */
     const renderer = new THREE.WebGLRenderer({
       alpha: false,
       antialias: false // Using FXAA post-processing instead
@@ -195,8 +252,17 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax));
     renderer.setClearColor(0x000000);
-    // LDR color pipeline - keep all values in [0,1] range in shaders
+
+    // PHASE 3: Linear workflow - no tone mapping on renderer (OutputPass handles it)
+    // renderer.toneMapping defaults to THREE.NoToneMapping (0) - correct!
+    // PHASE 3: Output color space conversion (linear → sRGB gamma)
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    // PHASE 4: Query device max point size for star sizing clamp
+    const gl = renderer.getContext();
+    const maxPointSize = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)[1];
+    console.log(`[IntroScreen] Device max point size: ${maxPointSize}px`);
+
     containerRef.current.appendChild(renderer.domElement);
 
     // ============================================================================
@@ -306,40 +372,89 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     // ============================================================================
-    // PHASE 1: HDR RENDER TARGET DETECTION & SETUP
+    // PHASE 2: HDR RENDER TARGET DETECTION & SETUP (ROBUST)
     // ============================================================================
-
-    // Detect HDR support (half-float render targets)
+    /**
+     * PHASE 2: Robust HDR capability detection
+     *
+     * HDR rendering requires:
+     * 1. WebGL2 context (for integer sampler support, MRT, etc.)
+     * 2. EXT_color_buffer_half_float extension (for renderable HalfFloat attachments)
+     *
+     * If BOTH are available:
+     *   - Create HalfFloatType render targets with LinearSRGBColorSpace
+     *   - Allows values > 1.0 for bloom highlights
+     *   - OutputPass applies tone mapping at the end
+     *
+     * If EITHER is missing:
+     *   - Fall back to default LDR (UnsignedByteType)
+     *   - All shader outputs must be clamped to [0, 1]
+     *   - OutputPass still applies color space conversion
+     *
+     * This ensures no incomplete framebuffer errors or precision issues.
+     */
     const supportsHDR = renderer.capabilities.isWebGL2;
-    let renderTargetType: string = 'LDR';
+    let renderTargetType: string = 'LDR (UnsignedByte)';
+    let actualHDRSupport = false;
 
     if (supportsHDR) {
       const halfFloatExt = renderer.extensions.get('EXT_color_buffer_half_float');
       if (halfFloatExt) {
         renderTargetType = 'HDR (HalfFloat)';
+        actualHDRSupport = true;
+      } else {
+        renderTargetType = 'LDR (WebGL2, no HalfFloat ext)';
       }
     }
 
-    // Update diagnostic state with render target type
-    setDiagnostics(prev => ({ ...prev, renderTargetType }));
+    // PHASE 1: Gather comprehensive diagnostic data
+    const toneMappingNames = ['NoToneMapping', 'LinearToneMapping', 'ReinhardToneMapping',
+                               'CineonToneMapping', 'ACESFilmicToneMapping', 'CustomToneMapping'];
+    const toneMapping = toneMappingNames[renderer.toneMapping] || 'Unknown';
+    const outputColorSpaceName = renderer.outputColorSpace === THREE.SRGBColorSpace ? 'sRGB' :
+                                   renderer.outputColorSpace === THREE.LinearSRGBColorSpace ? 'Linear-sRGB' :
+                                   'Unknown';
+
+    // Update diagnostic state with comprehensive pipeline info
+    setDiagnostics(prev => ({
+      ...prev,
+      renderTargetType,
+      renderSize: { width: window.innerWidth, height: window.innerHeight },
+      toneMapping,
+      outputColorSpace: outputColorSpaceName
+    }));
 
     // ============================================================================
-    // BLUEPRINT 1.2: POST-PROCESSING PIPELINE (DOCUMENTED ORDER)
-    // Order: RenderPass → CrackEffect → UnrealBloom → FXAA → Output
-    //
-    // Rationale:
-    // 1. RenderPass: Render scene to buffer
-    // 2. UnrealBloom: Minimal bloom on bright elements (0.35 constant)
-    // 3. FXAA: Anti-aliasing for smooth edges
-    // 4. Output: Tone mapping and color space conversion
+    // PHASE 2 & 3: POST-PROCESSING PIPELINE (LINEAR WORKFLOW CONTRACT)
     // ============================================================================
+    /**
+     * Pipeline Order: RenderPass → [CrackPass (Phase 6)] → UnrealBloom → FXAA → OutputPass
+     *
+     * COLOR PIPELINE CONTRACT (PHASE 3):
+     * ----------------------------------
+     * 1. All scene shaders output LINEAR color values (no gamma encoding)
+     * 2. All intermediate render targets use LinearSRGBColorSpace (if HDR)
+     * 3. Bloom operates on linear values (correct physically-based behavior)
+     * 4. OutputPass is the ONLY stage that applies:
+     *    - Tone mapping (if HDR: compress > 1.0 values)
+     *    - sRGB gamma encoding (for display)
+     * 5. Renderer.outputColorSpace = SRGBColorSpace ensures direct render matches
+     *
+     * CRITICAL: OutputPass must be enabled for correct output. Disabling it
+     * (via diagnostics) will result in linear output that appears washed out.
+     *
+     * VERIFICATION:
+     * - Use [P] parity mode to compare: direct render vs composer+RenderPass only
+     * - These should match visually (both apply same output transform)
+     * - Use [1] to toggle composer and compare direct vs full pipeline
+     */
 
-    // Create composer with HDR render targets if supported
-    const composer = new EffectComposer(renderer, supportsHDR ?
+    // PHASE 2: Create composer with HDR render targets ONLY if extension available
+    const composer = new EffectComposer(renderer, actualHDRSupport ?
       new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
         type: THREE.HalfFloatType,
-        colorSpace: THREE.LinearSRGBColorSpace
-      }) : undefined
+        colorSpace: THREE.LinearSRGBColorSpace  // Linear workflow: no gamma in intermediate buffers
+      }) : undefined  // LDR fallback: EffectComposer creates default UnsignedByteType target
     );
     const renderPass = new RenderPass(scene, camera);
     composer.addPass(renderPass);
@@ -436,9 +551,19 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         starColors[i3 + 2] = 0.8;
       }
 
-      // BLUEPRINT 4.1: Per-star attributes for GPU-based animation
-      // Base size (0.5 - 2.0) - immutable
-      starBaseSizes[i] = 0.5 + Math.random() * 1.5;
+      // PHASE 4: Per-star base size (recalibrated for crisp pinpoints)
+      // Distribution: 70% small (0.3-0.6), 25% medium (0.6-0.9), 5% hero (0.9-1.2)
+      const sizeRand = Math.random();
+      if (sizeRand < 0.70) {
+        // 70% small stars
+        starBaseSizes[i] = 0.3 + Math.random() * 0.3; // 0.3 - 0.6
+      } else if (sizeRand < 0.95) {
+        // 25% medium stars
+        starBaseSizes[i] = 0.6 + Math.random() * 0.3; // 0.6 - 0.9
+      } else {
+        // 5% hero stars (brightest, largest)
+        starBaseSizes[i] = 0.9 + Math.random() * 0.3; // 0.9 - 1.2
+      }
 
       // Twinkle seed for deterministic GPU animation
       starTwinkleSeeds[i] = Math.random() * 100.0;
@@ -460,14 +585,27 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
     starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
 
-    // PHASE 2: Enhanced GPU-based starfield shader with pixel-perfect sizing
+    // ============================================================================
+    // PHASE 3 & 4: STARFIELD SHADER (LINEAR COLOR OUTPUT)
+    // ============================================================================
+    /**
+     * PHASE 3: Shader outputs LINEAR color values (no gamma encoding)
+     * - Color buffer values are linear (0.95, 1.0, etc.)
+     * - No pow(color, 1.0/2.2) or other gamma correction in shader
+     * - Output transform applied by OutputPass only
+     *
+     * PHASE 4: Starfield sizing will be recalibrated for crisp pinpoints
+     * (Current sizing produces 7-27px blobs - to be fixed)
+     */
     const starMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0.0 },
         starTexture: { value: starTexture },
         baseOpacity: { value: 1.0 },
+        starIntensity: { value: 0.85 }, // PHASE 4: Global intensity scalar (tunable)
         pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
-        viewportHeight: { value: window.innerHeight }
+        viewportHeight: { value: window.innerHeight },
+        maxPointSize: { value: maxPointSize } // PHASE 4: Device max point size
       },
       vertexShader: `
         attribute float baseSize;
@@ -477,8 +615,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
         uniform float time;
         uniform float baseOpacity;
+        uniform float starIntensity;
         uniform float pixelRatio;
         uniform float viewportHeight;
+        uniform float maxPointSize;
 
         varying vec3 vColor;
         varying float vAlpha;
@@ -487,26 +627,36 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         void main() {
           vColor = color;
 
-          // PHASE 2: Smooth twinkle (reduced frequency for less flicker)
-          float twinkle = sin(time * 2.0 + twinkleSeed * 0.5) * 0.25 + 0.875;
+          // PHASE 4: Twinkle with controlled range [0.8, 1.0] (never exceeds 1.0!)
+          // Reduced amplitude (0.1 instead of 0.25) for subtlety
+          float twinkle = sin(time * 1.5 + twinkleSeed * 0.5) * 0.1 + 0.9;
 
-          // Apply absorption scale (modified on CPU during black hole pull)
-          float finalSize = baseSize * twinkle * absorptionScale;
-
-          // Calculate alpha based on opacity and absorption
-          vAlpha = baseOpacity * twinkle * absorptionScale;
+          // PHASE 4: Size modulation (twinkle affects brightness more than size)
+          float sizeMultiplier = twinkle * absorptionScale;
+          float brightnessMultiplier = twinkle * absorptionScale * starIntensity;
 
           // Transform to view space
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          float viewDistance = -mvPosition.z;
 
-          // PHASE 2: Pixel-perfect point size calculation
-          // Account for perspective, DPR, and viewport height for consistent screen-space size
-          float perspectiveFactor = 1.0 / -mvPosition.z;
-          float pixelSize = finalSize * perspectiveFactor * viewportHeight * 0.5;
-          gl_PointSize = pixelSize * pixelRatio;
+          // PHASE 4: Depth cueing - distant stars smaller and dimmer (subtle)
+          float depthFactor = 1.0 - (viewDistance - 30.0) / 100.0; // 30-130 range
+          depthFactor = clamp(depthFactor, 0.6, 1.0); // Min 60% size/brightness at far plane
 
-          // PHASE 2: Pass depth for depth-cueing in fragment shader
-          vDepth = -mvPosition.z / 160.0; // Normalize depth (0=near, 1=far)
+          // PHASE 4: Final size calculation (recalibrated for crisp pinpoints)
+          // Target: ~1-2px at Z=-80 for median star (baseSize=0.45)
+          // Formula simplified: pixels = baseSize * factors * screenScale / distance
+          float screenScale = viewportHeight * pixelRatio * 0.025; // Tuning factor
+          float pixelSize = baseSize * sizeMultiplier * depthFactor * screenScale / viewDistance;
+
+          // PHASE 4: Clamp to device limits and aesthetic max (4px)
+          gl_PointSize = clamp(pixelSize, 1.0, min(maxPointSize, 4.0 * pixelRatio));
+
+          // PHASE 4: Alpha with clamping discipline (never > 1.0)
+          vAlpha = clamp(baseOpacity * brightnessMultiplier * depthFactor, 0.0, 1.0);
+
+          // PHASE 4: Pass normalized depth for fragment shader
+          vDepth = (viewDistance - 30.0) / 100.0; // 0=near, 1=far
 
           gl_Position = projectionMatrix * mvPosition;
         }
@@ -519,22 +669,24 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         varying float vDepth;
 
         void main() {
-          // PHASE 2: Sample star texture
+          // PHASE 4: Sample star texture
           vec4 texColor = texture2D(starTexture, gl_PointCoord);
 
-          // PHASE 2: Depth cueing - distant stars slightly dimmer
-          float depthFade = 1.0 - vDepth * 0.3; // 30% dimming at max depth
+          // PHASE 4: Depth is already baked into vAlpha from vertex shader
+          // No double-application of depth cueing
 
-          // PHASE 2: Enhanced star core with subtle glow
-          // Stars have sharp center that blooms slightly at edges
+          // PHASE 4: Subtle core brightness boost for pinpoint crispness
           float dist = length(gl_PointCoord - vec2(0.5));
-          float coreBrightness = 1.0 - smoothstep(0.0, 0.3, dist);
+          float coreBrightness = smoothstep(0.5, 0.0, dist); // Sharper falloff
 
-          // Combine texture alpha with depth fade and core brightness
-          float finalAlpha = texColor.a * vAlpha * depthFade;
-          vec3 finalColor = vColor * (0.85 + coreBrightness * 0.15);
+          // PHASE 4: Final color with subtle core highlight
+          vec3 finalColor = vColor * (0.9 + coreBrightness * 0.1);
 
-          gl_FragColor = vec4(finalColor, finalAlpha);
+          // PHASE 4: Final alpha (depth already applied in vertex shader)
+          float finalAlpha = texColor.a * vAlpha;
+
+          // PHASE 4: Ensure clamping (redundant safeguard)
+          gl_FragColor = vec4(finalColor, clamp(finalAlpha, 0.0, 1.0));
         }
       `,
       transparent: true,
@@ -932,10 +1084,17 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     comet.add(cometGlow);
 
     // ============================================================================
-    // BLACK HOLE COMPONENT (4 layered meshes)
+    // PHASE 5: BLACK HOLE COMPONENT (4 layered meshes) - DEPTH COHERENCE FIX
     // ============================================================================
+    /**
+     * PHASE 5: Black hole positioned at Z=-70 (middle of star volume)
+     * - Stars: Z ∈ [-130, -30]
+     * - Black hole: Z = -70 (inside star volume, not in front!)
+     * - Selection radius 60 units now captures many stars
+     * - Before: Z=10 was 40-140 units in front of all stars (selection failed)
+     */
     const blackHoleGroup = new THREE.Group();
-    blackHoleGroup.position.set(0, -8, 10);
+    blackHoleGroup.position.set(0, -8, -70); // PHASE 5: Moved from Z=10 to Z=-70
     blackHoleGroup.scale.set(0, 0, 0);
     blackHoleGroup.visible = false;
     scene.add(blackHoleGroup);
@@ -1299,7 +1458,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
      * Quality scaling: HIGH = 360 particles (1.0x), LOW = 180 particles (0.5x)
      */
     function emitDebrisParticles() {
-      const impactPoint = new THREE.Vector3(0, -8, 10);
+      const impactPoint = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
       const colorPalette = [
         [0.6, 0.2, 0.8], // Purple
         [0.2, 0.8, 0.7], // Teal
@@ -1439,7 +1598,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
      * - Screen-space pull: visually consistent effect regardless of depth
      */
     function updateStarPulling(deltaTime: number, introElapsed: number) {
-      const blackHolePos = new THREE.Vector3(0, -8, 10);
+      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
       const positions = starGeometry.attributes.position.array as Float32Array;
       const absorptionScales = starGeometry.attributes.absorptionScale.array as Float32Array;
 
@@ -1527,13 +1686,15 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const alreadyPulledStars = new Set<number>();
 
     /**
-     * Select initial 12 stars to pull immediately when black hole forms
+     * PHASE 5: Select initial stars to pull immediately when black hole forms
+     * Now properly selects stars because black hole is inside star volume!
      */
     function selectInitialStarsToPull() {
-      const blackHolePos = new THREE.Vector3(0, -8, 10);
+      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
       const positions = starGeometry.attributes.position.array as Float32Array;
 
-      // Find all nearby stars (within 60 units - black hole is at Z:10, stars are at Z:-130 to -30)
+      // PHASE 5: Find nearby stars (within 60 units - black hole at Z:-70, stars Z:-130 to -30)
+      // Many stars within 60 units now that black hole is inside star volume!
       const nearbyStars: number[] = [];
       for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
@@ -1571,10 +1732,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Pull additional batch of 1-4 stars (called periodically)
+     * PHASE 5: Pull additional batch of 1-4 stars (called periodically)
      */
     function pullNextBatchOfStars(currentTime: number) {
-      const blackHolePos = new THREE.Vector3(0, -8, 10);
+      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
       const positions = starGeometry.attributes.position.array as Float32Array;
 
       // Find nearby stars that haven't been pulled yet (within 60 units)
@@ -1636,7 +1797,13 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       const rawDelta = clock.getDelta();
       const deltaTime = Math.min(rawDelta, 1 / 30); // Clamp to 30fps max step
 
-      introElapsed += deltaTime;
+      // PHASE 1: Time freeze/scrub support for diagnostics
+      if (debugMode && diagnostics.timeFrozen) {
+        introElapsed = diagnostics.scrubbedTime;
+      } else {
+        introElapsed += deltaTime;
+      }
+
       const phase = getPhaseInfo(introElapsed);
 
       // Update shader time uniforms (use introElapsed for consistency)
@@ -1683,12 +1850,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       if (phase.name === 'comet_approach') {
         const eased = phase.phaseT * phase.phaseT; // Quadratic ease-in for acceleration
 
-        // PHASE 3: Trajectory tuned for ~60° from vertical approach angle
+        // PHASE 5: Trajectory updated for depth coherence (impact inside star volume)
         // Vertical drop: 48 units (40 to -8)
-        // Forward motion: 50 units (-30 to 20) for dramatic diagonal approach
-        // This creates tan⁻¹(50/48) ≈ 46° from vertical (compromise for visual impact)
+        // Depth motion: 40 units (-30 to -70) for dramatic diagonal approach into star field
+        // Creates a coherent impact point where stars actually exist
         const startPos = new THREE.Vector3(0, 40, -30);
-        const endPos = new THREE.Vector3(0, -8, 20); // Increased Z from 10 to 20 for steeper angle
+        const endPos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
         comet.position.lerpVectors(startPos, endPos, eased);
 
         // PHASE 3: Size grows smoothly from tiny to full scale
@@ -1856,14 +2023,25 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         glassParticles.visible = diagnostics.particlesEnabled;
         blackHoleGroup.visible = blackHoleGroup.visible && diagnostics.blackHoleEnabled; // Respect phase visibility
 
-        // Control post-processing passes
-        bloomPass.enabled = diagnostics.bloomEnabled;
-        fxaaPass.enabled = diagnostics.fxaaEnabled;
+        // PHASE 1: Control post-processing passes
+        if (diagnostics.parityMode) {
+          // Golden parity mode: ONLY RenderPass (all other passes disabled)
+          bloomPass.enabled = false;
+          fxaaPass.enabled = false;
+          outputPass.enabled = false;
+        } else {
+          // Normal diagnostic mode: individual pass toggles
+          bloomPass.enabled = diagnostics.bloomEnabled;
+          fxaaPass.enabled = diagnostics.fxaaEnabled;
+          outputPass.enabled = diagnostics.outputPassEnabled;
+          // crackPass toggle will be added in Phase 6
+        }
 
         // Render with or without composer
         if (diagnostics.composerEnabled) {
           composer.render();
         } else {
+          // Direct renderer path (bypass composer entirely)
           renderer.render(scene, camera);
         }
       } else {
@@ -1955,81 +2133,132 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       <div ref={containerRef} className="absolute inset-0" />
 
       {/* PHASE 1: Enhanced Debug HUD with Diagnostics */}
-      {debugMode && (
+      {debugMode && diagnostics.uiEnabled && (
         <div className="absolute top-4 left-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none">
-          <div className="font-bold text-green-400 mb-2">DEBUG MODE (Press D for Diagnostics)</div>
+          <div className="font-bold text-green-400 mb-2">DEBUG MODE (Press D for Controls)</div>
           <div>Phase: {debugState.phase}</div>
-          <div>Elapsed: {debugState.elapsed.toFixed(2)}s</div>
+          <div className={diagnostics.timeFrozen ? 'text-yellow-400' : ''}>
+            Elapsed: {debugState.elapsed.toFixed(2)}s {diagnostics.timeFrozen ? '(FROZEN - F/,/.)' : ''}
+          </div>
           <div>FPS: {debugState.fps}</div>
           <div>Pulled Stars: {debugState.pulledStars}</div>
           <div>Active Particles: {debugState.activeParticles}</div>
-          <div>Quality: {activeQuality}</div>
-          <div>DPR: {Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax).toFixed(2)}</div>
-          <div>Render Target: {diagnostics.renderTargetType}</div>
-          <div>Reduced Motion: {prefersReducedMotion ? 'Yes' : 'No'}</div>
+          <div className="mt-2 pt-2 border-t border-gray-700">
+            <div className="font-bold text-blue-400 mb-1">Pipeline Info:</div>
+            <div>Quality: {activeQuality}</div>
+            <div>DPR: {Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax).toFixed(2)}</div>
+            <div>Render Size: {diagnostics.renderSize.width}x{diagnostics.renderSize.height}</div>
+            <div>RT Type: {diagnostics.renderTargetType}</div>
+            <div>Tone Map: {diagnostics.toneMapping}</div>
+            <div>Output CS: {diagnostics.outputColorSpace}</div>
+            <div>Reduced Motion: {prefersReducedMotion ? 'Yes' : 'No'}</div>
+          </div>
+          {diagnostics.parityMode && (
+            <div className="mt-2 pt-2 border-t border-yellow-600">
+              <div className="font-bold text-yellow-400">⚠ PARITY MODE (Press P)</div>
+              <div className="text-yellow-300 text-xs">RenderPass only - compare to direct render</div>
+            </div>
+          )}
         </div>
       )}
 
       {/* PHASE 1: Diagnostic Controls Panel */}
-      {debugMode && diagnostics.showPanel && (
-        <div className="absolute top-4 right-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none">
+      {debugMode && diagnostics.showPanel && diagnostics.uiEnabled && (
+        <div className="absolute top-4 right-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none max-h-screen overflow-y-auto">
           <div className="font-bold text-cyan-400 mb-2">DIAGNOSTICS</div>
           <div className="text-gray-400 mb-2">Press keys to toggle:</div>
-          <div className={diagnostics.composerEnabled ? 'text-green-400' : 'text-red-400'}>
-            [1] Composer: {diagnostics.composerEnabled ? 'ON' : 'OFF'}
+
+          <div className="mb-2 pb-2 border-b border-gray-700">
+            <div className="text-purple-400 font-bold mb-1">Rendering:</div>
+            <div className={diagnostics.composerEnabled ? 'text-green-400' : 'text-red-400'}>
+              [1] Composer: {diagnostics.composerEnabled ? 'ON' : 'OFF (direct render)'}
+            </div>
+            <div className={diagnostics.parityMode ? 'text-yellow-400' : 'text-gray-500'}>
+              [P] Parity Mode: {diagnostics.parityMode ? 'ON (RenderPass only)' : 'OFF'}
+            </div>
           </div>
-          <div className={diagnostics.bloomEnabled ? 'text-green-400' : 'text-red-400'}>
-            [2] Bloom: {diagnostics.bloomEnabled ? 'ON' : 'OFF'}
+
+          <div className="mb-2 pb-2 border-b border-gray-700">
+            <div className="text-purple-400 font-bold mb-1">Post-Processing:</div>
+            <div className={diagnostics.bloomEnabled ? 'text-green-400' : 'text-red-400'}>
+              [2] Bloom: {diagnostics.bloomEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.fxaaEnabled ? 'text-green-400' : 'text-red-400'}>
+              [3] FXAA: {diagnostics.fxaaEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.outputPassEnabled ? 'text-green-400' : 'text-red-400'}>
+              [8] OutputPass: {diagnostics.outputPassEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.crackPassEnabled ? 'text-gray-500' : 'text-gray-600'}>
+              [9] CrackPass: {diagnostics.crackPassEnabled ? 'ON' : 'OFF'} (Phase 6)
+            </div>
           </div>
-          <div className={diagnostics.fxaaEnabled ? 'text-green-400' : 'text-red-400'}>
-            [3] FXAA: {diagnostics.fxaaEnabled ? 'ON' : 'OFF'}
+
+          <div className="mb-2 pb-2 border-b border-gray-700">
+            <div className="text-purple-400 font-bold mb-1">Scene Objects:</div>
+            <div className={diagnostics.starsEnabled ? 'text-green-400' : 'text-red-400'}>
+              [4] Stars: {diagnostics.starsEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.cometEnabled ? 'text-green-400' : 'text-red-400'}>
+              [5] Comet: {diagnostics.cometEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.particlesEnabled ? 'text-green-400' : 'text-red-400'}>
+              [6] Particles: {diagnostics.particlesEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.blackHoleEnabled ? 'text-green-400' : 'text-red-400'}>
+              [7] Black Hole: {diagnostics.blackHoleEnabled ? 'ON' : 'OFF'}
+            </div>
+            <div className={diagnostics.uiEnabled ? 'text-green-400' : 'text-red-400'}>
+              [0] UI: {diagnostics.uiEnabled ? 'ON' : 'OFF'}
+            </div>
           </div>
-          <div className={diagnostics.starsEnabled ? 'text-green-400' : 'text-red-400'}>
-            [4] Stars: {diagnostics.starsEnabled ? 'ON' : 'OFF'}
-          </div>
-          <div className={diagnostics.cometEnabled ? 'text-green-400' : 'text-red-400'}>
-            [5] Comet: {diagnostics.cometEnabled ? 'ON' : 'OFF'}
-          </div>
-          <div className={diagnostics.particlesEnabled ? 'text-green-400' : 'text-red-400'}>
-            [6] Particles: {diagnostics.particlesEnabled ? 'ON' : 'OFF'}
-          </div>
-          <div className={diagnostics.blackHoleEnabled ? 'text-green-400' : 'text-red-400'}>
-            [7] Black Hole: {diagnostics.blackHoleEnabled ? 'ON' : 'OFF'}
+
+          <div className="mb-2">
+            <div className="text-purple-400 font-bold mb-1">Time Control:</div>
+            <div className={diagnostics.timeFrozen ? 'text-yellow-400' : 'text-gray-500'}>
+              [F] Freeze: {diagnostics.timeFrozen ? 'FROZEN' : 'Running'}
+            </div>
+            <div className="text-gray-400 text-xs ml-4">
+              [,] / [.] Scrub ±0.1s
+            </div>
           </div>
         </div>
       )}
 
       {/* Title Text - PHASE 6: Added semantic heading and aria-live */}
-      <div
-        className={`absolute top-[30%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-opacity duration-600 ${
-          showTitle ? 'opacity-100' : 'opacity-0'
-        }`}
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <h1
-          className={`font-rajdhani font-bold text-5xl tracking-[0.25em] text-white text-center ${
-            titleGlitch ? 'animate-glitch' : showTitle ? 'animate-glitch-in' : ''
+      {(!debugMode || diagnostics.uiEnabled) && (
+        <div
+          className={`absolute top-[30%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-opacity duration-600 ${
+            showTitle ? 'opacity-100' : 'opacity-0'
           }`}
-          style={{
-            textShadow: `
-              2px 0 0 rgba(255, 0, 255, 0.7),
-              -2px 0 0 rgba(0, 255, 255, 0.7),
-              0 0 40px rgba(150, 100, 200, 0.8)
-            `
-          }}
+          aria-live="polite"
+          aria-atomic="true"
         >
-          THE FINAL DESCENT
-        </h1>
-      </div>
+          <h1
+            className={`font-rajdhani font-bold text-5xl tracking-[0.25em] text-white text-center ${
+              titleGlitch ? 'animate-glitch' : showTitle ? 'animate-glitch-in' : ''
+            }`}
+            style={{
+              textShadow: `
+                2px 0 0 rgba(255, 0, 255, 0.7),
+                -2px 0 0 rgba(0, 255, 255, 0.7),
+                0 0 40px rgba(150, 100, 200, 0.8)
+              `
+            }}
+          >
+            THE FINAL DESCENT
+          </h1>
+        </div>
+      )}
 
       {/* PHASE 6: Enhanced button with accessibility and focus states */}
-      <div
-        className={`absolute top-[66%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-opacity duration-500 ${
-          showButton ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
-        <button
+      {(!debugMode || diagnostics.uiEnabled) && (
+        <div
+          className={`absolute top-[66%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-opacity duration-500 ${
+            showButton ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <button
           ref={buttonRef}
           className={`font-rajdhani font-semibold text-base tracking-[0.2em] text-white bg-transparent border-none px-4 py-2 cursor-pointer transition-all duration-200 hover:scale-110 focus:scale-110 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-60 ${
             buttonGlitch ? 'animate-glitch' : showButton ? 'animate-glitch-in' : ''
@@ -2051,7 +2280,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         >
           BEGIN THE DESCENT
         </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
