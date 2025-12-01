@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
 /**
  * Animation timeline phases for the intro sequence
@@ -154,23 +155,32 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
       return elapsed - lastGlitchTime >= interval;
     }
 
+    /**
+     * Project world position to normalized screen coordinates (0-1)
+     * Used for dynamic crater center calculation
+     */
+    function projectToScreenUV(worldPos: THREE.Vector3, camera: THREE.Camera): THREE.Vector2 {
+      const vector = worldPos.clone();
+      vector.project(camera);
+
+      // Convert from NDC (-1 to 1) to UV (0 to 1)
+      // Note: Y is inverted because screen Y goes down but NDC Y goes up
+      return new THREE.Vector2(
+        (vector.x + 1) / 2,
+        1 - (vector.y + 1) / 2
+      );
+    }
+
     // ============================================================================
     // POST-PROCESSING PIPELINE
+    // Order: Render → Crack → Bloom → FXAA
     // ============================================================================
     const composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, camera);
     composer.addPass(renderPass);
 
-    // UnrealBloomPass
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      2.0, // strength
-      0.5, // radius
-      0.3  // threshold
-    );
-    composer.addPass(bloomPass);
-
     // Reality Crack Shader (Post-Processing)
+    // Applied BEFORE bloom so bloom can enhance the crack effects
     const crackShader = {
       uniforms: {
         tDiffuse: { value: null },
@@ -178,7 +188,7 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         time: { value: 0.0 },
         intensity: { value: 0.0 },
         crackPhase: { value: 0.0 },
-        craterCenter: { value: new THREE.Vector2(0.5, 0.67) }
+        craterCenter: { value: new THREE.Vector2(0.5, 0.67) } // Updated dynamically each frame
       },
       vertexShader: `
         varying vec2 vUv;
@@ -305,6 +315,25 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
 
     const crackPass = new ShaderPass(crackShader);
     composer.addPass(crackPass);
+
+    // UnrealBloomPass
+    // Applied AFTER crack shader to enhance glowing effects on cracks
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      2.0, // strength
+      0.5, // radius
+      0.3  // threshold
+    );
+    composer.addPass(bloomPass);
+
+    // FXAA Anti-Aliasing Pass
+    // Applied LAST to smooth all visual artifacts
+    const fxaaPass = new ShaderPass(FXAAShader);
+    fxaaPass.uniforms['resolution'].value.set(
+      1 / window.innerWidth,
+      1 / window.innerHeight
+    );
+    composer.addPass(fxaaPass);
 
     // ============================================================================
     // STARFIELD SYSTEM (3000 stars)
@@ -861,11 +890,11 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         [0.4, 0.9, 0.5]  // Green
       ];
 
-      // 120 bursts of 2 particles = 240 particles
+      // 120 bursts of 3 particles = 360 particles
       for (let burst = 0; burst < 120; burst++) {
         const angle = (burst * 3) * Math.PI / 180; // Every 3 degrees
 
-        for (let p = 0; p < 2; p++) {
+        for (let p = 0; p < 3; p++) {
           if (activeDebrisCount >= debrisCount) break;
 
           const i = activeDebrisCount;
@@ -908,6 +937,7 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     /**
      * Emit glass dust particles from crack lines
      * Called during crater_settle phase when phaseT < 0.6
+     * Emits 1 particle per direction per frame
      */
     function emitGlassParticles() {
       // This function is only called during appropriate time window
@@ -915,7 +945,7 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
 
       const impactPoint = new THREE.Vector3(0, -8, 10);
       const directions = 24; // 24 radial directions
-      const particlesPerDirection = 2;
+      const particlesPerDirection = 1; // 1 particle per direction per frame
 
       for (let d = 0; d < directions; d++) {
         const angle = (d / directions) * Math.PI * 2;
@@ -1114,6 +1144,11 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
       accretionDiskMaterial.uniforms.time.value = introElapsed;
       outerGlowMaterial.uniforms.time.value = introElapsed;
 
+      // Update crater center projection dynamically
+      const blackHoleWorldPos = new THREE.Vector3(0, -8, 10);
+      const craterUV = projectToScreenUV(blackHoleWorldPos, camera);
+      crackPass.uniforms.craterCenter.value.copy(craterUV);
+
       // ============================================================================
       // PHASE 1 FIX: DETERMINISTIC PHASE EXECUTION
       // ============================================================================
@@ -1288,6 +1323,7 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
       composer.setSize(width, height);
 
       crackPass.uniforms.resolution.value.set(width, height);
+      fxaaPass.uniforms['resolution'].value.set(1 / width, 1 / height);
     }
 
     window.addEventListener('resize', handleResize);
