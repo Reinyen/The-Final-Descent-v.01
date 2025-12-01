@@ -1533,7 +1533,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       const blackHolePos = new THREE.Vector3(0, -8, 10);
       const positions = starGeometry.attributes.position.array as Float32Array;
 
-      // Find all nearby stars (within 30 units)
+      // Find all nearby stars (within 60 units - black hole is at Z:10, stars are at Z:-130 to -30)
       const nearbyStars: number[] = [];
       for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
@@ -1543,7 +1543,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           positions[i3 + 2]
         );
         const distance = starPos.distanceTo(blackHolePos);
-        if (distance < 30) {
+        if (distance < 60) {
           nearbyStars.push(i);
         }
       }
@@ -1577,7 +1577,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       const blackHolePos = new THREE.Vector3(0, -8, 10);
       const positions = starGeometry.attributes.position.array as Float32Array;
 
-      // Find nearby stars that haven't been pulled yet
+      // Find nearby stars that haven't been pulled yet (within 60 units)
       const availableStars: number[] = [];
       for (let i = 0; i < starCount; i++) {
         if (alreadyPulledStars.has(i)) continue;
@@ -1589,7 +1589,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           positions[i3 + 2]
         );
         const distance = starPos.distanceTo(blackHolePos);
-        if (distance < 30) {
+        if (distance < 60) {
           availableStars.push(i);
         }
       }
