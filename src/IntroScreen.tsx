@@ -682,9 +682,9 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           depthFactor = clamp(depthFactor, 0.6, 1.0); // Min 60% size/brightness at far plane
 
           // PHASE 4: Final size calculation (recalibrated for crisp pinpoints)
-          // Target: ~1-2px at Z=-80 for median star (baseSize=0.45)
+          // Target: ~3-5px at Z=-80 for median star (baseSize=0.45)
           // Formula simplified: pixels = baseSize * factors * screenScale / distance
-          float screenScale = viewportHeight * pixelRatio * 0.025; // Tuning factor
+          float screenScale = viewportHeight * pixelRatio * 1.5; // FIXED: Was 0.025 (way too small!)
           float pixelSize = baseSize * sizeMultiplier * depthFactor * screenScale / viewDistance;
 
           // PHASE 4: Clamp to device limits and aesthetic max (4px)
