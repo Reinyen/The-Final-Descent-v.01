@@ -285,6 +285,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     console.log(`[IntroScreen] Device max point size: ${maxPointSize}px`);
 
     containerRef.current.appendChild(renderer.domElement);
+    console.log('[IntroScreen] Canvas appended to container, canvas size:', renderer.domElement.width, 'x', renderer.domElement.height);
+    console.log('[IntroScreen] Canvas style:', renderer.domElement.style.cssText);
 
     // ============================================================================
     // PHASE 1 FIX: DETERMINISTIC TIMELINE SYSTEM
@@ -1923,17 +1925,25 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       // ============================================================================
 
       // FADE_IN: Starfield opacity fade (via shader uniform)
+      // TEMP TEST: Force opacity to 1.0 to test if stars render at all
+      starMaterial.uniforms.baseOpacity.value = 1.0;
+      if (frameCount === 1 || frameCount === 60) {
+        console.log('[IntroScreen] TEST: Opacity forced to 1.0, phase =', phase.name, 'elapsed =', introElapsed.toFixed(3));
+      }
+
+      /*
       if (phase.name === 'fade_in') {
         starMaterial.uniforms.baseOpacity.value = phase.phaseT;
-        if (frameCount === 1) {
-          console.log('[IntroScreen] FADE_IN phase: opacity =', phase.phaseT);
+        if (frameCount === 1 || frameCount % 60 === 0) {
+          console.log('[IntroScreen] FADE_IN: elapsed =', introElapsed.toFixed(3), 'opacity =', phase.phaseT.toFixed(3));
         }
       } else {
         starMaterial.uniforms.baseOpacity.value = 1.0;
-        if (frameCount === 1) {
-          console.log('[IntroScreen] After fade-in: opacity = 1.0, phase =', phase.name);
+        if (frameCount === 60) {
+          console.log('[IntroScreen] Phase:', phase.name, 'elapsed =', introElapsed.toFixed(3), 'opacity = 1.0');
         }
       }
+      */
 
       // COMET_APPROACH: Falling comet with heat buildup
       if (phase.name === 'comet_approach') {
