@@ -539,18 +539,22 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         ${simplexNoise3D}
 
         uniform float time;
+        uniform float heatIntensity;
         varying vec3 vNormal;
         varying vec3 vPosition;
+        varying vec3 vWorldPosition;
 
         void main() {
           vNormal = normalize(normalMatrix * normal);
 
-          // Surface displacement with simplex noise
+          // PHASE 4: Enhanced surface displacement with heat-driven turbulence
           vec3 pos = position;
-          float noise = snoise(pos * 2.0 + time * 0.3);
-          pos += normal * noise * 0.12;
+          float baseNoise = snoise(pos * 2.0 + time * 0.3);
+          float heatTurbulence = snoise(pos * 5.0 + time * 2.0) * heatIntensity * 0.1;
+          pos += normal * (baseNoise * 0.12 + heatTurbulence);
 
           vPosition = pos;
+          vWorldPosition = (modelMatrix * vec4(pos, 1.0)).xyz;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
         }
       `,
@@ -561,6 +565,7 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         uniform float heatIntensity;
         varying vec3 vNormal;
         varying vec3 vPosition;
+        varying vec3 vWorldPosition;
 
         void main() {
           // Multi-scale noise for rock texture
@@ -579,20 +584,37 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           baseColor = mix(baseColor, lightGray, noise2 * 0.5);
           baseColor = mix(baseColor, tan, noise3 * 0.3);
 
-          // Atmospheric heat effect
+          // PHASE 4: Improved atmospheric heat effect with smooth transitions
           if (heatIntensity > 0.0) {
-            vec3 viewDir = normalize(cameraPosition - vPosition);
+            vec3 viewDir = normalize(cameraPosition - vWorldPosition);
             float fresnel = pow(1.0 - dot(viewDir, vNormal), 1.5);
 
-            vec3 heatColor = vec3(1.0, 0.3, 0.05); // Orange-red
+            // Smooth heat intensity curve (ease-in-out cubic)
+            float smoothHeat = heatIntensity * heatIntensity * (3.0 - 2.0 * heatIntensity);
 
-            // Add cosmic purple tint when very hot
-            if (heatIntensity > 0.6) {
-              vec3 purpleTint = vec3(0.5, 0.1, 0.6);
-              heatColor = mix(heatColor, purpleTint, (heatIntensity - 0.6) * 2.5);
+            // Multi-stage heat color gradient
+            vec3 earlyHeat = vec3(1.0, 0.4, 0.1);     // Orange
+            vec3 midHeat = vec3(1.0, 0.2, 0.05);       // Deep orange-red
+            vec3 lateHeat = vec3(0.6, 0.15, 0.7);      // Purple plasma
+            vec3 extremeHeat = vec3(0.4, 0.3, 0.9);    // Blue-violet (hottest)
+
+            vec3 heatColor;
+            if (smoothHeat < 0.33) {
+              heatColor = mix(earlyHeat, midHeat, smoothHeat / 0.33);
+            } else if (smoothHeat < 0.66) {
+              heatColor = mix(midHeat, lateHeat, (smoothHeat - 0.33) / 0.33);
+            } else {
+              heatColor = mix(lateHeat, extremeHeat, (smoothHeat - 0.66) / 0.34);
             }
 
-            baseColor = mix(baseColor, heatColor, fresnel * heatIntensity);
+            // Emissive hotspots (turbulent noise-driven bright spots)
+            float hotspotNoise = snoise(vPosition * 8.0 + time * 1.5) * 0.5 + 0.5;
+            float hotspots = pow(hotspotNoise, 3.0) * smoothHeat;
+            vec3 emissive = heatColor * hotspots * 2.0;
+
+            // Combine base with heat glow and emissive hotspots
+            baseColor = mix(baseColor, heatColor, fresnel * smoothHeat * 0.8);
+            baseColor += emissive;
           }
 
           gl_FragColor = vec4(baseColor, 1.0);
@@ -610,13 +632,48 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     comet.visible = false;
     scene.add(comet);
 
-    // Comet glow aura
+    // PHASE 4: Dynamic comet glow aura (heat-reactive)
     const glowGeometry = new THREE.IcosahedronGeometry(1.8, 2);
-    const glowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x6633ff,
+    const glowMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0.0 },
+        heatIntensity: { value: 0.0 }
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        uniform float heatIntensity;
+        varying vec3 vNormal;
+
+        void main() {
+          // Heat-reactive color shift
+          vec3 coldColor = vec3(0.4, 0.2, 1.0);      // Purple (cold)
+          vec3 warmColor = vec3(1.0, 0.4, 0.1);      // Orange (warm)
+          vec3 hotColor = vec3(0.6, 0.3, 0.9);       // Violet (hot)
+
+          vec3 glowColor;
+          if (heatIntensity < 0.5) {
+            glowColor = mix(coldColor, warmColor, heatIntensity / 0.5);
+          } else {
+            glowColor = mix(warmColor, hotColor, (heatIntensity - 0.5) / 0.5);
+          }
+
+          // Pulsing opacity based on heat
+          float pulse = sin(time * 3.0) * 0.05 + 0.95;
+          float opacity = (0.15 + heatIntensity * 0.25) * pulse;
+
+          gl_FragColor = vec4(glowColor, opacity);
+        }
+      `,
       transparent: true,
-      opacity: 0.15,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
+      side: THREE.BackSide
     });
     const cometGlow = new THREE.Mesh(glowGeometry, glowMaterial);
     comet.add(cometGlow);
@@ -1295,8 +1352,11 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         comet.rotation.x += 1.8 * deltaTime;
         comet.rotation.y += 1.3 * deltaTime;
 
-        // Heat intensity
-        cometMaterial.uniforms.heatIntensity.value = phase.phaseT * 0.8;
+        // PHASE 4: Smooth heat transition with cubic ease-in-out
+        const heatIntensity = phase.phaseT * 0.8;
+        cometMaterial.uniforms.heatIntensity.value = heatIntensity;
+        glowMaterial.uniforms.heatIntensity.value = heatIntensity;
+        glowMaterial.uniforms.time.value = introElapsed;
       }
 
       // IMPACT: Explosion + camera shake + bloom spike
