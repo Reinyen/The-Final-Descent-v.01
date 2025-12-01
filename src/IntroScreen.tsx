@@ -258,6 +258,11 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     // PHASE 3: Output color space conversion (linear → sRGB gamma)
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+    // PHASE 4: Query device max point size for star sizing clamp
+    const gl = renderer.getContext();
+    const maxPointSize = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)[1];
+    console.log(`[IntroScreen] Device max point size: ${maxPointSize}px`);
+
     containerRef.current.appendChild(renderer.domElement);
 
     // ============================================================================
@@ -546,9 +551,19 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         starColors[i3 + 2] = 0.8;
       }
 
-      // BLUEPRINT 4.1: Per-star attributes for GPU-based animation
-      // Base size (0.5 - 2.0) - immutable
-      starBaseSizes[i] = 0.5 + Math.random() * 1.5;
+      // PHASE 4: Per-star base size (recalibrated for crisp pinpoints)
+      // Distribution: 70% small (0.3-0.6), 25% medium (0.6-0.9), 5% hero (0.9-1.2)
+      const sizeRand = Math.random();
+      if (sizeRand < 0.70) {
+        // 70% small stars
+        starBaseSizes[i] = 0.3 + Math.random() * 0.3; // 0.3 - 0.6
+      } else if (sizeRand < 0.95) {
+        // 25% medium stars
+        starBaseSizes[i] = 0.6 + Math.random() * 0.3; // 0.6 - 0.9
+      } else {
+        // 5% hero stars (brightest, largest)
+        starBaseSizes[i] = 0.9 + Math.random() * 0.3; // 0.9 - 1.2
+      }
 
       // Twinkle seed for deterministic GPU animation
       starTwinkleSeeds[i] = Math.random() * 100.0;
@@ -587,8 +602,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         time: { value: 0.0 },
         starTexture: { value: starTexture },
         baseOpacity: { value: 1.0 },
+        starIntensity: { value: 0.85 }, // PHASE 4: Global intensity scalar (tunable)
         pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
-        viewportHeight: { value: window.innerHeight }
+        viewportHeight: { value: window.innerHeight },
+        maxPointSize: { value: maxPointSize } // PHASE 4: Device max point size
       },
       vertexShader: `
         attribute float baseSize;
@@ -598,8 +615,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
         uniform float time;
         uniform float baseOpacity;
+        uniform float starIntensity;
         uniform float pixelRatio;
         uniform float viewportHeight;
+        uniform float maxPointSize;
 
         varying vec3 vColor;
         varying float vAlpha;
@@ -608,26 +627,36 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         void main() {
           vColor = color;
 
-          // PHASE 2: Smooth twinkle (reduced frequency for less flicker)
-          float twinkle = sin(time * 2.0 + twinkleSeed * 0.5) * 0.25 + 0.875;
+          // PHASE 4: Twinkle with controlled range [0.8, 1.0] (never exceeds 1.0!)
+          // Reduced amplitude (0.1 instead of 0.25) for subtlety
+          float twinkle = sin(time * 1.5 + twinkleSeed * 0.5) * 0.1 + 0.9;
 
-          // Apply absorption scale (modified on CPU during black hole pull)
-          float finalSize = baseSize * twinkle * absorptionScale;
-
-          // Calculate alpha based on opacity and absorption
-          vAlpha = baseOpacity * twinkle * absorptionScale;
+          // PHASE 4: Size modulation (twinkle affects brightness more than size)
+          float sizeMultiplier = twinkle * absorptionScale;
+          float brightnessMultiplier = twinkle * absorptionScale * starIntensity;
 
           // Transform to view space
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          float viewDistance = -mvPosition.z;
 
-          // PHASE 2: Pixel-perfect point size calculation
-          // Account for perspective, DPR, and viewport height for consistent screen-space size
-          float perspectiveFactor = 1.0 / -mvPosition.z;
-          float pixelSize = finalSize * perspectiveFactor * viewportHeight * 0.5;
-          gl_PointSize = pixelSize * pixelRatio;
+          // PHASE 4: Depth cueing - distant stars smaller and dimmer (subtle)
+          float depthFactor = 1.0 - (viewDistance - 30.0) / 100.0; // 30-130 range
+          depthFactor = clamp(depthFactor, 0.6, 1.0); // Min 60% size/brightness at far plane
 
-          // PHASE 2: Pass depth for depth-cueing in fragment shader
-          vDepth = -mvPosition.z / 160.0; // Normalize depth (0=near, 1=far)
+          // PHASE 4: Final size calculation (recalibrated for crisp pinpoints)
+          // Target: ~1-2px at Z=-80 for median star (baseSize=0.45)
+          // Formula simplified: pixels = baseSize * factors * screenScale / distance
+          float screenScale = viewportHeight * pixelRatio * 0.025; // Tuning factor
+          float pixelSize = baseSize * sizeMultiplier * depthFactor * screenScale / viewDistance;
+
+          // PHASE 4: Clamp to device limits and aesthetic max (4px)
+          gl_PointSize = clamp(pixelSize, 1.0, min(maxPointSize, 4.0 * pixelRatio));
+
+          // PHASE 4: Alpha with clamping discipline (never > 1.0)
+          vAlpha = clamp(baseOpacity * brightnessMultiplier * depthFactor, 0.0, 1.0);
+
+          // PHASE 4: Pass normalized depth for fragment shader
+          vDepth = (viewDistance - 30.0) / 100.0; // 0=near, 1=far
 
           gl_Position = projectionMatrix * mvPosition;
         }
@@ -640,22 +669,24 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         varying float vDepth;
 
         void main() {
-          // PHASE 2: Sample star texture
+          // PHASE 4: Sample star texture
           vec4 texColor = texture2D(starTexture, gl_PointCoord);
 
-          // PHASE 2: Depth cueing - distant stars slightly dimmer
-          float depthFade = 1.0 - vDepth * 0.3; // 30% dimming at max depth
+          // PHASE 4: Depth is already baked into vAlpha from vertex shader
+          // No double-application of depth cueing
 
-          // PHASE 2: Enhanced star core with subtle glow
-          // Stars have sharp center that blooms slightly at edges
+          // PHASE 4: Subtle core brightness boost for pinpoint crispness
           float dist = length(gl_PointCoord - vec2(0.5));
-          float coreBrightness = 1.0 - smoothstep(0.0, 0.3, dist);
+          float coreBrightness = smoothstep(0.5, 0.0, dist); // Sharper falloff
 
-          // Combine texture alpha with depth fade and core brightness
-          float finalAlpha = texColor.a * vAlpha * depthFade;
-          vec3 finalColor = vColor * (0.85 + coreBrightness * 0.15);
+          // PHASE 4: Final color with subtle core highlight
+          vec3 finalColor = vColor * (0.9 + coreBrightness * 0.1);
 
-          gl_FragColor = vec4(finalColor, finalAlpha);
+          // PHASE 4: Final alpha (depth already applied in vertex shader)
+          float finalAlpha = texColor.a * vAlpha;
+
+          // PHASE 4: Ensure clamping (redundant safeguard)
+          gl_FragColor = vec4(finalColor, clamp(finalAlpha, 0.0, 1.0));
         }
       `,
       transparent: true,
