@@ -1500,8 +1500,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         const distance = starPos.distanceTo(blackHolePos);
 
         // Gravitational acceleration: F = G * M / r^2
-        // Using simplified constants: G * M = 50.0 for visible effect
-        const gravityConstant = 50.0;
+        // Using simplified constants: G * M = 200.0 for strong, visible pull
+        const gravityConstant = 200.0;
         const acceleration = gravityConstant / (distance * distance + 0.1); // +0.1 to prevent division by zero
 
         // Update velocity: v = v + a * dt
@@ -1587,9 +1587,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         selectedStars.push(shuffled[i]);
       }
 
-      // Assign each star a random pull start time between 7.5s-11.5s
+      // Assign each star a random pull start time
+      // Start shortly after black hole appears (4.5s) so effect is visible during intro
       selectedStars.forEach(starIndex => {
-        const pullStartTime = 7.5 + Math.random() * 4.0; // 7.5s to 11.5s
+        const pullStartTime = 4.7 + Math.random() * 1.5; // 4.7s to 6.2s
         pulledStars.push({
           index: starIndex,
           pullStartTime: pullStartTime,
@@ -1725,10 +1726,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         if (phase.name === 'crater_settle') {
           blackHoleGroup.scale.setScalar(phase.phaseT);
 
-          // BLUEPRINT 12: Emit glass particles (first 600ms = 60% of phase) if enabled
-          if (phase.phaseT < 0.6 && qualityConfig.enableGlassParticles) {
-            emitGlassParticles();
-          }
+          // Glass particles removed per user request
+          // (Reality crack shader and glass effects removed entirely)
 
           // Title reveal at 0.4s mark (40% through phase = 4.9s global)
           if (phase.phaseT >= 0.4 && !showTitle) {
