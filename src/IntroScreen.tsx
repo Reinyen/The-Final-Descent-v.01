@@ -1084,10 +1084,17 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     comet.add(cometGlow);
 
     // ============================================================================
-    // BLACK HOLE COMPONENT (4 layered meshes)
+    // PHASE 5: BLACK HOLE COMPONENT (4 layered meshes) - DEPTH COHERENCE FIX
     // ============================================================================
+    /**
+     * PHASE 5: Black hole positioned at Z=-70 (middle of star volume)
+     * - Stars: Z ∈ [-130, -30]
+     * - Black hole: Z = -70 (inside star volume, not in front!)
+     * - Selection radius 60 units now captures many stars
+     * - Before: Z=10 was 40-140 units in front of all stars (selection failed)
+     */
     const blackHoleGroup = new THREE.Group();
-    blackHoleGroup.position.set(0, -8, 10);
+    blackHoleGroup.position.set(0, -8, -70); // PHASE 5: Moved from Z=10 to Z=-70
     blackHoleGroup.scale.set(0, 0, 0);
     blackHoleGroup.visible = false;
     scene.add(blackHoleGroup);
@@ -1451,7 +1458,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
      * Quality scaling: HIGH = 360 particles (1.0x), LOW = 180 particles (0.5x)
      */
     function emitDebrisParticles() {
-      const impactPoint = new THREE.Vector3(0, -8, 10);
+      const impactPoint = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
       const colorPalette = [
         [0.6, 0.2, 0.8], // Purple
         [0.2, 0.8, 0.7], // Teal
@@ -1591,7 +1598,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
      * - Screen-space pull: visually consistent effect regardless of depth
      */
     function updateStarPulling(deltaTime: number, introElapsed: number) {
-      const blackHolePos = new THREE.Vector3(0, -8, 10);
+      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
       const positions = starGeometry.attributes.position.array as Float32Array;
       const absorptionScales = starGeometry.attributes.absorptionScale.array as Float32Array;
 
@@ -1679,13 +1686,15 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const alreadyPulledStars = new Set<number>();
 
     /**
-     * Select initial 12 stars to pull immediately when black hole forms
+     * PHASE 5: Select initial stars to pull immediately when black hole forms
+     * Now properly selects stars because black hole is inside star volume!
      */
     function selectInitialStarsToPull() {
-      const blackHolePos = new THREE.Vector3(0, -8, 10);
+      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
       const positions = starGeometry.attributes.position.array as Float32Array;
 
-      // Find all nearby stars (within 60 units - black hole is at Z:10, stars are at Z:-130 to -30)
+      // PHASE 5: Find nearby stars (within 60 units - black hole at Z:-70, stars Z:-130 to -30)
+      // Many stars within 60 units now that black hole is inside star volume!
       const nearbyStars: number[] = [];
       for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
@@ -1723,10 +1732,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Pull additional batch of 1-4 stars (called periodically)
+     * PHASE 5: Pull additional batch of 1-4 stars (called periodically)
      */
     function pullNextBatchOfStars(currentTime: number) {
-      const blackHolePos = new THREE.Vector3(0, -8, 10);
+      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
       const positions = starGeometry.attributes.position.array as Float32Array;
 
       // Find nearby stars that haven't been pulled yet (within 60 units)
@@ -1841,12 +1850,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       if (phase.name === 'comet_approach') {
         const eased = phase.phaseT * phase.phaseT; // Quadratic ease-in for acceleration
 
-        // PHASE 3: Trajectory tuned for ~60° from vertical approach angle
+        // PHASE 5: Trajectory updated for depth coherence (impact inside star volume)
         // Vertical drop: 48 units (40 to -8)
-        // Forward motion: 50 units (-30 to 20) for dramatic diagonal approach
-        // This creates tan⁻¹(50/48) ≈ 46° from vertical (compromise for visual impact)
+        // Depth motion: 40 units (-30 to -70) for dramatic diagonal approach into star field
+        // Creates a coherent impact point where stars actually exist
         const startPos = new THREE.Vector3(0, 40, -30);
-        const endPos = new THREE.Vector3(0, -8, 20); // Increased Z from 10 to 20 for steeper angle
+        const endPos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
         comet.position.lerpVectors(startPos, endPos, eased);
 
         // PHASE 3: Size grows smoothly from tiny to full scale
