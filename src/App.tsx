@@ -21,7 +21,7 @@ export default function App() {
   return (
     <div className="w-full h-full">
       {!introComplete ? (
-        <IntroScreen onBegin={handleIntroComplete} debugMode={true} />
+        <IntroScreen onBegin={handleIntroComplete} debugMode={false} />
       ) : (
         <div className="w-full h-full bg-black flex items-center justify-center">
           <p className="text-white font-rajdhani text-2xl">
