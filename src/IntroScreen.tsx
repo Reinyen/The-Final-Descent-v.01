@@ -252,6 +252,15 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     );
     camera.position.set(0, 0, 30);
 
+    // TEST: Add a bright red sphere to verify rendering works AT ALL
+    const testSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(5, 32, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: false })
+    );
+    testSphere.position.set(0, 0, -50);
+    scene.add(testSphere);
+    console.log('[IntroScreen] TEST: Added bright red sphere at (0, 0, -50) to verify rendering');
+
     // ============================================================================
     // PHASE 3: RENDERER CONFIGURATION (LINEAR WORKFLOW)
     // ============================================================================
@@ -2165,8 +2174,9 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           renderer.render(scene, camera);
         }
       } else {
-        // Normal render path (no diagnostic overhead)
-        composer.render();
+        // TEMP TEST: Bypass composer, render directly
+        renderer.render(scene, camera);
+        // composer.render();
       }
 
       if (frameCount === 1) {
