@@ -1925,6 +1925,13 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       // ============================================================================
 
       // FADE_IN: Starfield opacity fade (via shader uniform)
+      // TEMP TEST: Force opacity to 1.0 to test if stars render at all
+      starMaterial.uniforms.baseOpacity.value = 1.0;
+      if (frameCount === 1 || frameCount === 60) {
+        console.log('[IntroScreen] TEST: Opacity forced to 1.0, phase =', phase.name, 'elapsed =', introElapsed.toFixed(3));
+      }
+
+      /*
       if (phase.name === 'fade_in') {
         starMaterial.uniforms.baseOpacity.value = phase.phaseT;
         if (frameCount === 1 || frameCount % 60 === 0) {
@@ -1936,6 +1943,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           console.log('[IntroScreen] Phase:', phase.name, 'elapsed =', introElapsed.toFixed(3), 'opacity = 1.0');
         }
       }
+      */
 
       // COMET_APPROACH: Falling comet with heat buildup
       if (phase.name === 'comet_approach') {
