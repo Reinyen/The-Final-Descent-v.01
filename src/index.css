@@ -1,0 +1,86 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap');
+@import "tailwindcss";
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #000000;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+}
+
+/* Glitch-in animation for initial reveal */
+@keyframes glitch-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.8);
+    filter: blur(10px);
+    clip-path: polygon(0 0, 100% 0, 100% 45%, 0 55%);
+  }
+  20% {
+    opacity: 0.3;
+    transform: translateX(-5px);
+    filter: blur(5px);
+    clip-path: polygon(0 10%, 100% 0, 100% 85%, 0 100%);
+  }
+  40% {
+    opacity: 0.6;
+    transform: translateX(3px);
+    filter: blur(2px);
+    clip-path: polygon(0 5%, 100% 15%, 100% 90%, 0 80%);
+  }
+  60% {
+    opacity: 0.8;
+    transform: translateX(-2px);
+    filter: blur(1px);
+    clip-path: polygon(0 0, 100% 5%, 100% 95%, 0 100%);
+  }
+  80% {
+    opacity: 1.0;
+    transform: translateX(1px);
+    filter: blur(0px);
+    clip-path: polygon(0 2%, 100% 0, 100% 100%, 0 98%);
+  }
+  100% {
+    opacity: 1.0;
+    transform: translateX(0) translateY(0) scale(1);
+    filter: blur(0px);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  }
+}
+
+/* Occasional glitch flicker */
+@keyframes glitch {
+  0%, 100% {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+    filter: blur(0px);
+  }
+  25% {
+    opacity: 0.3;
+    transform: translateX(-8px);
+    filter: blur(3px);
+  }
+  50% {
+    opacity: 0;
+    transform: translateX(8px) translateY(3px);
+    filter: blur(5px);
+  }
+  75% {
+    opacity: 0.4;
+    transform: translateX(-5px);
+    filter: blur(2px);
+  }
+}
+
+.animate-glitch-in {
+  animation: glitch-in 600ms ease-out forwards;
+}
+
+.animate-glitch {
+  animation: glitch 150ms ease-in-out;
+}
