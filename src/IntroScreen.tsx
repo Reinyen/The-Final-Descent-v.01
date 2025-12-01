@@ -435,8 +435,9 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           // Distance from crater center
           float dist = length(uv - center);
 
-          // Radial fade (soft outer edge) - INCREASED RANGE for more visible cracks
-          float radialFade = smoothstep(0.75, 0.0, dist) * intensity;
+          // CRITICAL FIX: Radial fade - SMALL AREA around black hole only
+          // 0.2 = only extends 20% of screen from center (localized effect)
+          float radialFade = smoothstep(0.2, 0.0, dist) * intensity;
 
           if (radialFade < 0.01) {
             gl_FragColor = texture2D(tDiffuse, uv);
@@ -452,54 +453,54 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           float cellDist2 = voronoiData.y;
           float cellId = voronoiData.z;
 
-          // Crack lines (Voronoi edges only) - THICKER, MORE VISIBLE CRACKS
+          // CRITICAL FIX: Thin crack lines (subtle shimmer effect)
           float edgeDist = cellDist2 - cellDist1;
-          float cracks = smoothstep(0.15, 0.0, edgeDist); // Increased from 0.08 to 0.15 for thicker cracks
+          float cracks = smoothstep(0.05, 0.0, edgeDist); // THIN: 0.05 (was 0.15)
 
-          // Per-shard distortion - MUCH MORE SEPARATION for visible shards
+          // CRITICAL FIX: Minimal distortion - just subtle starfield shimmer
           float rotation = cellId * 6.28318;
-          float separation = crackPhase * 0.15; // Increased from 0.04 to 0.15
+          float separation = crackPhase * 0.02; // SUBTLE: 0.02 (was 0.15)
           vec2 shardOffset = vec2(cos(rotation), sin(rotation)) * sqrt(cellDist1) * separation * radialFade;
           vec2 distortedUv = uv + shardOffset;
 
-          // Chromatic aberration - MORE INTENSE
-          float aberrationStrength = radialFade * 0.06 * (1.0 + cracks * 5.0); // Increased from 0.02 and multiplier from 3.0 to 5.0
+          // CRITICAL FIX: Minimal chromatic aberration
+          float aberrationStrength = radialFade * 0.01 * (1.0 + cracks * 1.5); // SUBTLE: 0.01, multiplier 1.5
           float r = texture2D(tDiffuse, distortedUv + vec2(aberrationStrength, 0.0)).r;
           float g = texture2D(tDiffuse, distortedUv).g;
           float b = texture2D(tDiffuse, distortedUv - vec2(aberrationStrength, 0.0)).b;
           vec3 color = vec3(r, g, b);
 
-          // Crack rendering - MUCH DARKER AND MORE VISIBLE
-          float crackDarkness = cracks * 0.9; // Increased from 0.5 to 0.9 for near-black cracks
+          // CRITICAL FIX: Subtle dark crack lines
+          float crackDarkness = cracks * 0.4; // SUBTLE: 0.4 (was 0.9)
           color = mix(color, vec3(0.0), crackDarkness);
 
-          // Hot edges (fresh cracks, fade over time) - BRIGHTER
-          float hotEdge = cracks * (1.0 - crackPhase * 0.5); // Reduced fade from 0.7 to 0.5
-          vec3 hotColor = vec3(3.5, 2.5, 1.8); // Increased brightness
-          color += hotColor * hotEdge * 1.2; // Increased from 0.5 to 1.2
+          // CRITICAL FIX: Subtle hot edges (dim orange shimmer)
+          float hotEdge = cracks * (1.0 - crackPhase * 0.7);
+          vec3 hotColor = vec3(0.8, 0.5, 0.3); // DIM: was vec3(3.5, 2.5, 1.8)
+          color += hotColor * hotEdge * 0.15; // SUBTLE: 0.15 (was 1.2)
 
-          // Cool glow (purple ↔ teal animated) - MORE INTENSE
-          vec3 purple = vec3(0.7, 0.3, 1.0); // Brighter purple
-          vec3 teal = vec3(0.3, 1.0, 0.9); // Brighter teal
+          // CRITICAL FIX: Subtle cool glow (very dim purple/teal)
+          vec3 purple = vec3(0.3, 0.15, 0.4); // DIM: was vec3(0.7, 0.3, 1.0)
+          vec3 teal = vec3(0.15, 0.4, 0.35); // DIM: was vec3(0.3, 1.0, 0.9)
           vec3 coolGlow = mix(purple, teal, sin(time * 2.0) * 0.5 + 0.5);
-          color += coolGlow * cracks * 0.8; // Increased from 0.3 to 0.8
+          color += coolGlow * cracks * 0.12; // SUBTLE: 0.12 (was 0.8)
 
-          // Glass reflections (shimmer effect) - BRIGHTER
+          // CRITICAL FIX: Subtle shimmer (faint reflections)
           float shimmer = sin(time * 3.0 + cellId * 6.28) * 0.5 + 0.5;
-          vec3 shimmerColor = vec3(0.5, 0.6, 0.7); // Brighter shimmer
-          color += shimmerColor * shimmer * cellDist1 * 0.3; // Increased from 0.08 to 0.3
+          vec3 shimmerColor = vec3(0.15, 0.18, 0.2); // DIM: was vec3(0.5, 0.6, 0.7)
+          color += shimmerColor * shimmer * cellDist1 * 0.05; // SUBTLE: 0.05 (was 0.3)
 
-          // Edge reflections (white on boundaries) - MUCH BRIGHTER
-          float edgeReflection = smoothstep(0.2, 0.02, edgeDist); // Wider and brighter
-          color += vec3(2.0, 1.8, 2.2) * edgeReflection * 1.5; // Increased brightness and added color tint
+          // CRITICAL FIX: Subtle edge reflections (faint white lines)
+          float edgeReflection = smoothstep(0.08, 0.02, edgeDist);
+          color += vec3(0.3, 0.3, 0.35) * edgeReflection * 0.2; // SUBTLE: 0.2, dim color
 
-          // REDUCED desaturation and darkening to keep effects visible
+          // CRITICAL FIX: Minimal desaturation and darkening
           float luminance = dot(color, vec3(0.299, 0.587, 0.114));
-          color = mix(color, vec3(luminance), 0.1); // Reduced from 0.3 to 0.1
-          color *= 0.95; // Reduced darkening from 0.75 to 0.95
+          color = mix(color, vec3(luminance), 0.05); // MINIMAL: 0.05 (was 0.1)
+          color *= 0.98; // MINIMAL darkening: 0.98 (was 0.95)
 
-          // Final output with INCREASED opacity for more visibility
-          gl_FragColor = vec4(color, radialFade * 0.85); // Increased from 0.5 to 0.85
+          // CRITICAL FIX: Low opacity for subtle blend with starfield
+          gl_FragColor = vec4(color, radialFade * 0.3); // SUBTLE: 0.3 opacity (was 0.85)
         }
       `
     };
