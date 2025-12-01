@@ -380,13 +380,19 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Time-based glitch trigger: Deterministic from elapsed time
+     * PHASE 11: Time-based glitch trigger with cinematic cadence
+     * Respects prefers-reduced-motion accessibility setting
      */
     function shouldGlitch(elapsed: number, lastGlitchTime: number, seed: number): boolean {
-      if (elapsed - lastGlitchTime < 0.8) return false; // Min 0.8s between glitches
+      // PHASE 11: Disable glitches entirely for reduced motion preference
+      if (prefersReducedMotion) return false;
 
-      // Use seed for deterministic "random" intervals
-      const interval = 0.8 + ((Math.sin(seed + lastGlitchTime * 0.7) * 0.5 + 0.5) * 1.5); // 0.8-2.3s (much more frequent)
+      // PHASE 11: Cinematic cadence - min 3s between glitches (was 0.8s)
+      if (elapsed - lastGlitchTime < 3.0) return false;
+
+      // PHASE 11: Use seed for deterministic "random" intervals: 3-7s (was 0.8-2.3s)
+      // More premium feel - rare, deliberate glitches rather than constant noise
+      const interval = 3.0 + ((Math.sin(seed + lastGlitchTime * 0.7) * 0.5 + 0.5) * 4.0);
       return elapsed - lastGlitchTime >= interval;
     }
 
@@ -1997,10 +2003,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           // Title reveal at 0.4s mark (40% through phase = 4.9s global)
           if (phase.phaseT >= 0.4 && !showTitle) {
             setShowTitle(true);
-            // FIXED: Trigger immediate glitch on reveal for dramatic effect
-            setTitleGlitch(true);
-            const timeout = setTimeout(() => setTitleGlitch(false), 300);
-            glitchTimeoutsRef.current.add(timeout);
+            // PHASE 11: Trigger glitch on reveal (respects reduced motion)
+            if (!prefersReducedMotion) {
+              setTitleGlitch(true);
+              // PHASE 11: Cinematic duration 120-180ms (was 300ms)
+              const glitchDuration = 120 + Math.random() * 60;
+              const timeout = setTimeout(() => setTitleGlitch(false), glitchDuration);
+              glitchTimeoutsRef.current.add(timeout);
+            }
             // Set timer to allow next glitch soon after
             lastTitleGlitchTime = introElapsed - 1.5;
           }
@@ -2024,10 +2034,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         // Button reveal (only during button_reveal phase at 0.2s mark = 5.7s global)
         if (phase.name === 'button_reveal' && phase.phaseT >= 0.2 && !showButton) {
           setShowButton(true);
-          // FIXED: Trigger immediate glitch on reveal for dramatic effect
-          setButtonGlitch(true);
-          const timeout = setTimeout(() => setButtonGlitch(false), 300);
-          glitchTimeoutsRef.current.add(timeout);
+          // PHASE 11: Trigger glitch on reveal (respects reduced motion)
+          if (!prefersReducedMotion) {
+            setButtonGlitch(true);
+            // PHASE 11: Cinematic duration 120-180ms (was 300ms)
+            const glitchDuration = 120 + Math.random() * 60;
+            const timeout = setTimeout(() => setButtonGlitch(false), glitchDuration);
+            glitchTimeoutsRef.current.add(timeout);
+          }
           // Set timer to allow next glitch soon after
           lastButtonGlitchTime = introElapsed - 1.5;
         }
@@ -2049,20 +2063,22 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         camera.position.copy(cameraBasePosition);
       }
 
-      // PHASE 1 FIX: Deterministic glitch triggering - INCREASED DURATION
+      // PHASE 11: Deterministic glitch triggering with cinematic cadence
       if (showTitle && shouldGlitch(introElapsed, lastTitleGlitchTime, 12.34)) {
         lastTitleGlitchTime = introElapsed;
         setTitleGlitch(true);
-        // Schedule glitch-off after 300ms to match animation duration
-        const timeout = setTimeout(() => setTitleGlitch(false), 300);
+        // PHASE 11: Randomized duration 120-180ms for organic feel (was 300ms)
+        const glitchDuration = 120 + Math.random() * 60;
+        const timeout = setTimeout(() => setTitleGlitch(false), glitchDuration);
         glitchTimeoutsRef.current.add(timeout);
       }
 
       if (showButton && shouldGlitch(introElapsed, lastButtonGlitchTime, 56.78)) {
         lastButtonGlitchTime = introElapsed;
         setButtonGlitch(true);
-        // Schedule glitch-off after 300ms to match animation duration
-        const timeout = setTimeout(() => setButtonGlitch(false), 300);
+        // PHASE 11: Randomized duration 120-180ms for organic feel (was 300ms)
+        const glitchDuration = 120 + Math.random() * 60;
+        const timeout = setTimeout(() => setButtonGlitch(false), glitchDuration);
         glitchTimeoutsRef.current.add(timeout);
       }
 
