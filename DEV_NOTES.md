@@ -125,20 +125,25 @@ Total duration: **6.5 seconds** + idle loop
 
 ### Bloom Configuration
 
-**Problem Solved:** Original bloom peak of 6.0 caused complete whiteout. Even after initial reduction to 2.5, screen still went white during impact.
+**Problem Solved:** Original bloom peak of 6.0 caused complete whiteout. Even after multiple reductions (2.5, then 1.2), screen still went 80% white during impact.
 
-**Final Solution:**
-- Base strength: 0.8 (drastically reduced from original 2.0)
-- Peak strength: 1.2 (reduced from original 6.0, then 2.5)
-- Threshold: 0.6 (balanced for both LDR and HDR pipelines)
+**Fundamental Solution:**
+The explosion flash comes from the **COMET ITSELF** (physical scale growth), **NOT from bloom**.
+Bloom is ONLY for subtle glow on cracks and black hole accretion disk.
 
-**Impact Timeline:**
-- 0-40ms: Spike from 0.8 → 1.2 (gentle flash)
-- 40-200ms: Decay 1.2 → 1.0
-- 200-300ms: Exponential decay 1.0 → 0.8
-- After 300ms: Base 0.8
+**Final Settings:**
+- **Constant bloom**: 0.35 (ultra-low, never varies)
+- **NO bloom spike** during impact (stays 0.35 throughout)
+- **Threshold**: 0.7 (only brightest crack highlights bloom)
+- **Radius**: 0.3 (minimal spread)
 
-**Result:** Impact flash is visible but not blinding. Black hole and reality cracks appear correctly at 4.5s. No whiteout, no washing out.
+**How Impact Works Now:**
+- Comet scales from 1.0 → 3.5x (creates visual "flash")
+- Comet glow intensity minimal (0.6 + 0.2 = 0.8 max)
+- Bloom stays constant at 0.35 (cannot cause whiteout)
+- After 120ms: comet hidden, debris visible, black hole appears
+
+**Result:** Explosion is impactful without ANY whiteout. Sky stays visible. Black hole and cracks appear clearly at 4.5s.
 
 ### Starfield Shader
 
@@ -328,12 +333,12 @@ In COMPLETE phase (6.5s+), memory should be stable:
 ## 🎨 Visual Tuning Guide
 
 ### Want MORE intense impact flash?
-Increase bloom peak (line ~1724):
+Increase comet explosion scale (line ~1705):
 ```typescript
-bloomStrength = 1.5; // Was 1.2 (CAUTION: higher values cause whiteout)
+const explosionScale = 1.0 + (4.5 - 1.0) * easeOut; // Was 3.5x
 ```
 
-**Warning:** Values above 1.5 may cause whiteout. The current value of 1.2 is carefully balanced.
+**Note:** Flash comes from comet scale, NOT from bloom. Bloom stays constant at 0.35 to prevent whiteout.
 
 ### Want LONGER camera shake?
 Increase duration check (line ~282):
