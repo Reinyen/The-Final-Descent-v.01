@@ -1863,7 +1863,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     // ANIMATION LOOP
     // ============================================================================
 
-    let frameCount = 0;
     function animate() {
       frameCount++;
       if (frameCount === 1) {
