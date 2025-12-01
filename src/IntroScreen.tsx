@@ -350,10 +350,27 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     // ============================================================================
-    // PHASE 1: HDR RENDER TARGET DETECTION & SETUP
+    // PHASE 2: HDR RENDER TARGET DETECTION & SETUP (ROBUST)
     // ============================================================================
-
-    // PHASE 1: Enhanced HDR support detection with diagnostic data
+    /**
+     * PHASE 2: Robust HDR capability detection
+     *
+     * HDR rendering requires:
+     * 1. WebGL2 context (for integer sampler support, MRT, etc.)
+     * 2. EXT_color_buffer_half_float extension (for renderable HalfFloat attachments)
+     *
+     * If BOTH are available:
+     *   - Create HalfFloatType render targets with LinearSRGBColorSpace
+     *   - Allows values > 1.0 for bloom highlights
+     *   - OutputPass applies tone mapping at the end
+     *
+     * If EITHER is missing:
+     *   - Fall back to default LDR (UnsignedByteType)
+     *   - All shader outputs must be clamped to [0, 1]
+     *   - OutputPass still applies color space conversion
+     *
+     * This ensures no incomplete framebuffer errors or precision issues.
+     */
     const supportsHDR = renderer.capabilities.isWebGL2;
     let renderTargetType: string = 'LDR (UnsignedByte)';
     let actualHDRSupport = false;
@@ -386,22 +403,36 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }));
 
     // ============================================================================
-    // BLUEPRINT 1.2: POST-PROCESSING PIPELINE (DOCUMENTED ORDER)
-    // Order: RenderPass → CrackEffect → UnrealBloom → FXAA → Output
-    //
-    // Rationale:
-    // 1. RenderPass: Render scene to buffer
-    // 2. UnrealBloom: Minimal bloom on bright elements (0.35 constant)
-    // 3. FXAA: Anti-aliasing for smooth edges
-    // 4. Output: Tone mapping and color space conversion
+    // PHASE 2 & 3: POST-PROCESSING PIPELINE (LINEAR WORKFLOW CONTRACT)
     // ============================================================================
+    /**
+     * Pipeline Order: RenderPass → [CrackPass (Phase 6)] → UnrealBloom → FXAA → OutputPass
+     *
+     * COLOR PIPELINE CONTRACT (PHASE 3):
+     * ----------------------------------
+     * 1. All scene shaders output LINEAR color values (no gamma encoding)
+     * 2. All intermediate render targets use LinearSRGBColorSpace (if HDR)
+     * 3. Bloom operates on linear values (correct physically-based behavior)
+     * 4. OutputPass is the ONLY stage that applies:
+     *    - Tone mapping (if HDR: compress > 1.0 values)
+     *    - sRGB gamma encoding (for display)
+     * 5. Renderer.outputColorSpace = SRGBColorSpace ensures direct render matches
+     *
+     * CRITICAL: OutputPass must be enabled for correct output. Disabling it
+     * (via diagnostics) will result in linear output that appears washed out.
+     *
+     * VERIFICATION:
+     * - Use [P] parity mode to compare: direct render vs composer+RenderPass only
+     * - These should match visually (both apply same output transform)
+     * - Use [1] to toggle composer and compare direct vs full pipeline
+     */
 
-    // PHASE 1: Create composer with HDR render targets ONLY if extension available
+    // PHASE 2: Create composer with HDR render targets ONLY if extension available
     const composer = new EffectComposer(renderer, actualHDRSupport ?
       new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
         type: THREE.HalfFloatType,
-        colorSpace: THREE.LinearSRGBColorSpace
-      }) : undefined
+        colorSpace: THREE.LinearSRGBColorSpace  // Linear workflow: no gamma in intermediate buffers
+      }) : undefined  // LDR fallback: EffectComposer creates default UnsignedByteType target
     );
     const renderPass = new RenderPass(scene, camera);
     composer.addPass(renderPass);
