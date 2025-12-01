@@ -97,7 +97,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     showPanel: false,
     composerEnabled: true,
     bloomEnabled: true,
-    crackEnabled: true,
     fxaaEnabled: true,
     starsEnabled: true,
     cometEnabled: true,
@@ -145,21 +144,18 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           setDiagnostics(prev => ({ ...prev, bloomEnabled: !prev.bloomEnabled }));
           break;
         case '3':
-          setDiagnostics(prev => ({ ...prev, crackEnabled: !prev.crackEnabled }));
-          break;
-        case '4':
           setDiagnostics(prev => ({ ...prev, fxaaEnabled: !prev.fxaaEnabled }));
           break;
-        case '5':
+        case '4':
           setDiagnostics(prev => ({ ...prev, starsEnabled: !prev.starsEnabled }));
           break;
-        case '6':
+        case '5':
           setDiagnostics(prev => ({ ...prev, cometEnabled: !prev.cometEnabled }));
           break;
-        case '7':
+        case '6':
           setDiagnostics(prev => ({ ...prev, particlesEnabled: !prev.particlesEnabled }));
           break;
-        case '8':
+        case '7':
           setDiagnostics(prev => ({ ...prev, blackHoleEnabled: !prev.blackHoleEnabled }));
           break;
       }
@@ -309,22 +305,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       return elapsed - lastGlitchTime >= interval;
     }
 
-    /**
-     * Project world position to normalized screen coordinates (0-1)
-     * Used for dynamic crater center calculation
-     */
-    function projectToScreenUV(worldPos: THREE.Vector3, camera: THREE.Camera): THREE.Vector2 {
-      const vector = worldPos.clone();
-      vector.project(camera);
-
-      // Convert from NDC (-1 to 1) to UV (0 to 1)
-      // Note: Y is inverted because screen Y goes down but NDC Y goes up
-      return new THREE.Vector2(
-        (vector.x + 1) / 2,
-        1 - (vector.y + 1) / 2
-      );
-    }
-
     // ============================================================================
     // PHASE 1: HDR RENDER TARGET DETECTION & SETUP
     // ============================================================================
@@ -347,15 +327,11 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     // BLUEPRINT 1.2: POST-PROCESSING PIPELINE (DOCUMENTED ORDER)
     // Order: RenderPass → CrackEffect → UnrealBloom → FXAA → Output
     //
-    // Rationale (Option A from Blueprint):
+    // Rationale:
     // 1. RenderPass: Render scene to buffer
-    // 2. CrackEffect: Modify scene color with reality cracks and distortions
-    // 3. UnrealBloom: Bloom both underlying scene AND crack highlights (hot edges glow)
-    // 4. FXAA: Final anti-aliasing pass for smooth edges
-    // 5. Output: Tone mapping and color space conversion (added in Phase 1)
-    //
-    // This order allows cracks to participate in bloom, creating the desired
-    // "reality-breaking glow" aesthetic where crack edges emit light.
+    // 2. UnrealBloom: Minimal bloom on bright elements (0.35 constant)
+    // 3. FXAA: Anti-aliasing for smooth edges
+    // 4. Output: Tone mapping and color space conversion
     // ============================================================================
 
     // Create composer with HDR render targets if supported
@@ -367,146 +343,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     );
     const renderPass = new RenderPass(scene, camera);
     composer.addPass(renderPass);
-
-    // Reality Crack Shader (Post-Processing)
-    // Applied BEFORE bloom so bloom can enhance the crack effects
-    const crackShader = {
-      uniforms: {
-        tDiffuse: { value: null },
-        resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-        time: { value: 0.0 },
-        intensity: { value: 0.0 },
-        crackPhase: { value: 0.0 },
-        craterCenter: { value: new THREE.Vector2(0.5, 0.67) } // Updated dynamically each frame
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform vec2 resolution;
-        uniform float time;
-        uniform float intensity;
-        uniform float crackPhase;
-        uniform vec2 craterCenter;
-        varying vec2 vUv;
-
-        // Hash function for pseudo-random values
-        float hash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-        }
-
-        // Voronoi cell distance calculation
-        vec3 voronoi(vec2 x, float scale) {
-          vec2 p = floor(x * scale);
-          vec2 f = fract(x * scale);
-
-          float minDist1 = 1.0;
-          float minDist2 = 1.0;
-          vec2 minPoint = vec2(0.0);
-
-          for (int j = -1; j <= 1; j++) {
-            for (int i = -1; i <= 1; i++) {
-              vec2 neighbor = vec2(float(i), float(j));
-              vec2 point = hash(p + neighbor) * vec2(1.0) + neighbor;
-              float dist = length(point - f);
-
-              if (dist < minDist1) {
-                minDist2 = minDist1;
-                minDist1 = dist;
-                minPoint = point;
-              } else if (dist < minDist2) {
-                minDist2 = dist;
-              }
-            }
-          }
-
-          return vec3(minDist1, minDist2, hash(p + floor(minPoint)));
-        }
-
-        void main() {
-          vec2 uv = vUv;
-          vec2 center = craterCenter;
-
-          // Distance from crater center
-          float dist = length(uv - center);
-
-          // CRITICAL FIX: Radial fade - SMALL AREA around black hole only
-          // 0.2 = only extends 20% of screen from center (localized effect)
-          float radialFade = smoothstep(0.2, 0.0, dist) * intensity;
-
-          if (radialFade < 0.01) {
-            gl_FragColor = texture2D(tDiffuse, uv);
-            return;
-          }
-
-          // PHASE 5: Stable Voronoi cell generation (FIXED SCALE - no crawling)
-          // Critical: voronoiScale is CONSTANT to prevent cell topology changes
-          // Only crackPhase drives expansion; cell boundaries remain stable
-          float voronoiScale = 25.0; // IMMUTABLE - do not animate this!
-          vec3 voronoiData = voronoi(uv, voronoiScale);
-          float cellDist1 = voronoiData.x;
-          float cellDist2 = voronoiData.y;
-          float cellId = voronoiData.z;
-
-          // CRITICAL FIX: Thin crack lines (subtle shimmer effect)
-          float edgeDist = cellDist2 - cellDist1;
-          float cracks = smoothstep(0.05, 0.0, edgeDist); // THIN: 0.05 (was 0.15)
-
-          // CRITICAL FIX: Minimal distortion - just subtle starfield shimmer
-          float rotation = cellId * 6.28318;
-          float separation = crackPhase * 0.02; // SUBTLE: 0.02 (was 0.15)
-          vec2 shardOffset = vec2(cos(rotation), sin(rotation)) * sqrt(cellDist1) * separation * radialFade;
-          vec2 distortedUv = uv + shardOffset;
-
-          // CRITICAL FIX: Minimal chromatic aberration
-          float aberrationStrength = radialFade * 0.01 * (1.0 + cracks * 1.5); // SUBTLE: 0.01, multiplier 1.5
-          float r = texture2D(tDiffuse, distortedUv + vec2(aberrationStrength, 0.0)).r;
-          float g = texture2D(tDiffuse, distortedUv).g;
-          float b = texture2D(tDiffuse, distortedUv - vec2(aberrationStrength, 0.0)).b;
-          vec3 color = vec3(r, g, b);
-
-          // CRITICAL FIX: Subtle dark crack lines
-          float crackDarkness = cracks * 0.4; // SUBTLE: 0.4 (was 0.9)
-          color = mix(color, vec3(0.0), crackDarkness);
-
-          // CRITICAL FIX: Subtle hot edges (dim orange shimmer)
-          float hotEdge = cracks * (1.0 - crackPhase * 0.7);
-          vec3 hotColor = vec3(0.8, 0.5, 0.3); // DIM: was vec3(3.5, 2.5, 1.8)
-          color += hotColor * hotEdge * 0.15; // SUBTLE: 0.15 (was 1.2)
-
-          // CRITICAL FIX: Subtle cool glow (very dim purple/teal)
-          vec3 purple = vec3(0.3, 0.15, 0.4); // DIM: was vec3(0.7, 0.3, 1.0)
-          vec3 teal = vec3(0.15, 0.4, 0.35); // DIM: was vec3(0.3, 1.0, 0.9)
-          vec3 coolGlow = mix(purple, teal, sin(time * 2.0) * 0.5 + 0.5);
-          color += coolGlow * cracks * 0.12; // SUBTLE: 0.12 (was 0.8)
-
-          // CRITICAL FIX: Subtle shimmer (faint reflections)
-          float shimmer = sin(time * 3.0 + cellId * 6.28) * 0.5 + 0.5;
-          vec3 shimmerColor = vec3(0.15, 0.18, 0.2); // DIM: was vec3(0.5, 0.6, 0.7)
-          color += shimmerColor * shimmer * cellDist1 * 0.05; // SUBTLE: 0.05 (was 0.3)
-
-          // CRITICAL FIX: Subtle edge reflections (faint white lines)
-          float edgeReflection = smoothstep(0.08, 0.02, edgeDist);
-          color += vec3(0.3, 0.3, 0.35) * edgeReflection * 0.2; // SUBTLE: 0.2, dim color
-
-          // CRITICAL FIX: Minimal desaturation and darkening
-          float luminance = dot(color, vec3(0.299, 0.587, 0.114));
-          color = mix(color, vec3(luminance), 0.05); // MINIMAL: 0.05 (was 0.1)
-          color *= 0.98; // MINIMAL darkening: 0.98 (was 0.95)
-
-          // CRITICAL FIX: Low opacity for subtle blend with starfield
-          gl_FragColor = vec4(color, radialFade * 0.3); // SUBTLE: 0.3 opacity (was 0.85)
-        }
-      `
-    };
-
-    const crackPass = new ShaderPass(crackShader);
-    composer.addPass(crackPass);
 
     // CRITICAL FIX: Minimal bloom - explosion flash comes from comet itself, NOT bloom
     // Bloom is ONLY for subtle glow on cracks and black hole accretion disk
@@ -540,6 +376,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const starGeometry = new THREE.BufferGeometry();
     const starPositions = new Float32Array(starCount * 3);
     const starColors = new Float32Array(starCount * 3);
+    const starBaseColors = new Float32Array(starCount * 3); // Store original colors for ripple effects
     const starBaseSizes = new Float32Array(starCount);
     const starTwinkleSeeds = new Float32Array(starCount);
     const starAbsorptionScales = new Float32Array(starCount);
@@ -608,10 +445,16 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
       // Absorption scale (1.0 = normal, decreases when pulled into black hole)
       starAbsorptionScales[i] = 1.0;
+
+      // Store base color for ripple effects (copy from color)
+      starBaseColors[i3] = starColors[i3];
+      starBaseColors[i3 + 1] = starColors[i3 + 1];
+      starBaseColors[i3 + 2] = starColors[i3 + 2];
     }
 
     starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
     starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+    starGeometry.setAttribute('baseColor', new THREE.BufferAttribute(starBaseColors, 3));
     starGeometry.setAttribute('baseSize', new THREE.BufferAttribute(starBaseSizes, 1));
     starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
     starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
@@ -701,8 +544,147 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const starField = new THREE.Points(starGeometry, starMaterial);
     scene.add(starField);
 
-    // Track which stars are being pulled
-    const pulledStars = new Set<number>();
+    // Track stars being pulled with detailed physics state
+    interface PulledStarData {
+      index: number;
+      pullStartTime: number; // Absolute time when pull starts (7.5s-11.5s)
+      velocity: THREE.Vector3; // Current velocity
+      hasImpacted: boolean; // Whether star has hit the black hole
+    }
+    const pulledStars: PulledStarData[] = [];
+
+    // Track active space-time ripples from star impacts
+    interface SpaceTimeRipple {
+      position: THREE.Vector3; // Impact position
+      startTime: number; // When ripple was created
+      duration: number; // How long it lasts (0.3-0.8s)
+      maxRadius: number; // Maximum ripple radius
+    }
+    const activeRipples: SpaceTimeRipple[] = [];
+
+    /**
+     * Create a space-time ripple effect when a star impacts the black hole
+     */
+    function createStarImpactRipple(impactPos: THREE.Vector3, currentTime: number) {
+      const duration = 0.3 + Math.random() * 0.5; // 0.3-0.8 seconds
+      const maxRadius = 15 + Math.random() * 10; // 15-25 units
+
+      activeRipples.push({
+        position: impactPos.clone(),
+        startTime: currentTime,
+        duration: duration,
+        maxRadius: maxRadius
+      });
+
+      console.log(`Star impact at (${impactPos.x.toFixed(1)}, ${impactPos.y.toFixed(1)}, ${impactPos.z.toFixed(1)}) - ripple created`);
+    }
+
+    /**
+     * Update ripple effects and apply distortion to nearby stars
+     */
+    function updateRippleEffects(introElapsed: number) {
+      const positions = starGeometry.attributes.position.array as Float32Array;
+      const colors = starGeometry.attributes.color.array as Float32Array;
+      const baseColors = starGeometry.attributes.baseColor.array as Float32Array;
+
+      // Clean up expired ripples
+      for (let i = activeRipples.length - 1; i >= 0; i--) {
+        const ripple = activeRipples[i];
+        const age = introElapsed - ripple.startTime;
+        if (age > ripple.duration) {
+          activeRipples.splice(i, 1);
+        }
+      }
+
+      // If no active ripples, reset all stars to base colors
+      if (activeRipples.length === 0) {
+        let needsReset = false;
+        for (let i = 0; i < starCount; i++) {
+          const i3 = i * 3;
+          if (colors[i3] !== baseColors[i3] || colors[i3 + 1] !== baseColors[i3 + 1] || colors[i3 + 2] !== baseColors[i3 + 2]) {
+            colors[i3] = baseColors[i3];
+            colors[i3 + 1] = baseColors[i3 + 1];
+            colors[i3 + 2] = baseColors[i3 + 2];
+            needsReset = true;
+          }
+        }
+        if (needsReset) {
+          starGeometry.attributes.color.needsUpdate = true;
+        }
+        return;
+      }
+
+      let colorChanged = false;
+
+      // Apply ripple effects to all stars
+      for (let i = 0; i < starCount; i++) {
+        const i3 = i * 3;
+        const starPos = new THREE.Vector3(
+          positions[i3],
+          positions[i3 + 1],
+          positions[i3 + 2]
+        );
+
+        let totalGlow = 0;
+        let totalDistortion = new THREE.Vector3(0, 0, 0);
+
+        // Accumulate effects from all active ripples
+        activeRipples.forEach(ripple => {
+          const age = introElapsed - ripple.startTime;
+          const progress = age / ripple.duration; // 0 to 1
+
+          // Current ripple radius expands over time
+          const currentRadius = progress * ripple.maxRadius;
+
+          // Distance from star to ripple center
+          const distance = starPos.distanceTo(ripple.position);
+
+          // Ripple wave is a thin ring that expands
+          const ringThickness = ripple.maxRadius * 0.15; // 15% of max radius
+          const distanceToRing = Math.abs(distance - currentRadius);
+
+          if (distanceToRing < ringThickness) {
+            // Star is near the expanding ring
+            const ringIntensity = 1.0 - (distanceToRing / ringThickness); // 0 to 1
+
+            // Warm golden glow
+            const glowFalloff = 1.0 - progress; // Fade over time
+            totalGlow += ringIntensity * glowFalloff * 0.8;
+
+            // Water-like distortion (radial displacement)
+            const distortionStrength = ringIntensity * glowFalloff * 0.3;
+            const direction = new THREE.Vector3().subVectors(starPos, ripple.position).normalize();
+            totalDistortion.add(direction.multiplyScalar(distortionStrength * Math.sin(progress * Math.PI)));
+          }
+        });
+
+        // Apply warm golden glow to star color
+        if (totalGlow > 0.01) {
+          const baseR = baseColors[i3];
+          const baseG = baseColors[i3 + 1];
+          const baseB = baseColors[i3 + 2];
+
+          // Add warm golden tint
+          colors[i3] = Math.min(1.0, baseR + totalGlow * 0.8); // More red
+          colors[i3 + 1] = Math.min(1.0, baseG + totalGlow * 0.6); // Medium green
+          colors[i3 + 2] = Math.min(1.0, baseB + totalGlow * 0.2); // Less blue
+
+          colorChanged = true;
+        }
+
+        // Apply position distortion (commented out for now - can cause visual artifacts)
+        // if (totalDistortion.length() > 0.001) {
+        //   positions[i3] += totalDistortion.x;
+        //   positions[i3 + 1] += totalDistortion.y;
+        //   positions[i3 + 2] += totalDistortion.z;
+        //   positionChanged = true;
+        // }
+      }
+
+      if (colorChanged) {
+        starGeometry.attributes.color.needsUpdate = true;
+      }
+    }
 
     // ============================================================================
     // COMET SHADER MATERIALS
@@ -1283,13 +1265,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       comet.visible = originalCometVisible;
       cometMaterial.uniforms.heatIntensity.value = 0.0;
       glowMaterial.uniforms.heatIntensity.value = 0.0;
-
-      // Also prewarm crack shader (render crack pass once)
-      crackPass.uniforms.intensity.value = 0.5;
-      crackPass.uniforms.crackPhase.value = 0.5;
-      composer.render();
-      crackPass.uniforms.intensity.value = 0.0;
-      crackPass.uniforms.crackPhase.value = 0.0;
     }
 
     // Prewarm shaders before starting animation
@@ -1495,72 +1470,74 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
      * - Exponential absorption: smooth fade via GPU attribute
      * - Screen-space pull: visually consistent effect regardless of depth
      */
-    function updateStarPulling(deltaTime: number, camera: THREE.Camera) {
+    function updateStarPulling(deltaTime: number, introElapsed: number) {
       const blackHolePos = new THREE.Vector3(0, -8, 10);
       const positions = starGeometry.attributes.position.array as Float32Array;
       const absorptionScales = starGeometry.attributes.absorptionScale.array as Float32Array;
 
-      // Project black hole to screen space once
-      const blackHoleScreen = blackHolePos.clone();
-      blackHoleScreen.project(camera);
-
       let positionChanged = false;
       let absorptionChanged = false;
 
-      pulledStars.forEach(starIndex => {
-        const i3 = starIndex * 3;
+      pulledStars.forEach(starData => {
+        // Only pull stars that have reached their start time and haven't impacted
+        if (introElapsed < starData.pullStartTime || starData.hasImpacted) {
+          return;
+        }
 
+        const i3 = starData.index * 3;
         const starPos = new THREE.Vector3(
           positions[i3],
           positions[i3 + 1],
           positions[i3 + 2]
         );
 
-        // Project star to screen space
-        const starScreen = starPos.clone();
-        starScreen.project(camera);
+        // Calculate direction from star to black hole
+        const direction = new THREE.Vector3()
+          .subVectors(blackHolePos, starPos)
+          .normalize();
 
-        // Calculate screen-space distance and direction
-        const screenDist = Math.sqrt(
-          Math.pow(blackHoleScreen.x - starScreen.x, 2) +
-          Math.pow(blackHoleScreen.y - starScreen.y, 2)
+        // World-space distance for gravity calculation
+        const distance = starPos.distanceTo(blackHolePos);
+
+        // Gravitational acceleration: F = G * M / r^2
+        // Using simplified constants: G * M = 50.0 for visible effect
+        const gravityConstant = 50.0;
+        const acceleration = gravityConstant / (distance * distance + 0.1); // +0.1 to prevent division by zero
+
+        // Update velocity: v = v + a * dt
+        starData.velocity.add(
+          direction.clone().multiplyScalar(acceleration * deltaTime)
         );
 
-        // Screen-space pull direction (normalized)
-        const screenDirX = (blackHoleScreen.x - starScreen.x) / (screenDist + 0.001);
-        const screenDirY = (blackHoleScreen.y - starScreen.y) / (screenDist + 0.001);
+        // Update position: p = p + v * dt
+        const displacement = starData.velocity.clone().multiplyScalar(deltaTime);
+        starPos.add(displacement);
 
-        // PHASE 5: dt-based pull force with velocity clamping
-        // pullStrength scales with deltaTime (framerate independent)
-        const pullStrength = deltaTime * 0.08 / (screenDist * screenDist + 0.01);
-        const clampedPullStrength = Math.min(pullStrength, 0.05); // Prevent snapping
-
-        // Apply pull in screen space
-        starScreen.x += screenDirX * clampedPullStrength;
-        starScreen.y += screenDirY * clampedPullStrength;
-        // Keep original Z depth in screen space
-
-        // Unproject back to world space
-        starScreen.unproject(camera);
-
-        // Update position
-        positions[i3] = starScreen.x;
-        positions[i3 + 1] = starScreen.y;
-        positions[i3 + 2] = starScreen.z;
+        // Write back to buffer
+        positions[i3] = starPos.x;
+        positions[i3 + 1] = starPos.y;
+        positions[i3 + 2] = starPos.z;
         positionChanged = true;
 
-        // World-space distance for absorption effect
-        const worldDist = starPos.distanceTo(blackHolePos);
+        // Check for impact (distance < 2 units from black hole center)
+        if (distance < 2.0 && !starData.hasImpacted) {
+          starData.hasImpacted = true;
 
-        // BLUEPRINT 8.3: Time-based absorption via GPU attribute
-        if (worldDist < 3) {
-          // Exponential decay: exp(-k * dt) where k=3.0
-          absorptionScales[starIndex] *= Math.exp(-3.0 * deltaTime);
+          // Trigger impact explosion and ripple effect
+          createStarImpactRipple(starPos.clone(), introElapsed);
+
+          // Start absorption effect
+          absorptionScales[starData.index] = 1.0;
+          absorptionChanged = true;
+        }
+
+        // Absorption effect for impacted stars
+        if (starData.hasImpacted) {
+          absorptionScales[starData.index] *= Math.exp(-3.0 * deltaTime);
           absorptionChanged = true;
 
-          // BLUEPRINT 8.3: Mark as absorbed when scale is very small
-          if (absorptionScales[starIndex] < 0.05) {
-            // Move star far away (effectively removed)
+          // Remove star when fully absorbed
+          if (absorptionScales[starData.index] < 0.05) {
             positions[i3] = 10000;
             positions[i3 + 1] = 10000;
             positions[i3 + 2] = -10000;
@@ -1578,12 +1555,15 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Select stars for pulling (8% of nearby stars)
+     * Select 1-4 stars for gravitational pull with staggered start times
+     * Stars start being pulled 3-7 seconds after black hole forms (7.5s-11.5s absolute)
      */
     function selectStarsToPull() {
       const blackHolePos = new THREE.Vector3(0, -8, 10);
       const positions = starGeometry.attributes.position.array as Float32Array;
 
+      // Find all nearby stars (within 30 units)
+      const nearbyStars: number[] = [];
       for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
         const starPos = new THREE.Vector3(
@@ -1591,14 +1571,34 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           positions[i3 + 1],
           positions[i3 + 2]
         );
-
         const distance = starPos.distanceTo(blackHolePos);
-
-        // Within 30 units and 8% probability
-        if (distance < 30 && Math.random() < 0.08) {
-          pulledStars.add(i);
+        if (distance < 30) {
+          nearbyStars.push(i);
         }
       }
+
+      // Select 1-4 stars randomly
+      const numStarsToPull = Math.floor(Math.random() * 4) + 1; // 1-4 stars
+      const selectedStars: number[] = [];
+
+      // Shuffle and pick
+      const shuffled = nearbyStars.sort(() => Math.random() - 0.5);
+      for (let i = 0; i < Math.min(numStarsToPull, shuffled.length); i++) {
+        selectedStars.push(shuffled[i]);
+      }
+
+      // Assign each star a random pull start time between 7.5s-11.5s
+      selectedStars.forEach(starIndex => {
+        const pullStartTime = 7.5 + Math.random() * 4.0; // 7.5s to 11.5s
+        pulledStars.push({
+          index: starIndex,
+          pullStartTime: pullStartTime,
+          velocity: new THREE.Vector3(0, 0, 0), // Start at rest
+          hasImpacted: false
+        });
+      });
+
+      console.log(`Selected ${selectedStars.length} stars for gravitational pull`);
     }
 
     // ============================================================================
@@ -1621,15 +1621,9 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       // Update shader time uniforms (use introElapsed for consistency)
       starMaterial.uniforms.time.value = introElapsed;
       cometMaterial.uniforms.time.value = introElapsed;
-      crackPass.uniforms.time.value = introElapsed;
       innerCoreMaterial.uniforms.time.value = introElapsed;
       accretionDiskMaterial.uniforms.time.value = introElapsed;
       outerGlowMaterial.uniforms.time.value = introElapsed;
-
-      // Update crater center projection dynamically
-      const blackHoleWorldPos = new THREE.Vector3(0, -8, 10);
-      const craterUV = projectToScreenUV(blackHoleWorldPos, camera);
-      crackPass.uniforms.craterCenter.value.copy(craterUV);
 
       // ============================================================================
       // PHASE 1 FIX: DETERMINISTIC PHASE EXECUTION
@@ -1731,10 +1725,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         if (phase.name === 'crater_settle') {
           blackHoleGroup.scale.setScalar(phase.phaseT);
 
-          // Reality crack effect
-          crackPass.uniforms.intensity.value = phase.phaseT;
-          crackPass.uniforms.crackPhase.value = phase.phaseT;
-
           // BLUEPRINT 12: Emit glass particles (first 600ms = 60% of phase) if enabled
           if (phase.phaseT < 0.6 && qualityConfig.enableGlassParticles) {
             emitGlassParticles();
@@ -1751,10 +1741,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             lastTitleGlitchTime = introElapsed - 1.5;
           }
         } else {
-          // Maintain full scale and crack effect
+          // Maintain full scale
           blackHoleGroup.scale.setScalar(1.0);
-          crackPass.uniforms.intensity.value = 1.0;
-          crackPass.uniforms.crackPhase.value = 1.0;
         }
 
         // Black hole rotation (continuous)
@@ -1763,8 +1751,11 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         innerCore.rotation.y -= 0.8 * deltaTime;
         accretionDisk.rotation.z += 2.0 * deltaTime;
 
-        // PHASE 3: Star pulling in screen space (continuous)
-        updateStarPulling(deltaTime, camera);
+        // Gravitational star pulling with inverse square law physics
+        updateStarPulling(deltaTime, introElapsed);
+
+        // Update space-time ripple effects from star impacts
+        updateRippleEffects(introElapsed);
 
         // Button reveal (only during button_reveal phase at 0.2s mark = 5.7s global)
         if (phase.name === 'button_reveal' && phase.phaseT >= 0.2 && !showButton) {
@@ -1826,7 +1817,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             phase: phase.name,
             elapsed: introElapsed,
             fps: currentFps,
-            pulledStars: pulledStars.size,
+            pulledStars: pulledStars.length,
             activeParticles: activeDebrisCount + activeGlassCount
           });
         }
@@ -1843,7 +1834,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
         // Control post-processing passes
         bloomPass.enabled = diagnostics.bloomEnabled;
-        crackPass.enabled = diagnostics.crackEnabled;
         fxaaPass.enabled = diagnostics.fxaaEnabled;
 
         // Render with or without composer
@@ -1877,7 +1867,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       composer.setSize(width, height);
 
       // Update post-processing uniforms
-      crackPass.uniforms.resolution.value.set(width, height);
       fxaaPass.uniforms['resolution'].value.set(1 / width, 1 / height);
 
       // PHASE 2: Update starfield uniforms for pixel-perfect sizing
@@ -1968,23 +1957,20 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           <div className={diagnostics.bloomEnabled ? 'text-green-400' : 'text-red-400'}>
             [2] Bloom: {diagnostics.bloomEnabled ? 'ON' : 'OFF'}
           </div>
-          <div className={diagnostics.crackEnabled ? 'text-green-400' : 'text-red-400'}>
-            [3] Cracks: {diagnostics.crackEnabled ? 'ON' : 'OFF'}
-          </div>
           <div className={diagnostics.fxaaEnabled ? 'text-green-400' : 'text-red-400'}>
-            [4] FXAA: {diagnostics.fxaaEnabled ? 'ON' : 'OFF'}
+            [3] FXAA: {diagnostics.fxaaEnabled ? 'ON' : 'OFF'}
           </div>
           <div className={diagnostics.starsEnabled ? 'text-green-400' : 'text-red-400'}>
-            [5] Stars: {diagnostics.starsEnabled ? 'ON' : 'OFF'}
+            [4] Stars: {diagnostics.starsEnabled ? 'ON' : 'OFF'}
           </div>
           <div className={diagnostics.cometEnabled ? 'text-green-400' : 'text-red-400'}>
-            [6] Comet: {diagnostics.cometEnabled ? 'ON' : 'OFF'}
+            [5] Comet: {diagnostics.cometEnabled ? 'ON' : 'OFF'}
           </div>
           <div className={diagnostics.particlesEnabled ? 'text-green-400' : 'text-red-400'}>
-            [7] Particles: {diagnostics.particlesEnabled ? 'ON' : 'OFF'}
+            [6] Particles: {diagnostics.particlesEnabled ? 'ON' : 'OFF'}
           </div>
           <div className={diagnostics.blackHoleEnabled ? 'text-green-400' : 'text-red-400'}>
-            [8] Black Hole: {diagnostics.blackHoleEnabled ? 'ON' : 'OFF'}
+            [7] Black Hole: {diagnostics.blackHoleEnabled ? 'ON' : 'OFF'}
           </div>
         </div>
       )}
