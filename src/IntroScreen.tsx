@@ -8,6 +8,22 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
 /**
+ * PHASE 9: Scratch vectors for hot-loop operations (avoid per-frame allocations)
+ * These are reused across frames to eliminate GC pressure
+ */
+const _scratchVec3A = new THREE.Vector3();
+const _scratchVec3B = new THREE.Vector3();
+const _scratchVec3C = new THREE.Vector3();
+
+/**
+ * PHASE 9: Constant positions (hoisted to avoid repeated allocations)
+ */
+const BLACK_HOLE_POSITION = new THREE.Vector3(0, -8, -70);
+const IMPACT_POINT = new THREE.Vector3(0, -8, -70);
+const COMET_START_POSITION = new THREE.Vector3(0, 40, -30);
+const COMET_END_POSITION = new THREE.Vector3(0, -8, -70);
+
+/**
  * Animation timeline phases for the intro sequence
  */
 type AnimationPhase = 'fade_in' | 'comet_approach' | 'impact' | 'crater_settle' | 'button_reveal' | 'complete';
@@ -212,12 +228,15 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // BLUEPRINT 11.3: StrictMode safety - prevent double initialization
+    // PHASE 10: StrictMode safety - prevent double initialization
     if (initializedRef.current) {
       console.warn('[IntroScreen] Already initialized, skipping duplicate effect (StrictMode)');
       return;
     }
     initializedRef.current = true;
+
+    // PHASE 10: Track RAF ID for cleanup
+    let rafId: number | null = null;
 
     // ============================================================================
     // SCENE SETUP
@@ -361,13 +380,19 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Time-based glitch trigger: Deterministic from elapsed time
+     * PHASE 11: Time-based glitch trigger with cinematic cadence
+     * Respects prefers-reduced-motion accessibility setting
      */
     function shouldGlitch(elapsed: number, lastGlitchTime: number, seed: number): boolean {
-      if (elapsed - lastGlitchTime < 0.8) return false; // Min 0.8s between glitches
+      // PHASE 11: Disable glitches entirely for reduced motion preference
+      if (prefersReducedMotion) return false;
 
-      // Use seed for deterministic "random" intervals
-      const interval = 0.8 + ((Math.sin(seed + lastGlitchTime * 0.7) * 0.5 + 0.5) * 1.5); // 0.8-2.3s (much more frequent)
+      // PHASE 11: Cinematic cadence - min 3s between glitches (was 0.8s)
+      if (elapsed - lastGlitchTime < 3.0) return false;
+
+      // PHASE 11: Use seed for deterministic "random" intervals: 3-7s (was 0.8-2.3s)
+      // More premium feel - rare, deliberate glitches rather than constant noise
+      const interval = 3.0 + ((Math.sin(seed + lastGlitchTime * 0.7) * 0.5 + 0.5) * 4.0);
       return elapsed - lastGlitchTime >= interval;
     }
 
@@ -733,7 +758,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Update ripple effects and apply distortion to nearby stars
+     * PHASE 9: Update ripple effects and apply distortion to nearby stars
+     * Optimized to eliminate per-frame Vector3 allocations using scratch vectors
      */
     function updateRippleEffects(introElapsed: number) {
       const positions = starGeometry.attributes.position.array as Float32Array;
@@ -783,28 +809,33 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       let colorChanged = false;
       let positionChanged = false;
 
-      // Apply ripple effects to all stars
+      // PHASE 9: Apply ripple effects to all stars (no allocations in hot loop)
       for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
-        const basePos = new THREE.Vector3(
-          basePositions[i3],
-          basePositions[i3 + 1],
-          basePositions[i3 + 2]
-        );
+
+        // PHASE 9: Use scratch vector instead of allocating
+        const basePosX = basePositions[i3];
+        const basePosY = basePositions[i3 + 1];
+        const basePosZ = basePositions[i3 + 2];
+        _scratchVec3A.set(basePosX, basePosY, basePosZ);
 
         let totalGlow = 0;
-        let totalDistortion = new THREE.Vector3(0, 0, 0);
+        // PHASE 9: Track distortion components directly (no Vector3 allocation)
+        let totalDistortionX = 0;
+        let totalDistortionY = 0;
+        let totalDistortionZ = 0;
 
         // Accumulate effects from all active ripples
-        activeRipples.forEach(ripple => {
+        for (let r = 0; r < activeRipples.length; r++) {
+          const ripple = activeRipples[r];
           const age = introElapsed - ripple.startTime;
           const progress = age / ripple.duration; // 0 to 1
 
           // Current ripple radius expands over time
           const currentRadius = progress * ripple.maxRadius;
 
-          // Distance from star base position to ripple center
-          const distance = basePos.distanceTo(ripple.position);
+          // PHASE 9: Distance calculation without allocation
+          const distance = _scratchVec3A.distanceTo(ripple.position);
 
           // Ripple wave is a thin ring that expands
           const ringThickness = ripple.maxRadius * 0.15; // 15% of max radius
@@ -818,12 +849,22 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             const glowFalloff = 1.0 - progress; // Fade over time
             totalGlow += ringIntensity * glowFalloff * 0.8;
 
-            // Water-like distortion (radial displacement from base position)
-            const distortionStrength = ringIntensity * glowFalloff * 0.5;
-            const direction = new THREE.Vector3().subVectors(basePos, ripple.position).normalize();
-            totalDistortion.add(direction.multiplyScalar(distortionStrength * Math.sin(progress * Math.PI * 2.0)));
+            // PHASE 9: Water-like distortion (radial displacement) - no allocations
+            const distortionStrength = ringIntensity * glowFalloff * 0.5 * Math.sin(progress * Math.PI * 2.0);
+
+            // Direction from ripple to star (normalized)
+            const dx = basePosX - ripple.position.x;
+            const dy = basePosY - ripple.position.y;
+            const dz = basePosZ - ripple.position.z;
+            const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (len > 0.0001) {
+              const invLen = 1.0 / len;
+              totalDistortionX += dx * invLen * distortionStrength;
+              totalDistortionY += dy * invLen * distortionStrength;
+              totalDistortionZ += dz * invLen * distortionStrength;
+            }
           }
-        });
+        }
 
         // Apply warm golden glow to star color
         if (totalGlow > 0.01) {
@@ -839,12 +880,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           colorChanged = true;
         }
 
-        // Apply position distortion (warps star positions like ripples in water)
-        // Calculate new position from base position + distortion
-        if (totalDistortion.length() > 0.001) {
-          positions[i3] = basePositions[i3] + totalDistortion.x;
-          positions[i3 + 1] = basePositions[i3 + 1] + totalDistortion.y;
-          positions[i3 + 2] = basePositions[i3 + 2] + totalDistortion.z;
+        // PHASE 9: Apply position distortion (warps star positions like ripples in water)
+        const distortionLength = Math.sqrt(totalDistortionX * totalDistortionX + totalDistortionY * totalDistortionY + totalDistortionZ * totalDistortionZ);
+        if (distortionLength > 0.001) {
+          positions[i3] = basePosX + totalDistortionX;
+          positions[i3 + 1] = basePosY + totalDistortionY;
+          positions[i3 + 2] = basePosZ + totalDistortionZ;
           positionChanged = true;
         }
       }
@@ -1300,6 +1341,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const debrisVelocities = new Float32Array(debrisCount * 3);
     const debrisColors = new Float32Array(debrisCount * 3);
     const debrisSizes = new Float32Array(debrisCount);
+    const debrisBaseSizes = new Float32Array(debrisCount); // PHASE 8: Store initial sizes
     const debrisLifetimes = new Float32Array(debrisCount);
     const debrisMaxLifetimes = new Float32Array(debrisCount);
 
@@ -1307,18 +1349,33 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     debrisGeometry.setAttribute('color', new THREE.BufferAttribute(debrisColors, 3));
     debrisGeometry.setAttribute('size', new THREE.BufferAttribute(debrisSizes, 1));
 
+    // PHASE 7: Debris material with pixel-consistent sizing
     const debrisMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        time: { value: 0.0 }
+        time: { value: 0.0 },
+        pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
+        maxPointSize: { value: maxPointSize } // Device max from Phase 4
       },
       vertexShader: `
         attribute float size;
         varying vec3 vColor;
 
+        uniform float pixelRatio;
+        uniform float maxPointSize;
+
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = size * (300.0 / -mvPosition.z);
+
+          // PHASE 7: Pixel-consistent sizing (calibrated for 3-8px range)
+          // size attribute: 1.0-3.0 (set at emission)
+          // depth factor: compensate for perspective
+          float viewDistance = -mvPosition.z;
+          float pixelSize = size * (50.0 / viewDistance) * pixelRatio;
+
+          // PHASE 7: Clamp to device max and aesthetic max (12px)
+          gl_PointSize = clamp(pixelSize, 1.0, min(maxPointSize, 12.0 * pixelRatio));
+
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -1326,10 +1383,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         varying vec3 vColor;
 
         void main() {
+          // PHASE 7: Circular particle with smooth falloff
           float dist = length(gl_PointCoord - vec2(0.5));
           if (dist > 0.5) discard;
 
-          float alpha = smoothstep(0.5, 0.3, dist);
+          // Smoother gradient for less harsh edges
+          float alpha = smoothstep(0.5, 0.2, dist);
           gl_FragColor = vec4(vColor, alpha);
         }
       `,
@@ -1342,12 +1401,13 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const debrisParticles = new THREE.Points(debrisGeometry, debrisMaterial);
     scene.add(debrisParticles);
 
-    // 8.2 Glass Dust Particles
+    // 8.2 Glass Dust Particles (disabled but fixed for completeness)
     const glassCount = 1000;
     const glassGeometry = new THREE.BufferGeometry();
     const glassPositions = new Float32Array(glassCount * 3);
     const glassVelocities = new Float32Array(glassCount * 3);
     const glassSizes = new Float32Array(glassCount);
+    const glassBaseSizes = new Float32Array(glassCount); // PHASE 8: Store initial sizes
     // const glassRotations = new Float32Array(glassCount); // Unused - reserved for future rotation animation
     const glassLifetimes = new Float32Array(glassCount);
     const glassMaxLifetimes = new Float32Array(glassCount);
@@ -1495,12 +1555,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           debrisColors[i3 + 1] = color[1];
           debrisColors[i3 + 2] = color[2];
 
-          // Size
-          debrisSizes[i] = 12 + Math.random() * 8;
+          // PHASE 8: Size (store baseSize for dt-consistent fade)
+          const baseSize = 1.0 + Math.random() * 2.0; // 1.0-3.0 (matches shader expectation)
+          debrisBaseSizes[i] = baseSize;
+          debrisSizes[i] = baseSize; // Initial size
 
           // Lifetime
           debrisLifetimes[i] = 0;
-          debrisMaxLifetimes[i] = 0.6; // 0.6 seconds
+          debrisMaxLifetimes[i] = 0.6 + Math.random() * 0.4; // 0.6-1.0 seconds
 
           activeDebrisCount++;
         }
@@ -1538,9 +1600,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             debrisVelocities[i3 + 1] *= damping;
             debrisVelocities[i3 + 2] *= damping;
 
-            // Alpha fade (avoid per-frame random allocation - size set at emission)
+            // PHASE 8: dt-consistent size fade (computed from baseSize + lifeRatio)
+            // No per-frame multiplication - size is pure function of time
             const lifeRatio = debrisLifetimes[i] / debrisMaxLifetimes[i];
-            debrisSizes[i] *= (1.0 - lifeRatio * 0.3); // Gentle size fade
+            debrisSizes[i] = debrisBaseSizes[i] * (1.0 - lifeRatio * 0.5); // 50% fade over lifetime
           } else {
             // Hide dead particle
             debrisSizes[i] = 0;
@@ -1575,9 +1638,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             glassVelocities[i3 + 1] *= damping;
             glassVelocities[i3 + 2] *= damping;
 
-            // Alpha fade (avoid per-frame random allocation)
+            // PHASE 8: dt-consistent size fade (computed from baseSize + lifeRatio)
+            // No per-frame multiplication - size is pure function of time
             const lifeRatio = glassLifetimes[i] / glassMaxLifetimes[i];
-            glassSizes[i] *= (1.0 - lifeRatio * 0.4); // Fade out
+            glassSizes[i] = glassBaseSizes[i] * (1.0 - lifeRatio * 0.6); // 60% fade over lifetime
           } else {
             // Hide dead particle
             glassSizes[i] = 0;
@@ -1591,14 +1655,15 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * PHASE 5: Screen-space star-pulling physics with deltaTime integration
+     * PHASE 9: Screen-space star-pulling physics with deltaTime integration
      * - dt-based integration: works correctly at any framerate (30fps, 60fps, 144fps)
      * - Clamped velocity: prevents snapping on long frames
      * - Exponential absorption: smooth fade via GPU attribute
      * - Screen-space pull: visually consistent effect regardless of depth
+     * - Optimized to eliminate per-frame Vector3 allocations using scratch vectors
      */
     function updateStarPulling(deltaTime: number, introElapsed: number) {
-      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
+      // PHASE 9: Use hoisted constant instead of allocation
       const positions = starGeometry.attributes.position.array as Float32Array;
       const absorptionScales = starGeometry.attributes.absorptionScale.array as Float32Array;
 
@@ -1612,46 +1677,54 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         }
 
         const i3 = starData.index * 3;
-        const starPos = new THREE.Vector3(
-          positions[i3],
-          positions[i3 + 1],
-          positions[i3 + 2]
-        );
 
-        // Calculate direction from star to black hole
-        const direction = new THREE.Vector3()
-          .subVectors(blackHolePos, starPos)
-          .normalize();
+        // PHASE 9: Use scratch vector instead of allocating
+        const starPosX = positions[i3];
+        const starPosY = positions[i3 + 1];
+        const starPosZ = positions[i3 + 2];
+        _scratchVec3A.set(starPosX, starPosY, starPosZ);
+
+        // PHASE 9: Calculate direction from star to black hole (no allocations)
+        const dx = BLACK_HOLE_POSITION.x - starPosX;
+        const dy = BLACK_HOLE_POSITION.y - starPosY;
+        const dz = BLACK_HOLE_POSITION.z - starPosZ;
 
         // World-space distance for gravity calculation
-        const distance = starPos.distanceTo(blackHolePos);
+        const distance = _scratchVec3A.distanceTo(BLACK_HOLE_POSITION);
+
+        // PHASE 9: Normalize direction (no allocation)
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        let dirX = 0, dirY = 0, dirZ = 0;
+        if (len > 0.0001) {
+          const invLen = 1.0 / len;
+          dirX = dx * invLen;
+          dirY = dy * invLen;
+          dirZ = dz * invLen;
+        }
 
         // Gravitational acceleration: F = G * M / r^2
         // Using simplified constants: G * M = 200.0 for strong, visible pull
         const gravityConstant = 200.0;
         const acceleration = gravityConstant / (distance * distance + 0.1); // +0.1 to prevent division by zero
 
-        // Update velocity: v = v + a * dt
-        starData.velocity.add(
-          direction.clone().multiplyScalar(acceleration * deltaTime)
-        );
+        // PHASE 9: Update velocity: v = v + a * dt (no clone)
+        starData.velocity.x += dirX * acceleration * deltaTime;
+        starData.velocity.y += dirY * acceleration * deltaTime;
+        starData.velocity.z += dirZ * acceleration * deltaTime;
 
-        // Update position: p = p + v * dt
-        const displacement = starData.velocity.clone().multiplyScalar(deltaTime);
-        starPos.add(displacement);
-
-        // Write back to buffer
-        positions[i3] = starPos.x;
-        positions[i3 + 1] = starPos.y;
-        positions[i3 + 2] = starPos.z;
+        // PHASE 9: Update position: p = p + v * dt (no clone)
+        positions[i3] = starPosX + starData.velocity.x * deltaTime;
+        positions[i3 + 1] = starPosY + starData.velocity.y * deltaTime;
+        positions[i3 + 2] = starPosZ + starData.velocity.z * deltaTime;
         positionChanged = true;
 
         // Check for impact (distance < 2 units from black hole center)
         if (distance < 2.0 && !starData.hasImpacted) {
           starData.hasImpacted = true;
 
-          // Trigger impact explosion and ripple effect
-          createStarImpactRipple(starPos.clone(), introElapsed);
+          // PHASE 9: Trigger impact explosion and ripple effect (use scratch for cloning)
+          _scratchVec3B.set(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+          createStarImpactRipple(_scratchVec3B.clone(), introElapsed);
 
           // Start absorption effect
           absorptionScales[starData.index] = 1.0;
@@ -1686,24 +1759,21 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const alreadyPulledStars = new Set<number>();
 
     /**
-     * PHASE 5: Select initial stars to pull immediately when black hole forms
+     * PHASE 9: Select initial stars to pull immediately when black hole forms
      * Now properly selects stars because black hole is inside star volume!
+     * Optimized to eliminate Vector3 allocations in loop
      */
     function selectInitialStarsToPull() {
-      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
+      // PHASE 9: Use hoisted constant instead of allocation
       const positions = starGeometry.attributes.position.array as Float32Array;
 
-      // PHASE 5: Find nearby stars (within 60 units - black hole at Z:-70, stars Z:-130 to -30)
-      // Many stars within 60 units now that black hole is inside star volume!
+      // PHASE 9: Find nearby stars (within 60 units) - no allocations in loop
       const nearbyStars: number[] = [];
       for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
-        const starPos = new THREE.Vector3(
-          positions[i3],
-          positions[i3 + 1],
-          positions[i3 + 2]
-        );
-        const distance = starPos.distanceTo(blackHolePos);
+        // PHASE 9: Use scratch vector instead of allocating
+        _scratchVec3A.set(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+        const distance = _scratchVec3A.distanceTo(BLACK_HOLE_POSITION);
         if (distance < 60) {
           nearbyStars.push(i);
         }
@@ -1732,24 +1802,22 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * PHASE 5: Pull additional batch of 1-4 stars (called periodically)
+     * PHASE 9: Pull additional batch of 1-4 stars (called periodically)
+     * Optimized to eliminate Vector3 allocations in loop
      */
     function pullNextBatchOfStars(currentTime: number) {
-      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
+      // PHASE 9: Use hoisted constant instead of allocation
       const positions = starGeometry.attributes.position.array as Float32Array;
 
-      // Find nearby stars that haven't been pulled yet (within 60 units)
+      // PHASE 9: Find nearby stars that haven't been pulled yet (within 60 units) - no allocations
       const availableStars: number[] = [];
       for (let i = 0; i < starCount; i++) {
         if (alreadyPulledStars.has(i)) continue;
 
         const i3 = i * 3;
-        const starPos = new THREE.Vector3(
-          positions[i3],
-          positions[i3 + 1],
-          positions[i3 + 2]
-        );
-        const distance = starPos.distanceTo(blackHolePos);
+        // PHASE 9: Use scratch vector instead of allocating
+        _scratchVec3A.set(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+        const distance = _scratchVec3A.distanceTo(BLACK_HOLE_POSITION);
         if (distance < 60) {
           availableStars.push(i);
         }
@@ -1850,13 +1918,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       if (phase.name === 'comet_approach') {
         const eased = phase.phaseT * phase.phaseT; // Quadratic ease-in for acceleration
 
-        // PHASE 5: Trajectory updated for depth coherence (impact inside star volume)
+        // PHASE 9: Trajectory updated for depth coherence (impact inside star volume)
         // Vertical drop: 48 units (40 to -8)
         // Depth motion: 40 units (-30 to -70) for dramatic diagonal approach into star field
         // Creates a coherent impact point where stars actually exist
-        const startPos = new THREE.Vector3(0, 40, -30);
-        const endPos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
-        comet.position.lerpVectors(startPos, endPos, eased);
+        // Use hoisted constants to avoid per-frame allocation
+        comet.position.lerpVectors(COMET_START_POSITION, COMET_END_POSITION, eased);
 
         // PHASE 3: Size grows smoothly from tiny to full scale
         const scale = 0.01 + (1.0 - 0.01) * phase.phaseT;
@@ -1879,11 +1946,11 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         glowMaterial.uniforms.time.value = introElapsed;
       }
 
-      // PHASE 4: Impact explosion with precise timing windows
+      // PHASE 7: Impact explosion with controlled bloom spike
       if (phase.name === 'impact') {
-        // PHASE 4: Strict time windows for controlled sequence
-        // 0-120ms: Explosive burst with visible comet
-        // 120-500ms: Bloom decay, shake decay, debris expansion
+        // PHASE 7: Structured sub-windows
+        // 0-100ms: Burst + controlled highlight injection (bloom spike)
+        // 100-500ms: Decay + debris expansion + shake decay
 
         if (phase.phaseT < 0.24) {
           const t = phase.phaseT / 0.24;
@@ -1903,11 +1970,23 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           comet.visible = false;
         }
 
-        // CRITICAL FIX: NO BLOOM SPIKE - explosion flash comes from comet itself!
-        // Bloom stays constant at 0.35 throughout impact
-        // The visual impact comes from the comet scaling 1.0 → 6.0, NOT from bloom
-        // This prevents ANY possibility of whiteout
-        bloomPass.strength = 0.35 * qualityConfig.bloomStrengthScale;
+        // PHASE 7: Brief controlled bloom spike (0-100ms only)
+        // Peak at 50ms, decay to baseline by 150ms
+        const timeSinceImpact = (introElapsed - phase.phaseStart) * 1000; // Convert to ms
+        if (timeSinceImpact < 150) {
+          // Triangle wave: ramp up 0-50ms, decay 50-150ms
+          let bloomMultiplier;
+          if (timeSinceImpact < 50) {
+            // Ramp up to peak
+            bloomMultiplier = 1.0 + (timeSinceImpact / 50) * 1.2; // Peak at 2.2x
+          } else {
+            // Decay to baseline
+            bloomMultiplier = 2.2 - ((timeSinceImpact - 50) / 100) * 1.2; // 2.2x → 1.0x
+          }
+          bloomPass.strength = 0.35 * bloomMultiplier * qualityConfig.bloomStrengthScale;
+        } else {
+          bloomPass.strength = 0.35 * qualityConfig.bloomStrengthScale; // Baseline
+        }
       } else {
         bloomPass.strength = 0.35 * qualityConfig.bloomStrengthScale; // Constant low bloom
       }
@@ -1924,10 +2003,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           // Title reveal at 0.4s mark (40% through phase = 4.9s global)
           if (phase.phaseT >= 0.4 && !showTitle) {
             setShowTitle(true);
-            // FIXED: Trigger immediate glitch on reveal for dramatic effect
-            setTitleGlitch(true);
-            const timeout = setTimeout(() => setTitleGlitch(false), 300);
-            glitchTimeoutsRef.current.add(timeout);
+            // PHASE 11: Trigger glitch on reveal (respects reduced motion)
+            if (!prefersReducedMotion) {
+              setTitleGlitch(true);
+              // PHASE 11: Cinematic duration 120-180ms (was 300ms)
+              const glitchDuration = 120 + Math.random() * 60;
+              const timeout = setTimeout(() => setTitleGlitch(false), glitchDuration);
+              glitchTimeoutsRef.current.add(timeout);
+            }
             // Set timer to allow next glitch soon after
             lastTitleGlitchTime = introElapsed - 1.5;
           }
@@ -1951,10 +2034,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         // Button reveal (only during button_reveal phase at 0.2s mark = 5.7s global)
         if (phase.name === 'button_reveal' && phase.phaseT >= 0.2 && !showButton) {
           setShowButton(true);
-          // FIXED: Trigger immediate glitch on reveal for dramatic effect
-          setButtonGlitch(true);
-          const timeout = setTimeout(() => setButtonGlitch(false), 300);
-          glitchTimeoutsRef.current.add(timeout);
+          // PHASE 11: Trigger glitch on reveal (respects reduced motion)
+          if (!prefersReducedMotion) {
+            setButtonGlitch(true);
+            // PHASE 11: Cinematic duration 120-180ms (was 300ms)
+            const glitchDuration = 120 + Math.random() * 60;
+            const timeout = setTimeout(() => setButtonGlitch(false), glitchDuration);
+            glitchTimeoutsRef.current.add(timeout);
+          }
           // Set timer to allow next glitch soon after
           lastButtonGlitchTime = introElapsed - 1.5;
         }
@@ -1976,20 +2063,22 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         camera.position.copy(cameraBasePosition);
       }
 
-      // PHASE 1 FIX: Deterministic glitch triggering - INCREASED DURATION
+      // PHASE 11: Deterministic glitch triggering with cinematic cadence
       if (showTitle && shouldGlitch(introElapsed, lastTitleGlitchTime, 12.34)) {
         lastTitleGlitchTime = introElapsed;
         setTitleGlitch(true);
-        // Schedule glitch-off after 300ms to match animation duration
-        const timeout = setTimeout(() => setTitleGlitch(false), 300);
+        // PHASE 11: Randomized duration 120-180ms for organic feel (was 300ms)
+        const glitchDuration = 120 + Math.random() * 60;
+        const timeout = setTimeout(() => setTitleGlitch(false), glitchDuration);
         glitchTimeoutsRef.current.add(timeout);
       }
 
       if (showButton && shouldGlitch(introElapsed, lastButtonGlitchTime, 56.78)) {
         lastButtonGlitchTime = introElapsed;
         setButtonGlitch(true);
-        // Schedule glitch-off after 300ms to match animation duration
-        const timeout = setTimeout(() => setButtonGlitch(false), 300);
+        // PHASE 11: Randomized duration 120-180ms for organic feel (was 300ms)
+        const glitchDuration = 120 + Math.random() * 60;
+        const timeout = setTimeout(() => setButtonGlitch(false), glitchDuration);
         glitchTimeoutsRef.current.add(timeout);
       }
 
@@ -2049,7 +2138,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         composer.render();
       }
 
-      requestAnimationFrame(animate);
+      // PHASE 10: Track RAF ID for proper cleanup
+      rafId = requestAnimationFrame(animate);
     }
 
     animate();
@@ -2079,10 +2169,17 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     window.addEventListener('resize', handleResize);
 
     // ============================================================================
-    // BLUEPRINT 11.2: COMPREHENSIVE CLEANUP
+    // PHASE 10: COMPREHENSIVE CLEANUP (RAF + Resources)
     // ============================================================================
 
     return () => {
+      // PHASE 10: Cancel animation frame to stop render loop
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+        console.log('[IntroScreen] Animation loop canceled (RAF cleaned up)');
+      }
+
       window.removeEventListener('resize', handleResize);
 
       // Clear all glitch timeouts
