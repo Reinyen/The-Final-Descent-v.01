@@ -443,9 +443,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             return;
           }
 
-          // PHASE 2: Stable Voronoi cell generation (fixed scale for stable topology)
-          // Use fixed scale so glass shards don't morph - only animate effects
-          float voronoiScale = 25.0;
+          // PHASE 5: Stable Voronoi cell generation (FIXED SCALE - no crawling)
+          // Critical: voronoiScale is CONSTANT to prevent cell topology changes
+          // Only crackPhase drives expansion; cell boundaries remain stable
+          float voronoiScale = 25.0; // IMMUTABLE - do not animate this!
           vec3 voronoiData = voronoi(uv, voronoiScale);
           float cellDist1 = voronoiData.x;
           float cellDist2 = voronoiData.y;
@@ -938,21 +939,25 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     blackHoleGroup.visible = false;
     scene.add(blackHoleGroup);
 
-    // 6.1 Event Horizon (center sphere)
+    // PHASE 5: Event Horizon (center sphere) - WRITES DEPTH
     const eventHorizonGeometry = new THREE.SphereGeometry(2.5, 32, 32);
     const eventHorizonMaterial = new THREE.MeshBasicMaterial({
       color: 0x000000,
-      opacity: 1.0
+      opacity: 1.0,
+      depthWrite: true,  // PHASE 5: Core writes depth for proper occlusion
+      depthTest: true
     });
     const eventHorizon = new THREE.Mesh(eventHorizonGeometry, eventHorizonMaterial);
     blackHoleGroup.add(eventHorizon);
 
-    // 6.2 Volumetric Inner Core
+    // PHASE 5: Volumetric Inner Core - NO DEPTH WRITE (additive layer)
     const innerCoreGeometry = new THREE.SphereGeometry(3.5, 32, 32);
     const innerCoreMaterial = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       transparent: true,
       blending: THREE.AdditiveBlending,
+      depthWrite: false,  // PHASE 5: Additive layers don't write depth
+      depthTest: true,    // But still respect depth for occlusion
       uniforms: {
         time: { value: 0.0 }
       },
@@ -1014,12 +1019,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const innerCore = new THREE.Mesh(innerCoreGeometry, innerCoreMaterial);
     blackHoleGroup.add(innerCore);
 
-    // 6.3 Accretion Disk
+    // PHASE 5: Accretion Disk - NO DEPTH WRITE (additive layer)
     const accretionDiskGeometry = new THREE.RingGeometry(3, 10, 64);
     const accretionDiskMaterial = new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       transparent: true,
       blending: THREE.AdditiveBlending,
+      depthWrite: false,  // PHASE 5: Additive layers don't write depth
+      depthTest: true,
       uniforms: {
         time: { value: 0.0 }
       },
@@ -1072,12 +1079,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     accretionDisk.rotation.x = -Math.PI / 2.5; // Tilted
     blackHoleGroup.add(accretionDisk);
 
-    // 6.4 Outer Glow (atmosphere)
+    // PHASE 5: Outer Glow (atmosphere) - NO DEPTH WRITE (additive layer)
     const outerGlowGeometry = new THREE.SphereGeometry(5, 32, 32);
     const outerGlowMaterial = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       transparent: true,
       blending: THREE.AdditiveBlending,
+      depthWrite: false,  // PHASE 5: Additive layers don't write depth
+      depthTest: true,
       uniforms: {
         time: { value: 0.0 }
       },
@@ -1350,17 +1359,19 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Emit glass dust particles from crack lines
-     * Called during crater_settle phase when phaseT < 0.6
-     * Emits 1 particle per direction per frame
+     * PHASE 5: Emit glass dust particles from crack lines
+     * Spec: 24 directions, 1 particle per direction per frame, 600ms window (~864 max)
+     * Capacity: 1000 particles (buffer size from geometry)
+     * Called during crater_settle phase when phaseT < 0.6 (600ms of 1000ms phase)
+     * At 60fps: 600ms × 60fps × 24 directions = 864 particles (within 1000 capacity)
      */
     function emitGlassParticles() {
       // This function is only called during appropriate time window
-      // No need for time check here - caller handles it
+      // Caller (crater_settle phase) handles timing check
 
       const impactPoint = new THREE.Vector3(0, -8, 10);
-      const directions = 24; // 24 radial directions
-      const particlesPerDirection = 1; // 1 particle per direction per frame
+      const directions = 24; // PHASE 5: 24 radial directions (spec)
+      const particlesPerDirection = 1; // PHASE 5: 1 particle per direction per frame (spec)
 
       for (let d = 0; d < directions; d++) {
         const angle = (d / directions) * Math.PI * 2;
@@ -1478,8 +1489,11 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * BLUEPRINT 8: Screen-space star-pulling physics system with GPU absorption
-     * Pulls stars toward black hole in screen space for visually consistent effect
+     * PHASE 5: Screen-space star-pulling physics with deltaTime integration
+     * - dt-based integration: works correctly at any framerate (30fps, 60fps, 144fps)
+     * - Clamped velocity: prevents snapping on long frames
+     * - Exponential absorption: smooth fade via GPU attribute
+     * - Screen-space pull: visually consistent effect regardless of depth
      */
     function updateStarPulling(deltaTime: number, camera: THREE.Camera) {
       const blackHolePos = new THREE.Vector3(0, -8, 10);
@@ -1516,9 +1530,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         const screenDirX = (blackHoleScreen.x - starScreen.x) / (screenDist + 0.001);
         const screenDirY = (blackHoleScreen.y - starScreen.y) / (screenDist + 0.001);
 
-        // BLUEPRINT 8.1: Pull force with clamped velocity
+        // PHASE 5: dt-based pull force with velocity clamping
+        // pullStrength scales with deltaTime (framerate independent)
         const pullStrength = deltaTime * 0.08 / (screenDist * screenDist + 0.01);
-        const clampedPullStrength = Math.min(pullStrength, 0.05); // Clamp max velocity
+        const clampedPullStrength = Math.min(pullStrength, 0.05); // Prevent snapping
 
         // Apply pull in screen space
         starScreen.x += screenDirX * clampedPullStrength;
