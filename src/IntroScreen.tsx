@@ -1399,19 +1399,19 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           comet.visible = false;
         }
 
-        // Multi-stage bloom spike with impact flash
+        // Multi-stage bloom spike with impact flash - REDUCED to prevent white-out
         let bloomStrength = 2.0;
         if (phase.phaseT < 0.04) {
-          // Instant flash in first 20ms (0-0.04 of 0.5s phase)
-          bloomStrength = 12.0;
+          // Instant flash in first 20ms - REDUCED from 12.0 to 6.0
+          bloomStrength = 6.0;
         } else if (phase.phaseT < 0.2) {
           // Rapid decay to high bloom (20-100ms)
           const t = (phase.phaseT - 0.04) / 0.16;
-          bloomStrength = 12.0 - (12.0 - 8.0) * t;
+          bloomStrength = 6.0 - (6.0 - 4.5) * t; // 6.0 -> 4.5
         } else if (phase.phaseT < 0.6) {
           // Exponential decay to base (100-300ms)
           const t = (phase.phaseT - 0.2) / 0.4;
-          bloomStrength = 8.0 * Math.exp(-t * 3.0);
+          bloomStrength = 4.5 * Math.exp(-t * 2.5); // Reduced multiplier
         } else {
           bloomStrength = 2.0;
         }
@@ -1438,7 +1438,11 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           // Title reveal at 0.4s mark (40% through phase = 4.9s global)
           if (phase.phaseT >= 0.4 && !showTitle) {
             setShowTitle(true);
-            lastTitleGlitchTime = introElapsed; // Reset glitch timer
+            // FIXED: Trigger immediate glitch on reveal for dramatic effect
+            setTitleGlitch(true);
+            setTimeout(() => setTitleGlitch(false), 300);
+            // Set timer to allow next glitch soon after
+            lastTitleGlitchTime = introElapsed - 1.5;
           }
         } else {
           // Maintain full scale and crack effect
@@ -1459,7 +1463,11 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         // Button reveal (only during button_reveal phase at 0.2s mark = 5.7s global)
         if (phase.name === 'button_reveal' && phase.phaseT >= 0.2 && !showButton) {
           setShowButton(true);
-          lastButtonGlitchTime = introElapsed; // Reset glitch timer
+          // FIXED: Trigger immediate glitch on reveal for dramatic effect
+          setButtonGlitch(true);
+          setTimeout(() => setButtonGlitch(false), 300);
+          // Set timer to allow next glitch soon after
+          lastButtonGlitchTime = introElapsed - 1.5;
         }
       }
 
