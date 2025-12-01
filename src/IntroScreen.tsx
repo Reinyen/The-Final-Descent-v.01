@@ -228,12 +228,15 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // BLUEPRINT 11.3: StrictMode safety - prevent double initialization
+    // PHASE 10: StrictMode safety - prevent double initialization
     if (initializedRef.current) {
       console.warn('[IntroScreen] Already initialized, skipping duplicate effect (StrictMode)');
       return;
     }
     initializedRef.current = true;
+
+    // PHASE 10: Track RAF ID for cleanup
+    let rafId: number | null = null;
 
     // ============================================================================
     // SCENE SETUP
@@ -2119,7 +2122,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         composer.render();
       }
 
-      requestAnimationFrame(animate);
+      // PHASE 10: Track RAF ID for proper cleanup
+      rafId = requestAnimationFrame(animate);
     }
 
     animate();
@@ -2149,10 +2153,17 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     window.addEventListener('resize', handleResize);
 
     // ============================================================================
-    // BLUEPRINT 11.2: COMPREHENSIVE CLEANUP
+    // PHASE 10: COMPREHENSIVE CLEANUP (RAF + Resources)
     // ============================================================================
 
     return () => {
+      // PHASE 10: Cancel animation frame to stop render loop
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+        console.log('[IntroScreen] Animation loop canceled (RAF cleaned up)');
+      }
+
       window.removeEventListener('resize', handleResize);
 
       // Clear all glitch timeouts
