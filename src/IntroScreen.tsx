@@ -984,8 +984,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const cometMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0.0 },
-        heatIntensity: { value: 0.0 },
-        cameraPosition: { value: camera.position }
+        heatIntensity: { value: 0.0 }
       },
       vertexShader: `
         ${simplexNoise3D}
@@ -1015,7 +1014,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
         uniform float time;
         uniform float heatIntensity;
-        uniform vec3 cameraPosition;
         varying vec3 vNormal;
         varying vec3 vPosition;
         varying vec3 vWorldPosition;
