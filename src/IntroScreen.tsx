@@ -51,6 +51,110 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     containerRef.current.appendChild(renderer.domElement);
 
     // ============================================================================
+    // PHASE 1 FIX: DETERMINISTIC TIMELINE SYSTEM
+    // ============================================================================
+
+    /**
+     * Phase mapper: Pure function of intro elapsed time
+     * Returns phase info without side effects
+     */
+    interface PhaseInfo {
+      name: AnimationPhase;
+      phaseT: number;    // 0..1 within current phase
+      globalT: number;   // 0..1 across full 6.5s
+      phaseStart: number;
+      phaseEnd: number;
+    }
+
+    function getPhaseInfo(introElapsed: number): PhaseInfo {
+      const clamped = Math.max(0, introElapsed);
+
+      if (clamped < 1.0) {
+        return {
+          name: 'fade_in',
+          phaseT: clamped / 1.0,
+          globalT: clamped / 6.5,
+          phaseStart: 0.0,
+          phaseEnd: 1.0
+        };
+      } else if (clamped < 4.0) {
+        return {
+          name: 'comet_approach',
+          phaseT: (clamped - 1.0) / 3.0,
+          globalT: clamped / 6.5,
+          phaseStart: 1.0,
+          phaseEnd: 4.0
+        };
+      } else if (clamped < 4.5) {
+        return {
+          name: 'impact',
+          phaseT: (clamped - 4.0) / 0.5,
+          globalT: clamped / 6.5,
+          phaseStart: 4.0,
+          phaseEnd: 4.5
+        };
+      } else if (clamped < 5.5) {
+        return {
+          name: 'crater_settle',
+          phaseT: (clamped - 4.5) / 1.0,
+          globalT: clamped / 6.5,
+          phaseStart: 4.5,
+          phaseEnd: 5.5
+        };
+      } else if (clamped < 6.5) {
+        return {
+          name: 'button_reveal',
+          phaseT: (clamped - 5.5) / 1.0,
+          globalT: clamped / 6.5,
+          phaseStart: 5.5,
+          phaseEnd: 6.5
+        };
+      } else {
+        return {
+          name: 'complete',
+          phaseT: 1.0,
+          globalT: 1.0,
+          phaseStart: 6.5,
+          phaseEnd: Infinity
+        };
+      }
+    }
+
+    /**
+     * Deterministic camera shake: Pure function of time since impact
+     * Uses sinusoidal combination for stable, FPS-independent shake
+     */
+    function getCameraShake(timeSinceImpact: number): { x: number; y: number } {
+      if (timeSinceImpact < 0 || timeSinceImpact > 0.5) {
+        return { x: 0, y: 0 };
+      }
+
+      // Exponential amplitude decay
+      const amplitude = 0.8 * Math.exp(-timeSinceImpact * 10);
+
+      // Combination of incommensurate frequencies for natural feel
+      const shake1 = Math.sin(timeSinceImpact * 17.3);
+      const shake2 = Math.sin(timeSinceImpact * 23.7);
+      const shake3 = Math.sin(timeSinceImpact * 31.1);
+
+      return {
+        x: amplitude * (shake1 * 0.5 + shake2 * 0.3 + shake3 * 0.2),
+        y: amplitude * (shake2 * 0.5 + shake1 * 0.3 + shake3 * 0.2) * 0.625 // Vertical is 62.5% of horizontal
+      };
+    }
+
+    /**
+     * Time-based glitch trigger: Deterministic from elapsed time
+     */
+    function shouldGlitch(elapsed: number, lastGlitchTime: number, seed: number): boolean {
+      if (elapsed - lastGlitchTime < 3.0) return false; // Min 3s between glitches
+
+      // Use seed for deterministic "random" intervals
+      const interval = 3.0 + ((Math.sin(seed + lastGlitchTime * 0.7) * 0.5 + 0.5) * 4.0); // 3-7s
+      return elapsed - lastGlitchTime >= interval;
+    }
+
+    // ============================================================================
     // POST-PROCESSING PIPELINE
     // ============================================================================
     const composer = new EffectComposer(renderer);
@@ -727,21 +831,20 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     scene.add(glassParticles);
 
     // ============================================================================
-    // ANIMATION STATE
+    // PHASE 1 FIX: DETERMINISTIC ANIMATION STATE
     // ============================================================================
     const clock = new THREE.Clock();
-    let elapsedTime = 0;
-    let currentPhase: AnimationPhase = 'fade_in';
-    let phaseStartTime = 0;
+    let introElapsed = 0;          // Single source of truth for timeline
+    let prevPhase: AnimationPhase = 'fade_in';
+    let lastTitleGlitchTime = -10; // Force first glitch check after reveal
+    let lastButtonGlitchTime = -10;
 
-    // Camera shake state
-    let cameraShakeIntensity = 0;
+    // Camera base position
     const cameraBasePosition = new THREE.Vector3(0, 0, 30);
 
     // Active particle tracking
     let activeDebrisCount = 0;
     let activeGlassCount = 0;
-    let glassEmissionStartTime = 0;
 
     // ============================================================================
     // PARTICLE EMISSION FUNCTIONS
@@ -804,10 +907,11 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
 
     /**
      * Emit glass dust particles from crack lines
+     * Called during crater_settle phase when phaseT < 0.6
      */
     function emitGlassParticles() {
-      const timeSinceStart = elapsedTime - glassEmissionStartTime;
-      if (timeSinceStart > 0.6) return; // Only emit for first 600ms
+      // This function is only called during appropriate time window
+      // No need for time check here - caller handles it
 
       const impactPoint = new THREE.Vector3(0, -8, 10);
       const directions = 24; // 24 radial directions
@@ -867,16 +971,16 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           debrisPositions[i3 + 1] += debrisVelocities[i3 + 1] * deltaTime;
           debrisPositions[i3 + 2] += debrisVelocities[i3 + 2] * deltaTime;
 
-          // Velocity damping (98% per frame at 60fps)
-          const damping = Math.pow(0.98, deltaTime * 60);
+          // PHASE 1 FIX: Time-based velocity damping (exponential decay)
+          // k=1.22 matches ~0.98 per frame at 60fps: exp(-1.22/60) ≈ 0.98
+          const damping = Math.exp(-1.22 * deltaTime);
           debrisVelocities[i3] *= damping;
           debrisVelocities[i3 + 1] *= damping;
           debrisVelocities[i3 + 2] *= damping;
 
-          // Alpha fade
+          // Alpha fade (avoid per-frame random allocation - size set at emission)
           const lifeRatio = debrisLifetimes[i] / debrisMaxLifetimes[i];
-          const alpha = 1.0 - lifeRatio;
-          debrisSizes[i] = (12 + Math.random() * 8) * alpha;
+          debrisSizes[i] *= (1.0 - lifeRatio * 0.3); // Gentle size fade
         } else {
           // Hide dead particle
           debrisSizes[i] = 0;
@@ -901,16 +1005,16 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           // Gravity
           glassVelocities[i3 + 1] -= 9.8 * 0.3 * deltaTime;
 
-          // Air resistance (98.5% per frame)
-          const damping = Math.pow(0.985, deltaTime * 60);
+          // PHASE 1 FIX: Time-based air resistance (exponential decay)
+          // k=0.92 matches ~0.985 per frame at 60fps: exp(-0.92/60) ≈ 0.985
+          const damping = Math.exp(-0.92 * deltaTime);
           glassVelocities[i3] *= damping;
           glassVelocities[i3 + 1] *= damping;
           glassVelocities[i3 + 2] *= damping;
 
-          // Alpha fade
+          // Alpha fade (avoid per-frame random allocation)
           const lifeRatio = glassLifetimes[i] / glassMaxLifetimes[i];
-          const alpha = 1.0 - lifeRatio;
-          glassSizes[i] = (0.3 + Math.random() * 1.2) * alpha;
+          glassSizes[i] *= (1.0 - lifeRatio * 0.4); // Fade out
         } else {
           // Hide dead particle
           glassSizes[i] = 0;
@@ -951,9 +1055,10 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         positions[i3 + 1] = starPos.y;
         positions[i3 + 2] = starPos.z;
 
-        // Absorption effect (shrink when close)
+        // PHASE 1 FIX: Time-based absorption shrink (exponential decay)
         if (distance < 3) {
-          sizes[starIndex] *= 0.95;
+          // Continuous decay: exp(-k * dt) where k=3.0 matches ~0.95 at 60fps
+          sizes[starIndex] *= Math.exp(-3.0 * deltaTime);
         }
       });
 
@@ -986,217 +1091,175 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     }
 
     // ============================================================================
-    // GLITCH ANIMATION SCHEDULING
+    // PHASE 1 FIX: TIME-BASED GLITCH TRIGGERING (NO SETTIMEOUT)
     // ============================================================================
-
-    let titleGlitchTimeout: number | null = null;
-    let buttonGlitchTimeout: number | null = null;
-
-    function scheduleTitleGlitch() {
-      if (titleGlitchTimeout) clearTimeout(titleGlitchTimeout);
-
-      const delay = 3000 + Math.random() * 4000; // 3-7 seconds
-      titleGlitchTimeout = window.setTimeout(() => {
-        setTitleGlitch(true);
-        setTimeout(() => {
-          setTitleGlitch(false);
-          scheduleTitleGlitch(); // Recursive scheduling
-        }, 150); // 150ms flicker
-      }, delay);
-    }
-
-    function scheduleButtonGlitch() {
-      if (buttonGlitchTimeout) clearTimeout(buttonGlitchTimeout);
-
-      const delay = 3000 + Math.random() * 4000; // 3-7 seconds
-      buttonGlitchTimeout = window.setTimeout(() => {
-        setButtonGlitch(true);
-        setTimeout(() => {
-          setButtonGlitch(false);
-          scheduleButtonGlitch(); // Recursive scheduling
-        }, 150); // 150ms flicker
-      }, delay);
-    }
+    // Glitch logic now handled deterministically in animate loop
 
     // ============================================================================
     // ANIMATION LOOP
     // ============================================================================
 
     function animate() {
-      const deltaTime = clock.getDelta();
-      elapsedTime += deltaTime;
-      const phaseTime = elapsedTime - phaseStartTime;
+      // PHASE 1 FIX: Long-frame protection
+      const rawDelta = clock.getDelta();
+      const deltaTime = Math.min(rawDelta, 1 / 30); // Clamp to 30fps max step
 
-      // Update shader time uniforms
-      cometMaterial.uniforms.time.value = elapsedTime;
-      crackPass.uniforms.time.value = elapsedTime;
-      innerCoreMaterial.uniforms.time.value = elapsedTime;
-      accretionDiskMaterial.uniforms.time.value = elapsedTime;
-      outerGlowMaterial.uniforms.time.value = elapsedTime;
+      introElapsed += deltaTime;
+      const phase = getPhaseInfo(introElapsed);
+
+      // Update shader time uniforms (use introElapsed for consistency)
+      cometMaterial.uniforms.time.value = introElapsed;
+      crackPass.uniforms.time.value = introElapsed;
+      innerCoreMaterial.uniforms.time.value = introElapsed;
+      accretionDiskMaterial.uniforms.time.value = introElapsed;
+      outerGlowMaterial.uniforms.time.value = introElapsed;
 
       // ============================================================================
-      // PHASE TRANSITIONS
+      // PHASE 1 FIX: DETERMINISTIC PHASE EXECUTION
       // ============================================================================
 
-      // Phase 1: FADE_IN (0.0s - 1.0s)
-      if (currentPhase === 'fade_in') {
-        const progress = Math.min(phaseTime / 1.0, 1.0);
-        starField.material.opacity = progress;
-
-        if (elapsedTime >= 1.0) {
-          currentPhase = 'comet_approach';
-          phaseStartTime = elapsedTime;
+      // One-time phase enter actions
+      if (phase.name !== prevPhase) {
+        if (phase.name === 'comet_approach') {
           comet.visible = true;
+        } else if (phase.name === 'impact') {
+          emitDebrisParticles();
+        } else if (phase.name === 'crater_settle') {
+          blackHoleGroup.visible = true;
+          selectStarsToPull();
         }
+        prevPhase = phase.name;
       }
 
-      // Phase 2: COMET_APPROACH (1.0s - 4.0s)
-      else if (currentPhase === 'comet_approach') {
-        const progress = Math.min(phaseTime / 3.0, 1.0);
+      // ============================================================================
+      // PHASE-SPECIFIC UPDATES (Time-driven, not state-driven)
+      // ============================================================================
 
-        // Quadratic ease-in for acceleration
-        const eased = progress * progress;
+      // FADE_IN: Starfield opacity fade
+      if (phase.name === 'fade_in') {
+        starField.material.opacity = phase.phaseT;
+      } else {
+        starField.material.opacity = 1.0;
+      }
 
-        // Position interpolation
+      // COMET_APPROACH: Falling comet with heat buildup
+      if (phase.name === 'comet_approach') {
+        const eased = phase.phaseT * phase.phaseT; // Quadratic ease-in
+
+        // Position
         const startPos = new THREE.Vector3(0, 40, -30);
         const endPos = new THREE.Vector3(0, -8, 10);
         comet.position.lerpVectors(startPos, endPos, eased);
 
         // Scale
-        const scale = 0.01 + (1.0 - 0.01) * progress;
+        const scale = 0.01 + (1.0 - 0.01) * phase.phaseT;
         comet.scale.set(scale, scale, scale);
 
-        // Rotation
+        // Rotation (accumulate over time, not reset)
         comet.rotation.x += 1.8 * deltaTime;
         comet.rotation.y += 1.3 * deltaTime;
 
         // Heat intensity
-        cometMaterial.uniforms.heatIntensity.value = progress * 0.8;
-
-        if (elapsedTime >= 4.0) {
-          currentPhase = 'impact';
-          phaseStartTime = elapsedTime;
-          emitDebrisParticles();
-        }
+        cometMaterial.uniforms.heatIntensity.value = phase.phaseT * 0.8;
       }
 
-      // Phase 3: IMPACT (4.0s - 4.5s)
-      else if (currentPhase === 'impact') {
-        const progress = Math.min(phaseTime / 0.5, 1.0);
-
-        // Explosive growth in first 100ms
-        if (phaseTime < 0.1) {
-          const explosionProgress = phaseTime / 0.1;
+      // IMPACT: Explosion + camera shake + bloom spike
+      if (phase.name === 'impact') {
+        // Explosive growth in first 100ms (0-0.2 of phase)
+        if (phase.phaseT < 0.2) {
+          const explosionProgress = phase.phaseT / 0.2;
           const explosionScale = 1.0 + (5.0 - 1.0) * explosionProgress;
           comet.scale.set(explosionScale, explosionScale, explosionScale);
         } else {
           comet.visible = false;
         }
 
-        // Camera shake (exponential decay)
-        cameraShakeIntensity = Math.exp(-phaseTime * 5) * 0.8;
-
-        // Bloom spike
-        bloomPass.strength = 2.0 + (6.0 - 2.0) * (1.0 - progress);
-
-        if (elapsedTime >= 4.5) {
-          currentPhase = 'crater_settle';
-          phaseStartTime = elapsedTime;
-          blackHoleGroup.visible = true;
-          selectStarsToPull();
-          glassEmissionStartTime = elapsedTime;
-        }
+        // Bloom spike (quick rise, then decay)
+        const spikeProgress = Math.min(phase.phaseT / 0.16, 1.0); // Spike in first 80ms
+        bloomPass.strength = 2.0 + (6.0 - 2.0) * (1.0 - spikeProgress);
+      } else {
+        bloomPass.strength = 2.0; // Reset to base
       }
 
-      // Phase 4: CRATER_SETTLE (4.5s - 5.5s)
-      else if (currentPhase === 'crater_settle') {
-        const progress = Math.min(phaseTime / 1.0, 1.0);
+      // CRATER_SETTLE: Black hole formation + reality cracks + title
+      if (phase.name === 'crater_settle' || phase.name === 'button_reveal' || phase.name === 'complete') {
+        // Black hole scale fade-in (only during crater_settle)
+        if (phase.name === 'crater_settle') {
+          blackHoleGroup.scale.setScalar(phase.phaseT);
 
-        // Black hole scale fade-in
-        blackHoleGroup.scale.setScalar(progress);
+          // Reality crack effect
+          crackPass.uniforms.intensity.value = phase.phaseT;
+          crackPass.uniforms.crackPhase.value = phase.phaseT;
 
-        // Black hole rotation
-        blackHoleGroup.rotation.y += 0.3 * deltaTime;
-        blackHoleGroup.rotation.z += 0.15 * deltaTime;
-        innerCore.rotation.y -= 0.8 * deltaTime; // Counter-rotation
-        accretionDisk.rotation.z += 2.0 * deltaTime; // Fast spin
+          // Emit glass particles (first 600ms = 60% of phase)
+          if (phase.phaseT < 0.6) {
+            emitGlassParticles();
+          }
 
-        // Reality crack effect
-        crackPass.uniforms.intensity.value = progress;
-        crackPass.uniforms.crackPhase.value = progress;
-
-        // Emit glass particles (first 600ms)
-        if (phaseTime < 0.6) {
-          emitGlassParticles();
+          // Title reveal at 0.4s mark (40% through phase = 4.9s global)
+          if (phase.phaseT >= 0.4 && !showTitle) {
+            setShowTitle(true);
+            lastTitleGlitchTime = introElapsed; // Reset glitch timer
+          }
+        } else {
+          // Maintain full scale and crack effect
+          blackHoleGroup.scale.setScalar(1.0);
+          crackPass.uniforms.intensity.value = 1.0;
+          crackPass.uniforms.crackPhase.value = 1.0;
         }
 
-        // Star pulling
-        updateStarPulling(deltaTime);
-
-        // Title reveal at 0.4s mark (4.9s total)
-        if (phaseTime >= 0.4 && !showTitle) {
-          setShowTitle(true);
-          setTimeout(() => scheduleTitleGlitch(), 600); // Start glitching after intro animation
-        }
-
-        if (elapsedTime >= 5.5) {
-          currentPhase = 'button_reveal';
-          phaseStartTime = elapsedTime;
-        }
-      }
-
-      // Phase 5: BUTTON_REVEAL (5.5s - 6.5s)
-      else if (currentPhase === 'button_reveal') {
-        // Continue black hole rotation and star pulling
+        // Black hole rotation (continuous)
         blackHoleGroup.rotation.y += 0.3 * deltaTime;
         blackHoleGroup.rotation.z += 0.15 * deltaTime;
         innerCore.rotation.y -= 0.8 * deltaTime;
         accretionDisk.rotation.z += 2.0 * deltaTime;
 
+        // Star pulling (continuous)
         updateStarPulling(deltaTime);
 
-        // Button reveal at 0.2s mark (5.7s total)
-        if (phaseTime >= 0.2 && !showButton) {
+        // Button reveal (only during button_reveal phase at 0.2s mark = 5.7s global)
+        if (phase.name === 'button_reveal' && phase.phaseT >= 0.2 && !showButton) {
           setShowButton(true);
-          setTimeout(() => scheduleButtonGlitch(), 600); // Start glitching after intro animation
-        }
-
-        if (elapsedTime >= 6.5) {
-          currentPhase = 'complete';
-          phaseStartTime = elapsedTime;
+          lastButtonGlitchTime = introElapsed; // Reset glitch timer
         }
       }
 
-      // Phase 6: COMPLETE (6.5s+)
-      else if (currentPhase === 'complete') {
-        // Continue black hole rotation and star pulling
-        blackHoleGroup.rotation.y += 0.3 * deltaTime;
-        blackHoleGroup.rotation.z += 0.15 * deltaTime;
-        innerCore.rotation.y -= 0.8 * deltaTime;
-        accretionDisk.rotation.z += 2.0 * deltaTime;
-
-        updateStarPulling(deltaTime);
-      }
-
       // ============================================================================
-      // CONTINUOUS UPDATES
+      // PHASE 1 FIX: DETERMINISTIC CONTINUOUS UPDATES
       // ============================================================================
 
-      // Star twinkling (all phases)
+      // Star twinkling (all phases) - NOTE: This will be replaced with GPU shader in Phase 2
       const sizes = starGeometry.attributes.size.array as Float32Array;
       for (let i = 0; i < starCount; i++) {
         const baseSize = sizes[i];
-        const twinkle = Math.sin(elapsedTime * 2.5 + i * 0.5) * 0.3 + 0.85;
+        const twinkle = Math.sin(introElapsed * 2.5 + i * 0.5) * 0.3 + 0.85;
         sizes[i] = baseSize * twinkle;
       }
       starGeometry.attributes.size.needsUpdate = true;
 
-      // Camera shake
-      if (cameraShakeIntensity > 0.001) {
-        camera.position.x = cameraBasePosition.x + (Math.random() - 0.5) * cameraShakeIntensity * 2;
-        camera.position.y = cameraBasePosition.y + (Math.random() - 0.5) * cameraShakeIntensity;
+      // PHASE 1 FIX: Deterministic camera shake
+      if (phase.name === 'impact') {
+        const timeSinceImpact = introElapsed - phase.phaseStart;
+        const shake = getCameraShake(timeSinceImpact);
+        camera.position.x = cameraBasePosition.x + shake.x;
+        camera.position.y = cameraBasePosition.y + shake.y;
       } else {
         camera.position.copy(cameraBasePosition);
+      }
+
+      // PHASE 1 FIX: Deterministic glitch triggering
+      if (showTitle && shouldGlitch(introElapsed, lastTitleGlitchTime, 12.34)) {
+        lastTitleGlitchTime = introElapsed;
+        setTitleGlitch(true);
+        // Schedule glitch-off after 150ms
+        setTimeout(() => setTitleGlitch(false), 150);
+      }
+
+      if (showButton && shouldGlitch(introElapsed, lastButtonGlitchTime, 56.78)) {
+        lastButtonGlitchTime = introElapsed;
+        setButtonGlitch(true);
+        // Schedule glitch-off after 150ms
+        setTimeout(() => setButtonGlitch(false), 150);
       }
 
       // Update particles
@@ -1236,8 +1299,7 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     return () => {
       window.removeEventListener('resize', handleResize);
 
-      if (titleGlitchTimeout) clearTimeout(titleGlitchTimeout);
-      if (buttonGlitchTimeout) clearTimeout(buttonGlitchTimeout);
+      // PHASE 1: No more setTimeout-based glitches to clean up
 
       // Dispose geometries
       starGeometry.dispose();
