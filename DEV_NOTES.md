@@ -4,16 +4,15 @@
 
 ### Rendering Pipeline
 
-The intro sequence uses a carefully ordered post-processing pipeline:
+The intro sequence uses a clean post-processing pipeline:
 
 ```
-RenderPass → CrackShader → UnrealBloom → FXAA → Output → Screen
+RenderPass → UnrealBloom → FXAA → Output → Screen
 ```
 
 **Order Rationale:**
 - **RenderPass**: Render scene to buffer (HDR when supported)
-- **CrackShader**: Reality-breaking Voronoi glass effect
-- **UnrealBloom**: Selective bloom (only bright elements glow)
+- **UnrealBloom**: Minimal bloom (0.35 constant strength, no spike)
 - **FXAA**: Anti-aliasing for smooth edges
 - **Output**: Tone mapping + color space conversion
 
@@ -38,12 +37,11 @@ Enable debug mode by passing `debugMode={true}` to `<IntroScreen />`:
 - **D**: Toggle diagnostic controls panel
 - **1**: Toggle Composer (on/off compares raw vs composed output)
 - **2**: Toggle Bloom pass
-- **3**: Toggle Crack pass
-- **4**: Toggle FXAA pass
-- **5**: Toggle Stars visibility
-- **6**: Toggle Comet visibility
-- **7**: Toggle Particles visibility
-- **8**: Toggle Black Hole visibility
+- **3**: Toggle FXAA pass
+- **4**: Toggle Stars visibility
+- **5**: Toggle Comet visibility
+- **6**: Toggle Particles visibility
+- **7**: Toggle Black Hole visibility
 
 ### Debug HUD Information
 
@@ -105,10 +103,9 @@ Total duration: **6.5 seconds** + idle loop
 
 4. **CRATER_SETTLE** (4.5s - 5.5s)
    - Black hole scales from 0% to 100%
-   - Reality cracks appear (Voronoi glass effect)
    - Glass dust emits for first 600ms (864 particles max at 60fps)
-   - Stars pull toward black hole (8% of nearby stars)
    - Title appears at 4.9s (40% through phase)
+   - Stars begin staggered gravitational pull (1-4 stars starting at 7.5s-11.5s)
 
 5. **BUTTON_REVEAL** (5.5s - 6.5s)
    - Button appears at 5.7s (20% through phase)
@@ -129,12 +126,12 @@ Total duration: **6.5 seconds** + idle loop
 
 **Fundamental Solution:**
 The explosion flash comes from the **COMET ITSELF** (physical scale growth), **NOT from bloom**.
-Bloom is ONLY for subtle glow on cracks and black hole accretion disk.
+Bloom is ONLY for subtle glow on black hole accretion disk and bright elements.
 
 **Final Settings:**
 - **Constant bloom**: 0.35 (ultra-low, never varies)
 - **NO bloom spike** during impact (stays 0.35 throughout)
-- **Threshold**: 0.7 (only brightest crack highlights bloom)
+- **Threshold**: 0.7 (only brightest elements bloom)
 - **Radius**: 0.3 (minimal spread)
 
 **How Impact Works Now:**
@@ -143,7 +140,7 @@ Bloom is ONLY for subtle glow on cracks and black hole accretion disk.
 - Bloom stays constant at 0.35 (cannot cause whiteout)
 - After 120ms: comet hidden, debris visible, black hole appears
 
-**Result:** Explosion is impactful without ANY whiteout. Sky stays visible. Black hole and cracks appear clearly at 4.5s.
+**Result:** Explosion is impactful without ANY whiteout. Sky stays visible. Black hole appears clearly at 4.5s.
 
 ### Starfield Shader
 
@@ -152,15 +149,6 @@ Stars use custom ShaderMaterial (not PointsMaterial) for:
 - **GPU twinkle**: Smooth animation via `sin(time * 2.0 + seed)`, reduced frequency from 2.5 to 2.0
 - **Depth cueing**: Distant stars 30% dimmer
 - **Absorption**: Per-star scale for black hole pull
-
-### Reality Crack Shader
-
-Voronoi-based glass effect with:
-- **Stable topology**: `voronoiScale = 25.0` is IMMUTABLE (prevents crawling)
-- **Per-shard distortion**: Each shard shifts based on `cellId`
-- **Chromatic aberration**: RGB channel separation for broken-reality feel
-- **Hot edges**: Fresh cracks glow orange/purple
-- **Dynamic center**: Crater center projected from world position each frame
 
 ### Camera Shake
 
@@ -187,11 +175,37 @@ Deterministic shake using sinusoidal combination:
 
 ### Star Pulling Physics
 
-- **Selection**: 8% of stars within 30 units of black hole
-- **Pull**: Screen-space (visually consistent regardless of depth)
-- **Integration**: dt-based with velocity clamping (max 0.05)
-- **Absorption**: Exponential via GPU attribute (k=3.0)
-- **Removal**: Stars with absorptionScale < 0.05 moved far offscreen
+**Selection System:**
+- **Count**: Randomly selects 1-4 stars from those within 30 units of black hole
+- **Staggered timing**: Each star starts being pulled at a random time 3-7 seconds after black hole forms (7.5s-11.5s absolute)
+- **Initial state**: All stars start at rest (zero velocity)
+
+**Gravitational Physics:**
+- **Force**: Inverse square law: `F = G * M / r²` where `G * M = 50.0`
+- **Integration**: Velocity-Verlet physics with dt-based updates
+  - `velocity += (direction * acceleration) * dt`
+  - `position += velocity * dt`
+- **Framerate independent**: Works correctly at any FPS (30, 60, 144)
+
+**Impact Detection:**
+- **Threshold**: Star has impacted when distance < 2.0 units from black hole center
+- **On impact**: Create space-time ripple effect and begin absorption
+
+**Space-Time Ripples:**
+- **Trigger**: Created when star impacts black hole
+- **Duration**: Random 0.3-0.8 seconds per ripple
+- **Radius**: Expands from 0 to 15-25 units
+- **Visual effects**:
+  - Radial wave that expands outward
+  - Warm golden glow on nearby stars (adds orange/yellow tint)
+  - Ring thickness: 15% of max radius
+  - Intensity fades over time: `1.0 - progress`
+- **Multiple ripples**: Can overlap and co-exist
+
+**Absorption Effect:**
+- **Method**: Exponential via GPU attribute (k=3.0)
+- **Duration**: Gradual fade using `exp(-3.0 * dt)`
+- **Removal**: Stars with absorptionScale < 0.05 moved far offscreen (10000, 10000, -10000)
 
 ### Black Hole Rendering
 
@@ -208,7 +222,7 @@ Deterministic shake using sinusoidal combination:
 
 ### Shader Prewarm
 
-Both comet and crack shaders are "prewarmed" before animation starts:
+Comet shader is "prewarmed" before animation starts:
 - Render once offscreen with non-zero uniforms
 - Forces shader compilation
 - Prevents first-frame hitch when effects appear
@@ -227,8 +241,6 @@ Both comet and crack shaders are "prewarmed" before animation starts:
 System respects `prefers-reduced-motion: reduce`:
 - Camera shake greatly reduced
 - Glitch effects less intense
-- Chromatic aberration reduced
-- Bloom spike gentler (peak 2.0 instead of 2.5)
 
 ## 🧹 Memory Management
 
@@ -276,8 +288,8 @@ In COMPLETE phase (6.5s+), memory should be stable:
 
 1. **Mobile Performance**: Glass particles disabled at LOW quality (too many for mobile GPUs)
 2. **Bloom Selectivity**: Uses threshold-based bloom, not layer-based (simpler but less control)
-3. **Crack Shader Compositing**: Uses simple alpha blending, not true glass refraction
-4. **Star Count**: Fixed at 3000 (not configurable per quality tier)
+3. **Star Count**: Fixed at 3000 (not configurable per quality tier)
+4. **Star Pull Count**: Random 1-4 stars (not configurable)
 
 ## 🔧 Troubleshooting
 
@@ -285,11 +297,6 @@ In COMPLETE phase (6.5s+), memory should be stable:
 - Check bloom threshold in diagnostic mode (should be 0.85)
 - Verify base strength is 1.5, not 2.0+
 - Ensure OutputPass is present (proper tone mapping)
-
-### "Cracks are crawling/morphing"
-- Check Voronoi scale is fixed at 25.0
-- Verify only `crackPhase` uniform changes, not scale
-- Ensure crater center is updated via projection, not hard-coded
 
 ### "Stars look like blobs"
 - Verify ShaderMaterial is being used (not PointsMaterial)
@@ -346,16 +353,16 @@ Increase duration check (line ~282):
 if (timeSinceImpact < 0 || timeSinceImpact > 0.8) { // Was 0.5
 ```
 
-### Want THICKER cracks?
-Increase crack smoothstep (line ~457):
+### Want MORE stars pulled into black hole?
+Change the selection count (line ~1439 in selectStarsToPull):
 ```typescript
-float cracks = smoothstep(0.20, 0.0, edgeDist); // Was 0.15
+const numStarsToPull = Math.floor(Math.random() * 6) + 1; // Was 1-4, now 1-6
 ```
 
-### Want MORE stars pulled into black hole?
-Increase selection probability (line ~1594):
+### Want EARLIER star impacts?
+Reduce the pull start time range (line ~1450 in selectStarsToPull):
 ```typescript
-if (distance < 30 && Math.random() < 0.12) { // Was 0.08
+const pullStartTime = 5.0 + Math.random() * 2.0; // Was 7.5-11.5s, now 5.0-7.0s
 ```
 
 ### Want FASTER heat buildup on comet?
