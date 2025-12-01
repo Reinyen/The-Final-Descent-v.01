@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
 /**
@@ -91,6 +92,20 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     activeParticles: 0
   });
 
+  // PHASE 1: Diagnostic toggles for isolating rendering issues
+  const [diagnostics, setDiagnostics] = useState({
+    showPanel: false,
+    composerEnabled: true,
+    bloomEnabled: true,
+    crackEnabled: true,
+    fxaaEnabled: true,
+    starsEnabled: true,
+    cometEnabled: true,
+    particlesEnabled: true,
+    blackHoleEnabled: true,
+    renderTargetType: 'detecting...' as string
+  });
+
   // PHASE 6: Keyboard accessibility handler
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -110,6 +125,49 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       buttonRef.current.focus();
     }
   }, [showButton]);
+
+  // PHASE 1: Diagnostic keyboard controls (dev mode only)
+  useEffect(() => {
+    if (!debugMode) return;
+
+    const handleDiagnosticKeys = (e: KeyboardEvent) => {
+      // Don't interfere with button interactions
+      if (e.target instanceof HTMLButtonElement) return;
+
+      switch (e.key.toLowerCase()) {
+        case 'd':
+          setDiagnostics(prev => ({ ...prev, showPanel: !prev.showPanel }));
+          break;
+        case '1':
+          setDiagnostics(prev => ({ ...prev, composerEnabled: !prev.composerEnabled }));
+          break;
+        case '2':
+          setDiagnostics(prev => ({ ...prev, bloomEnabled: !prev.bloomEnabled }));
+          break;
+        case '3':
+          setDiagnostics(prev => ({ ...prev, crackEnabled: !prev.crackEnabled }));
+          break;
+        case '4':
+          setDiagnostics(prev => ({ ...prev, fxaaEnabled: !prev.fxaaEnabled }));
+          break;
+        case '5':
+          setDiagnostics(prev => ({ ...prev, starsEnabled: !prev.starsEnabled }));
+          break;
+        case '6':
+          setDiagnostics(prev => ({ ...prev, cometEnabled: !prev.cometEnabled }));
+          break;
+        case '7':
+          setDiagnostics(prev => ({ ...prev, particlesEnabled: !prev.particlesEnabled }));
+          break;
+        case '8':
+          setDiagnostics(prev => ({ ...prev, blackHoleEnabled: !prev.blackHoleEnabled }));
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleDiagnosticKeys);
+    return () => window.removeEventListener('keydown', handleDiagnosticKeys);
+  }, [debugMode]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -266,19 +324,45 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     // ============================================================================
+    // PHASE 1: HDR RENDER TARGET DETECTION & SETUP
+    // ============================================================================
+
+    // Detect HDR support (half-float render targets)
+    const supportsHDR = renderer.capabilities.isWebGL2;
+    let renderTargetType: string = 'LDR';
+
+    if (supportsHDR) {
+      const halfFloatExt = renderer.extensions.get('EXT_color_buffer_half_float');
+      if (halfFloatExt) {
+        renderTargetType = 'HDR (HalfFloat)';
+      }
+    }
+
+    // Update diagnostic state with render target type
+    setDiagnostics(prev => ({ ...prev, renderTargetType }));
+
+    // ============================================================================
     // BLUEPRINT 1.2: POST-PROCESSING PIPELINE (DOCUMENTED ORDER)
-    // Order: RenderPass → CrackEffect → UnrealBloom → FXAA
+    // Order: RenderPass → CrackEffect → UnrealBloom → FXAA → Output
     //
     // Rationale (Option A from Blueprint):
     // 1. RenderPass: Render scene to buffer
     // 2. CrackEffect: Modify scene color with reality cracks and distortions
     // 3. UnrealBloom: Bloom both underlying scene AND crack highlights (hot edges glow)
     // 4. FXAA: Final anti-aliasing pass for smooth edges
+    // 5. Output: Tone mapping and color space conversion (added in Phase 1)
     //
     // This order allows cracks to participate in bloom, creating the desired
     // "reality-breaking glow" aesthetic where crack edges emit light.
     // ============================================================================
-    const composer = new EffectComposer(renderer);
+
+    // Create composer with HDR render targets if supported
+    const composer = new EffectComposer(renderer, supportsHDR ?
+      new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+        type: THREE.HalfFloatType,
+        colorSpace: THREE.LinearSRGBColorSpace
+      }) : undefined
+    );
     const renderPass = new RenderPass(scene, camera);
     composer.addPass(renderPass);
 
@@ -420,24 +504,31 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const crackPass = new ShaderPass(crackShader);
     composer.addPass(crackPass);
 
-    // BLUEPRINT 1.2 & 12: UnrealBloomPass with quality scaling
+    // PHASE 1: UnrealBloomPass with AGGRESSIVE THRESHOLD for selective bloom
     // Applied AFTER crack shader to enhance glowing effects on cracks
+    // CRITICAL FIX: Raised threshold from 0.3 to 0.85 to prevent starfield blooming
+    // Only very bright elements (comet, crack highlights, accretion) will bloom
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      2.0 * qualityConfig.bloomStrengthScale, // strength scaled by quality
-      0.5, // radius
-      0.3  // threshold
+      1.5 * qualityConfig.bloomStrengthScale, // REDUCED base from 2.0 to 1.5
+      0.4, // radius (reduced from 0.5 for tighter glow)
+      0.85  // threshold (RAISED from 0.3 to 0.85 for selective bloom)
     );
     composer.addPass(bloomPass);
 
     // FXAA Anti-Aliasing Pass
-    // Applied LAST to smooth all visual artifacts
+    // Applied before output pass to smooth all visual artifacts
     const fxaaPass = new ShaderPass(FXAAShader);
     fxaaPass.uniforms['resolution'].value.set(
       1 / window.innerWidth,
       1 / window.innerHeight
     );
     composer.addPass(fxaaPass);
+
+    // PHASE 1: Output Pass for proper tone mapping and color space conversion
+    // This ensures no double tone-mapping and correct sRGB output
+    const outputPass = new OutputPass();
+    composer.addPass(outputPass);
 
     // ============================================================================
     // BLUEPRINT 4: STARFIELD SYSTEM (GPU-optimized with per-star attributes)
@@ -1508,34 +1599,37 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           comet.visible = false;
         }
 
-        // BLUEPRINT 13: Multi-stage bloom spike (reduced for accessibility)
-        let bloomStrength = 2.0;
+        // PHASE 1 FIX: Controlled bloom spike (SIGNIFICANTLY REDUCED to prevent whiteout)
+        // Base strength is now 1.5 (set at bloom pass creation)
+        // Peak reduced from 6.0 to 2.5 for controlled flash
+        let bloomStrength = 1.5;
         if (!prefersReducedMotion) {
           if (phase.phaseT < 0.04) {
-            // Instant flash in first 20ms - REDUCED from 12.0 to 6.0
-            bloomStrength = 6.0;
+            // Instant flash in first 20ms - REDUCED from 6.0 to 2.5
+            bloomStrength = 2.5;
           } else if (phase.phaseT < 0.2) {
-            // Rapid decay to high bloom (20-100ms)
+            // Rapid decay to medium bloom (20-100ms)
             const t = (phase.phaseT - 0.04) / 0.16;
-            bloomStrength = 6.0 - (6.0 - 4.5) * t; // 6.0 -> 4.5
+            bloomStrength = 2.5 - (2.5 - 2.0) * t; // 2.5 -> 2.0
           } else if (phase.phaseT < 0.6) {
             // Exponential decay to base (100-300ms)
             const t = (phase.phaseT - 0.2) / 0.4;
-            bloomStrength = 4.5 * Math.exp(-t * 2.5); // Reduced multiplier
+            bloomStrength = 2.0 * Math.exp(-t * 1.5); // Gentler decay
+            bloomStrength = Math.max(bloomStrength, 1.5); // Floor at base
           } else {
-            bloomStrength = 2.0;
+            bloomStrength = 1.5;
           }
         } else {
           // Reduced motion: gentler bloom spike
           if (phase.phaseT < 0.2) {
-            bloomStrength = 3.0;
-          } else {
             bloomStrength = 2.0;
+          } else {
+            bloomStrength = 1.5;
           }
         }
         bloomPass.strength = bloomStrength * qualityConfig.bloomStrengthScale;
       } else {
-        bloomPass.strength = 2.0; // Reset to base
+        bloomPass.strength = 1.5 * qualityConfig.bloomStrengthScale; // Reset to base
       }
 
       // CRATER_SETTLE: Black hole formation + reality cracks + title
@@ -1645,8 +1739,30 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         }
       }
 
-      // Render
-      composer.render();
+      // PHASE 1: Conditional rendering based on diagnostic toggles
+      if (debugMode) {
+        // Control scene object visibility
+        starField.visible = diagnostics.starsEnabled;
+        comet.visible = comet.visible && diagnostics.cometEnabled; // Respect phase visibility
+        debrisParticles.visible = diagnostics.particlesEnabled;
+        glassParticles.visible = diagnostics.particlesEnabled;
+        blackHoleGroup.visible = blackHoleGroup.visible && diagnostics.blackHoleEnabled; // Respect phase visibility
+
+        // Control post-processing passes
+        bloomPass.enabled = diagnostics.bloomEnabled;
+        crackPass.enabled = diagnostics.crackEnabled;
+        fxaaPass.enabled = diagnostics.fxaaEnabled;
+
+        // Render with or without composer
+        if (diagnostics.composerEnabled) {
+          composer.render();
+        } else {
+          renderer.render(scene, camera);
+        }
+      } else {
+        // Normal render path (no diagnostic overhead)
+        composer.render();
+      }
 
       requestAnimationFrame(animate);
     }
@@ -1727,16 +1843,51 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       {/* Three.js canvas container */}
       <div ref={containerRef} className="absolute inset-0" />
 
-      {/* BLUEPRINT 14: Debug HUD */}
+      {/* PHASE 1: Enhanced Debug HUD with Diagnostics */}
       {debugMode && (
-        <div className="absolute top-4 left-4 bg-black bg-opacity-75 text-white font-mono text-xs p-3 rounded pointer-events-none z-50">
+        <div className="absolute top-4 left-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none">
+          <div className="font-bold text-green-400 mb-2">DEBUG MODE (Press D for Diagnostics)</div>
           <div>Phase: {debugState.phase}</div>
           <div>Elapsed: {debugState.elapsed.toFixed(2)}s</div>
           <div>FPS: {debugState.fps}</div>
           <div>Pulled Stars: {debugState.pulledStars}</div>
           <div>Active Particles: {debugState.activeParticles}</div>
           <div>Quality: {activeQuality}</div>
+          <div>DPR: {Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax).toFixed(2)}</div>
+          <div>Render Target: {diagnostics.renderTargetType}</div>
           <div>Reduced Motion: {prefersReducedMotion ? 'Yes' : 'No'}</div>
+        </div>
+      )}
+
+      {/* PHASE 1: Diagnostic Controls Panel */}
+      {debugMode && diagnostics.showPanel && (
+        <div className="absolute top-4 right-4 bg-black bg-opacity-90 text-white font-mono text-xs p-3 rounded z-50 pointer-events-none">
+          <div className="font-bold text-cyan-400 mb-2">DIAGNOSTICS</div>
+          <div className="text-gray-400 mb-2">Press keys to toggle:</div>
+          <div className={diagnostics.composerEnabled ? 'text-green-400' : 'text-red-400'}>
+            [1] Composer: {diagnostics.composerEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.bloomEnabled ? 'text-green-400' : 'text-red-400'}>
+            [2] Bloom: {diagnostics.bloomEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.crackEnabled ? 'text-green-400' : 'text-red-400'}>
+            [3] Cracks: {diagnostics.crackEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.fxaaEnabled ? 'text-green-400' : 'text-red-400'}>
+            [4] FXAA: {diagnostics.fxaaEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.starsEnabled ? 'text-green-400' : 'text-red-400'}>
+            [5] Stars: {diagnostics.starsEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.cometEnabled ? 'text-green-400' : 'text-red-400'}>
+            [6] Comet: {diagnostics.cometEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.particlesEnabled ? 'text-green-400' : 'text-red-400'}>
+            [7] Particles: {diagnostics.particlesEnabled ? 'ON' : 'OFF'}
+          </div>
+          <div className={diagnostics.blackHoleEnabled ? 'text-green-400' : 'text-red-400'}>
+            [8] Black Hole: {diagnostics.blackHoleEnabled ? 'ON' : 'OFF'}
+          </div>
         </div>
       )}
 
