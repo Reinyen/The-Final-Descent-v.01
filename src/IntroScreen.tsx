@@ -13,13 +13,13 @@ import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
  */
 const _scratchVec3A = new THREE.Vector3();
 const _scratchVec3B = new THREE.Vector3();
-const _scratchVec3C = new THREE.Vector3();
+// const _scratchVec3C = new THREE.Vector3(); // Reserved for future use
 
 /**
  * PHASE 9: Constant positions (hoisted to avoid repeated allocations)
  */
 const BLACK_HOLE_POSITION = new THREE.Vector3(0, -8, -70);
-const IMPACT_POINT = new THREE.Vector3(0, -8, -70);
+// const IMPACT_POINT = new THREE.Vector3(0, -8, -70); // Same as BLACK_HOLE_POSITION
 const COMET_START_POSITION = new THREE.Vector3(0, 40, -30);
 const COMET_END_POSITION = new THREE.Vector3(0, -8, -70);
 
@@ -237,6 +237,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
     // PHASE 10: Track RAF ID for cleanup
     let rafId: number | null = null;
+
+    console.log('[IntroScreen] Initialization starting...');
 
     // ============================================================================
     // SCENE SETUP
@@ -1860,7 +1862,13 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     // ANIMATION LOOP
     // ============================================================================
 
+    let frameCount = 0;
     function animate() {
+      frameCount++;
+      if (frameCount === 1) {
+        console.log('[IntroScreen] First frame rendering...');
+      }
+
       // PHASE 1 FIX: Long-frame protection
       const rawDelta = clock.getDelta();
       const deltaTime = Math.min(rawDelta, 1 / 30); // Clamp to 30fps max step
@@ -1873,6 +1881,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       }
 
       const phase = getPhaseInfo(introElapsed);
+
+      if (frameCount === 1) {
+        console.log('[IntroScreen] Phase:', phase.name, 'Elapsed:', introElapsed, 'BaseOpacity will be:', phase.phaseT);
+      }
 
       // Update shader time uniforms (use introElapsed for consistency)
       starMaterial.uniforms.time.value = introElapsed;
@@ -2142,6 +2154,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       rafId = requestAnimationFrame(animate);
     }
 
+    console.log('[IntroScreen] Starting animation loop...');
     animate();
 
     // ============================================================================
