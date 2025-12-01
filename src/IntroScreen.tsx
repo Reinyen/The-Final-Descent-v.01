@@ -507,15 +507,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const crackPass = new ShaderPass(crackShader);
     composer.addPass(crackPass);
 
-    // CRITICAL FIX: UnrealBloomPass with balanced threshold to prevent whiteout
-    // Applied AFTER crack shader to enhance glowing effects on cracks
-    // Base strength: 0.8 (very conservative to prevent whiteout)
-    // Threshold: 0.6 (allows bright elements to bloom without washing out scene)
+    // CRITICAL FIX: Minimal bloom - explosion flash comes from comet itself, NOT bloom
+    // Bloom is ONLY for subtle glow on cracks and black hole accretion disk
+    // NO bloom spike during impact - keeps constant low value throughout
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.8 * qualityConfig.bloomStrengthScale, // DRASTICALLY REDUCED from 1.5
-      0.4, // radius (tighter glow)
-      0.6  // threshold (balanced - not too high, not too low)
+      0.35 * qualityConfig.bloomStrengthScale, // MINIMAL: 0.35 (no whiteout possible)
+      0.3, // radius (tight, minimal spread)
+      0.7  // threshold (only brightest elements like crack highlights)
     );
     composer.addPass(bloomPass);
 
@@ -1700,52 +1699,29 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
         if (phase.phaseT < 0.24) {
           const t = phase.phaseT / 0.24;
-          // PHASE 4: Ease-out cubic for realistic explosion physics
+          // CRITICAL FIX: Reduced explosion scale to prevent screen domination
+          // Ease-out cubic for realistic explosion physics
           const easeOut = 1.0 - Math.pow(1.0 - t, 3.0);
-          const explosionScale = 1.0 + (6.0 - 1.0) * easeOut;
+          const explosionScale = 1.0 + (3.5 - 1.0) * easeOut; // REDUCED: 3.5x (was 6.0x)
           comet.scale.set(explosionScale, explosionScale, explosionScale);
 
-          // CRITICAL FIX: Moderate comet glow during explosion (prevent whiteout)
+          // CRITICAL FIX: Minimal glow during explosion (flash comes from scale, not glow)
           if (glowMaterial.uniforms) {
-            const explosionGlow = easeOut * 0.4; // REDUCED from 0.7 to 0.4
-            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.7 + explosionGlow);
+            const explosionGlow = easeOut * 0.2; // MINIMAL: 0.2 (was 0.4, originally 0.7)
+            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.6 + explosionGlow);
           }
         } else {
           // Hide comet after explosion burst
           comet.visible = false;
         }
 
-        // CRITICAL FIX: DRASTICALLY reduced bloom spike to prevent whiteout
-        // Base strength is now 0.8 (set at bloom pass creation)
-        // Peak: 1.2 (was 2.5) - just enough for impact flash without washing out
-        let bloomStrength = 0.8;
-        if (!prefersReducedMotion) {
-          if (phase.phaseT < 0.04) {
-            // Instant flash in first 20ms - DRASTICALLY REDUCED to 1.2
-            bloomStrength = 1.2;
-          } else if (phase.phaseT < 0.2) {
-            // Rapid decay to medium bloom (20-100ms)
-            const t = (phase.phaseT - 0.04) / 0.16;
-            bloomStrength = 1.2 - (1.2 - 1.0) * t; // 1.2 -> 1.0
-          } else if (phase.phaseT < 0.6) {
-            // Exponential decay to base (100-300ms)
-            const t = (phase.phaseT - 0.2) / 0.4;
-            bloomStrength = 1.0 * Math.exp(-t * 1.2);
-            bloomStrength = Math.max(bloomStrength, 0.8); // Floor at base
-          } else {
-            bloomStrength = 0.8;
-          }
-        } else {
-          // Reduced motion: even gentler bloom spike
-          if (phase.phaseT < 0.2) {
-            bloomStrength = 1.0;
-          } else {
-            bloomStrength = 0.8;
-          }
-        }
-        bloomPass.strength = bloomStrength * qualityConfig.bloomStrengthScale;
+        // CRITICAL FIX: NO BLOOM SPIKE - explosion flash comes from comet itself!
+        // Bloom stays constant at 0.35 throughout impact
+        // The visual impact comes from the comet scaling 1.0 → 6.0, NOT from bloom
+        // This prevents ANY possibility of whiteout
+        bloomPass.strength = 0.35 * qualityConfig.bloomStrengthScale;
       } else {
-        bloomPass.strength = 0.8 * qualityConfig.bloomStrengthScale; // Reset to base
+        bloomPass.strength = 0.35 * qualityConfig.bloomStrengthScale; // Constant low bloom
       }
 
       // CRATER_SETTLE: Black hole formation + reality cracks + title
