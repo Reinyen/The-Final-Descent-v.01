@@ -254,8 +254,9 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
             return;
           }
 
-          // Voronoi cell generation (animated scale)
-          float voronoiScale = 25.0 + sin(time * 0.5) * 2.0;
+          // PHASE 2: Stable Voronoi cell generation (fixed scale for stable topology)
+          // Use fixed scale so glass shards don't morph - only animate effects
+          float voronoiScale = 25.0;
           vec3 voronoiData = voronoi(uv, voronoiScale);
           float cellDist1 = voronoiData.x;
           float cellDist2 = voronoiData.y;
@@ -400,17 +401,58 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
     starGeometry.setAttribute('size', new THREE.BufferAttribute(starSizes, 1));
 
-    const starMaterial = new THREE.PointsMaterial({
-      size: 0.3,
-      map: starTexture,
-      vertexColors: true,
+    // PHASE 2: GPU-based starfield shader with hardware twinkling
+    const starMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0.0 },
+        starTexture: { value: starTexture },
+        baseOpacity: { value: 1.0 }
+      },
+      vertexShader: `
+        attribute float size;
+        attribute vec3 color;
+
+        uniform float time;
+        uniform float baseOpacity;
+
+        varying vec3 vColor;
+        varying float vAlpha;
+
+        void main() {
+          vColor = color;
+
+          // GPU-based twinkling: deterministic per-star using position as seed
+          float starSeed = position.x * 12.9898 + position.y * 78.233 + position.z * 37.719;
+          float twinkle = sin(time * 2.5 + starSeed) * 0.3 + 0.85;
+
+          // Apply twinkling to size
+          float finalSize = size * twinkle;
+
+          // Calculate alpha based on opacity
+          vAlpha = baseOpacity * twinkle;
+
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = finalSize * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D starTexture;
+
+        varying vec3 vColor;
+        varying float vAlpha;
+
+        void main() {
+          vec4 texColor = texture2D(starTexture, gl_PointCoord);
+          gl_FragColor = vec4(vColor, texColor.a * vAlpha);
+        }
+      `,
+      transparent: true,
       blending: THREE.NormalBlending,
-      depthWrite: false,
-      transparent: true
+      depthWrite: false
     });
 
     const starField = new THREE.Points(starGeometry, starMaterial);
-    starField.material.opacity = 0; // Start invisible
     scene.add(starField);
 
     // Track which stars are being pulled
@@ -610,11 +652,17 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         varying vec3 vNormal;
         varying vec2 vUv;
         varying vec3 vPosition;
+        varying vec3 vViewPosition;
 
         void main() {
           vNormal = normalize(normalMatrix * normal);
           vUv = uv;
           vPosition = position;
+
+          // PHASE 2: Pass world position for proper Fresnel calculation
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vViewPosition = cameraPosition - worldPosition.xyz;
+
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -623,6 +671,7 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         varying vec3 vNormal;
         varying vec2 vUv;
         varying vec3 vPosition;
+        varying vec3 vViewPosition;
 
         void main() {
           // Convert to polar coordinates
@@ -636,8 +685,9 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
 
           float pattern = (layer1 + layer2 + layer3) / 3.0 * 0.5 + 0.5;
 
-          // Fresnel fade
-          float fresnel = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.0);
+          // PHASE 2: Proper Fresnel calculation using actual view direction
+          vec3 viewDir = normalize(vViewPosition);
+          float fresnel = pow(1.0 - abs(dot(vNormal, viewDir)), 2.0);
 
           // Color mixing (purple ↔ teal)
           vec3 purple = vec3(0.3, 0.05, 0.4);
@@ -725,19 +775,27 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
       },
       vertexShader: `
         varying vec3 vNormal;
+        varying vec3 vViewPosition;
 
         void main() {
           vNormal = normalize(normalMatrix * normal);
+
+          // PHASE 2: Pass world position for proper Fresnel calculation
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vViewPosition = cameraPosition - worldPosition.xyz;
+
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
         uniform float time;
         varying vec3 vNormal;
+        varying vec3 vViewPosition;
 
         void main() {
-          // Fresnel
-          float fresnel = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 3.0);
+          // PHASE 2: Proper Fresnel calculation using actual view direction
+          vec3 viewDir = normalize(vViewPosition);
+          float fresnel = pow(1.0 - abs(dot(vNormal, viewDir)), 3.0);
 
           // Color
           vec3 color = vec3(0.2, 0.1, 0.3);
@@ -1138,6 +1196,7 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
       const phase = getPhaseInfo(introElapsed);
 
       // Update shader time uniforms (use introElapsed for consistency)
+      starMaterial.uniforms.time.value = introElapsed;
       cometMaterial.uniforms.time.value = introElapsed;
       crackPass.uniforms.time.value = introElapsed;
       innerCoreMaterial.uniforms.time.value = introElapsed;
@@ -1170,11 +1229,11 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
       // PHASE-SPECIFIC UPDATES (Time-driven, not state-driven)
       // ============================================================================
 
-      // FADE_IN: Starfield opacity fade
+      // FADE_IN: Starfield opacity fade (via shader uniform)
       if (phase.name === 'fade_in') {
-        starField.material.opacity = phase.phaseT;
+        starMaterial.uniforms.baseOpacity.value = phase.phaseT;
       } else {
-        starField.material.opacity = 1.0;
+        starMaterial.uniforms.baseOpacity.value = 1.0;
       }
 
       // COMET_APPROACH: Falling comet with heat buildup
@@ -1260,19 +1319,12 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
       }
 
       // ============================================================================
-      // PHASE 1 FIX: DETERMINISTIC CONTINUOUS UPDATES
+      // DETERMINISTIC CONTINUOUS UPDATES
       // ============================================================================
 
-      // Star twinkling (all phases) - NOTE: This will be replaced with GPU shader in Phase 2
-      const sizes = starGeometry.attributes.size.array as Float32Array;
-      for (let i = 0; i < starCount; i++) {
-        const baseSize = sizes[i];
-        const twinkle = Math.sin(introElapsed * 2.5 + i * 0.5) * 0.3 + 0.85;
-        sizes[i] = baseSize * twinkle;
-      }
-      starGeometry.attributes.size.needsUpdate = true;
+      // PHASE 2: Star twinkling now handled by GPU shader (removed CPU loop)
 
-      // PHASE 1 FIX: Deterministic camera shake
+      // Deterministic camera shake
       if (phase.name === 'impact') {
         const timeSinceImpact = introElapsed - phase.phaseStart;
         const shake = getCameraShake(timeSinceImpact);
