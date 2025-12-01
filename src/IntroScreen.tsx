@@ -1307,18 +1307,33 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     debrisGeometry.setAttribute('color', new THREE.BufferAttribute(debrisColors, 3));
     debrisGeometry.setAttribute('size', new THREE.BufferAttribute(debrisSizes, 1));
 
+    // PHASE 7: Debris material with pixel-consistent sizing
     const debrisMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        time: { value: 0.0 }
+        time: { value: 0.0 },
+        pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
+        maxPointSize: { value: maxPointSize } // Device max from Phase 4
       },
       vertexShader: `
         attribute float size;
         varying vec3 vColor;
 
+        uniform float pixelRatio;
+        uniform float maxPointSize;
+
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = size * (300.0 / -mvPosition.z);
+
+          // PHASE 7: Pixel-consistent sizing (calibrated for 3-8px range)
+          // size attribute: 1.0-3.0 (set at emission)
+          // depth factor: compensate for perspective
+          float viewDistance = -mvPosition.z;
+          float pixelSize = size * (50.0 / viewDistance) * pixelRatio;
+
+          // PHASE 7: Clamp to device max and aesthetic max (12px)
+          gl_PointSize = clamp(pixelSize, 1.0, min(maxPointSize, 12.0 * pixelRatio));
+
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -1326,10 +1341,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         varying vec3 vColor;
 
         void main() {
+          // PHASE 7: Circular particle with smooth falloff
           float dist = length(gl_PointCoord - vec2(0.5));
           if (dist > 0.5) discard;
 
-          float alpha = smoothstep(0.5, 0.3, dist);
+          // Smoother gradient for less harsh edges
+          float alpha = smoothstep(0.5, 0.2, dist);
           gl_FragColor = vec4(vColor, alpha);
         }
       `,
@@ -1879,11 +1896,11 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         glowMaterial.uniforms.time.value = introElapsed;
       }
 
-      // PHASE 4: Impact explosion with precise timing windows
+      // PHASE 7: Impact explosion with controlled bloom spike
       if (phase.name === 'impact') {
-        // PHASE 4: Strict time windows for controlled sequence
-        // 0-120ms: Explosive burst with visible comet
-        // 120-500ms: Bloom decay, shake decay, debris expansion
+        // PHASE 7: Structured sub-windows
+        // 0-100ms: Burst + controlled highlight injection (bloom spike)
+        // 100-500ms: Decay + debris expansion + shake decay
 
         if (phase.phaseT < 0.24) {
           const t = phase.phaseT / 0.24;
@@ -1903,11 +1920,23 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           comet.visible = false;
         }
 
-        // CRITICAL FIX: NO BLOOM SPIKE - explosion flash comes from comet itself!
-        // Bloom stays constant at 0.35 throughout impact
-        // The visual impact comes from the comet scaling 1.0 → 6.0, NOT from bloom
-        // This prevents ANY possibility of whiteout
-        bloomPass.strength = 0.35 * qualityConfig.bloomStrengthScale;
+        // PHASE 7: Brief controlled bloom spike (0-100ms only)
+        // Peak at 50ms, decay to baseline by 150ms
+        const timeSinceImpact = (introElapsed - phase.phaseStart) * 1000; // Convert to ms
+        if (timeSinceImpact < 150) {
+          // Triangle wave: ramp up 0-50ms, decay 50-150ms
+          let bloomMultiplier;
+          if (timeSinceImpact < 50) {
+            // Ramp up to peak
+            bloomMultiplier = 1.0 + (timeSinceImpact / 50) * 1.2; // Peak at 2.2x
+          } else {
+            // Decay to baseline
+            bloomMultiplier = 2.2 - ((timeSinceImpact - 50) / 100) * 1.2; // 2.2x → 1.0x
+          }
+          bloomPass.strength = 0.35 * bloomMultiplier * qualityConfig.bloomStrengthScale;
+        } else {
+          bloomPass.strength = 0.35 * qualityConfig.bloomStrengthScale; // Baseline
+        }
       } else {
         bloomPass.strength = 0.35 * qualityConfig.bloomStrengthScale; // Constant low bloom
       }
