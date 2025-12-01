@@ -542,19 +542,26 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const starAbsorptionScales = new Float32Array(starCount);
     const starOriginalPositions = new Float32Array(starCount * 3);
 
-    // Create star texture (32x32 radial gradient)
+    // PHASE 2: Create high-quality star texture (64x64 for crisp rendering)
     const starCanvas = document.createElement('canvas');
-    starCanvas.width = 32;
-    starCanvas.height = 32;
+    starCanvas.width = 64;
+    starCanvas.height = 64;
     const starCtx = starCanvas.getContext('2d')!;
-    const gradient = starCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
-    gradient.addColorStop(0.4, 'rgba(255, 255, 255, 1.0)');
-    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.5)');
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    const gradient = starCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+
+    // PHASE 2: Sharper gradient with bright core and diffuse halo
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');    // Bright center
+    gradient.addColorStop(0.2, 'rgba(255, 255, 255, 1.0)');  // Hold brightness
+    gradient.addColorStop(0.35, 'rgba(255, 255, 255, 0.8)'); // Sharp falloff starts
+    gradient.addColorStop(0.55, 'rgba(255, 255, 255, 0.3)'); // Soft halo
+    gradient.addColorStop(0.8, 'rgba(255, 255, 255, 0.1)');  // Diffuse edge
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');      // Fade out
+
     starCtx.fillStyle = gradient;
-    starCtx.fillRect(0, 0, 32, 32);
+    starCtx.fillRect(0, 0, 64, 64);
+
     const starTexture = new THREE.CanvasTexture(starCanvas);
+    starTexture.needsUpdate = true;
 
     // Initialize star properties
     for (let i = 0; i < starCount; i++) {
@@ -606,12 +613,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
     starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
 
-    // BLUEPRINT 4.2: GPU-based starfield shader with per-vertex attributes
+    // PHASE 2: Enhanced GPU-based starfield shader with pixel-perfect sizing
     const starMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0.0 },
         starTexture: { value: starTexture },
-        baseOpacity: { value: 1.0 }
+        baseOpacity: { value: 1.0 },
+        pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
+        viewportHeight: { value: window.innerHeight }
       },
       vertexShader: `
         attribute float baseSize;
@@ -621,24 +630,37 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
         uniform float time;
         uniform float baseOpacity;
+        uniform float pixelRatio;
+        uniform float viewportHeight;
 
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vDepth;
 
         void main() {
           vColor = color;
 
-          // BLUEPRINT 4.2: GPU-based twinkling using per-star seed
-          float twinkle = sin(time * 2.5 + twinkleSeed * 0.5) * 0.3 + 0.85;
+          // PHASE 2: Smooth twinkle (reduced frequency for less flicker)
+          float twinkle = sin(time * 2.0 + twinkleSeed * 0.5) * 0.25 + 0.875;
 
-          // BLUEPRINT 4.3: Apply absorption scale (modified on CPU during black hole pull)
+          // Apply absorption scale (modified on CPU during black hole pull)
           float finalSize = baseSize * twinkle * absorptionScale;
 
           // Calculate alpha based on opacity and absorption
           vAlpha = baseOpacity * twinkle * absorptionScale;
 
+          // Transform to view space
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = finalSize * (300.0 / -mvPosition.z);
+
+          // PHASE 2: Pixel-perfect point size calculation
+          // Account for perspective, DPR, and viewport height for consistent screen-space size
+          float perspectiveFactor = 1.0 / -mvPosition.z;
+          float pixelSize = finalSize * perspectiveFactor * viewportHeight * 0.5;
+          gl_PointSize = pixelSize * pixelRatio;
+
+          // PHASE 2: Pass depth for depth-cueing in fragment shader
+          vDepth = -mvPosition.z / 160.0; // Normalize depth (0=near, 1=far)
+
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -647,10 +669,25 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vDepth;
 
         void main() {
+          // PHASE 2: Sample star texture
           vec4 texColor = texture2D(starTexture, gl_PointCoord);
-          gl_FragColor = vec4(vColor, texColor.a * vAlpha);
+
+          // PHASE 2: Depth cueing - distant stars slightly dimmer
+          float depthFade = 1.0 - vDepth * 0.3; // 30% dimming at max depth
+
+          // PHASE 2: Enhanced star core with subtle glow
+          // Stars have sharp center that blooms slightly at edges
+          float dist = length(gl_PointCoord - vec2(0.5));
+          float coreBrightness = 1.0 - smoothstep(0.0, 0.3, dist);
+
+          // Combine texture alpha with depth fade and core brightness
+          float finalAlpha = texColor.a * vAlpha * depthFade;
+          vec3 finalColor = vColor * (0.85 + coreBrightness * 0.15);
+
+          gl_FragColor = vec4(finalColor, finalAlpha);
         }
       `,
       transparent: true,
@@ -1783,8 +1820,13 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       renderer.setSize(width, height);
       composer.setSize(width, height);
 
+      // Update post-processing uniforms
       crackPass.uniforms.resolution.value.set(width, height);
       fxaaPass.uniforms['resolution'].value.set(1 / width, 1 / height);
+
+      // PHASE 2: Update starfield uniforms for pixel-perfect sizing
+      starMaterial.uniforms.viewportHeight.value = height;
+      starMaterial.uniforms.pixelRatio.value = Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax);
     }
 
     window.addEventListener('resize', handleResize);
