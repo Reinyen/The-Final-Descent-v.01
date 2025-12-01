@@ -453,6 +453,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    starGeometry.setAttribute('basePosition', new THREE.BufferAttribute(starOriginalPositions, 3));
     starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
     starGeometry.setAttribute('baseColor', new THREE.BufferAttribute(starBaseColors, 3));
     starGeometry.setAttribute('baseSize', new THREE.BufferAttribute(starBaseSizes, 1));
@@ -584,6 +585,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
      */
     function updateRippleEffects(introElapsed: number) {
       const positions = starGeometry.attributes.position.array as Float32Array;
+      const basePositions = starGeometry.attributes.basePosition.array as Float32Array;
       const colors = starGeometry.attributes.color.array as Float32Array;
       const baseColors = starGeometry.attributes.baseColor.array as Float32Array;
 
@@ -596,33 +598,46 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         }
       }
 
-      // If no active ripples, reset all stars to base colors
+      // If no active ripples, reset all stars to base colors and positions
       if (activeRipples.length === 0) {
-        let needsReset = false;
+        let needsColorReset = false;
+        let needsPositionReset = false;
         for (let i = 0; i < starCount; i++) {
           const i3 = i * 3;
+          // Reset colors
           if (colors[i3] !== baseColors[i3] || colors[i3 + 1] !== baseColors[i3 + 1] || colors[i3 + 2] !== baseColors[i3 + 2]) {
             colors[i3] = baseColors[i3];
             colors[i3 + 1] = baseColors[i3 + 1];
             colors[i3 + 2] = baseColors[i3 + 2];
-            needsReset = true;
+            needsColorReset = true;
+          }
+          // Reset positions
+          if (positions[i3] !== basePositions[i3] || positions[i3 + 1] !== basePositions[i3 + 1] || positions[i3 + 2] !== basePositions[i3 + 2]) {
+            positions[i3] = basePositions[i3];
+            positions[i3 + 1] = basePositions[i3 + 1];
+            positions[i3 + 2] = basePositions[i3 + 2];
+            needsPositionReset = true;
           }
         }
-        if (needsReset) {
+        if (needsColorReset) {
           starGeometry.attributes.color.needsUpdate = true;
+        }
+        if (needsPositionReset) {
+          starGeometry.attributes.position.needsUpdate = true;
         }
         return;
       }
 
       let colorChanged = false;
+      let positionChanged = false;
 
       // Apply ripple effects to all stars
       for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
-        const starPos = new THREE.Vector3(
-          positions[i3],
-          positions[i3 + 1],
-          positions[i3 + 2]
+        const basePos = new THREE.Vector3(
+          basePositions[i3],
+          basePositions[i3 + 1],
+          basePositions[i3 + 2]
         );
 
         let totalGlow = 0;
@@ -636,8 +651,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           // Current ripple radius expands over time
           const currentRadius = progress * ripple.maxRadius;
 
-          // Distance from star to ripple center
-          const distance = starPos.distanceTo(ripple.position);
+          // Distance from star base position to ripple center
+          const distance = basePos.distanceTo(ripple.position);
 
           // Ripple wave is a thin ring that expands
           const ringThickness = ripple.maxRadius * 0.15; // 15% of max radius
@@ -651,10 +666,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             const glowFalloff = 1.0 - progress; // Fade over time
             totalGlow += ringIntensity * glowFalloff * 0.8;
 
-            // Water-like distortion (radial displacement)
-            const distortionStrength = ringIntensity * glowFalloff * 0.3;
-            const direction = new THREE.Vector3().subVectors(starPos, ripple.position).normalize();
-            totalDistortion.add(direction.multiplyScalar(distortionStrength * Math.sin(progress * Math.PI)));
+            // Water-like distortion (radial displacement from base position)
+            const distortionStrength = ringIntensity * glowFalloff * 0.5;
+            const direction = new THREE.Vector3().subVectors(basePos, ripple.position).normalize();
+            totalDistortion.add(direction.multiplyScalar(distortionStrength * Math.sin(progress * Math.PI * 2.0)));
           }
         });
 
@@ -672,17 +687,21 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           colorChanged = true;
         }
 
-        // Apply position distortion (commented out for now - can cause visual artifacts)
-        // if (totalDistortion.length() > 0.001) {
-        //   positions[i3] += totalDistortion.x;
-        //   positions[i3 + 1] += totalDistortion.y;
-        //   positions[i3 + 2] += totalDistortion.z;
-        //   positionChanged = true;
-        // }
+        // Apply position distortion (warps star positions like ripples in water)
+        // Calculate new position from base position + distortion
+        if (totalDistortion.length() > 0.001) {
+          positions[i3] = basePositions[i3] + totalDistortion.x;
+          positions[i3 + 1] = basePositions[i3 + 1] + totalDistortion.y;
+          positions[i3 + 2] = basePositions[i3 + 2] + totalDistortion.z;
+          positionChanged = true;
+        }
       }
 
       if (colorChanged) {
         starGeometry.attributes.color.needsUpdate = true;
+      }
+      if (positionChanged) {
+        starGeometry.attributes.position.needsUpdate = true;
       }
     }
 
@@ -1170,7 +1189,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const glassPositions = new Float32Array(glassCount * 3);
     const glassVelocities = new Float32Array(glassCount * 3);
     const glassSizes = new Float32Array(glassCount);
-    const glassRotations = new Float32Array(glassCount);
+    // const glassRotations = new Float32Array(glassCount); // Unused - reserved for future rotation animation
     const glassLifetimes = new Float32Array(glassCount);
     const glassMaxLifetimes = new Float32Array(glassCount);
 
@@ -1333,58 +1352,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       debrisGeometry.attributes.size.needsUpdate = true;
     }
 
-    /**
-     * PHASE 5: Emit glass dust particles from crack lines
-     * Spec: 24 directions, 1 particle per direction per frame, 600ms window (~864 max)
-     * Capacity: 1000 particles (buffer size from geometry)
-     * Called during crater_settle phase when phaseT < 0.6 (600ms of 1000ms phase)
-     * At 60fps: 600ms × 60fps × 24 directions = 864 particles (within 1000 capacity)
-     */
-    function emitGlassParticles() {
-      // This function is only called during appropriate time window
-      // Caller (crater_settle phase) handles timing check
-
-      const impactPoint = new THREE.Vector3(0, -8, 10);
-      const directions = 24; // PHASE 5: 24 radial directions (spec)
-      const particlesPerDirection = 1; // PHASE 5: 1 particle per direction per frame (spec)
-
-      for (let d = 0; d < directions; d++) {
-        const angle = (d / directions) * Math.PI * 2;
-
-        for (let p = 0; p < particlesPerDirection; p++) {
-          if (activeGlassCount >= glassCount) break;
-
-          const i = activeGlassCount;
-          const i3 = i * 3;
-
-          // Position (5-13 units from center, flattened Y)
-          const dist = 5 + Math.random() * 8;
-          glassPositions[i3] = impactPoint.x + Math.cos(angle) * dist;
-          glassPositions[i3 + 1] = impactPoint.y + Math.sin(angle) * dist * 0.3;
-          glassPositions[i3 + 2] = impactPoint.z + (Math.random() - 0.5) * 2;
-
-          // Velocity
-          glassVelocities[i3] = Math.cos(angle) * 3 + (Math.random() - 0.5) * 8;
-          glassVelocities[i3 + 1] = Math.sin(angle) * 3 + (Math.random() - 0.5) * 8;
-          glassVelocities[i3 + 2] = (Math.random() - 0.5) * 8;
-
-          // Size
-          glassSizes[i] = 0.3 + Math.random() * 1.2;
-
-          // Rotation
-          glassRotations[i] = (Math.random() - 0.5) * 4; // -2 to +2 rad/s
-
-          // Lifetime
-          glassLifetimes[i] = 0;
-          glassMaxLifetimes[i] = 0.8 + Math.random() * 0.4; // 0.8-1.2 seconds
-
-          activeGlassCount++;
-        }
-      }
-
-      glassGeometry.attributes.position.needsUpdate = true;
-      glassGeometry.attributes.size.needsUpdate = true;
-    }
+    // Glass particle emission function removed - feature disabled
 
     /**
      * PHASE 3: Optimized particle update system
@@ -1554,11 +1522,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       }
     }
 
+    // Track when to pull next batch of stars
+    let nextBatchPullTime = 0;
+    const alreadyPulledStars = new Set<number>();
+
     /**
-     * Select 1-4 stars for gravitational pull with staggered start times
-     * Stars start being pulled 3-7 seconds after black hole forms (7.5s-11.5s absolute)
+     * Select initial 12 stars to pull immediately when black hole forms
      */
-    function selectStarsToPull() {
+    function selectInitialStarsToPull() {
       const blackHolePos = new THREE.Vector3(0, -8, 10);
       const positions = starGeometry.attributes.position.array as Float32Array;
 
@@ -1577,29 +1548,78 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         }
       }
 
-      // Select 1-4 stars randomly
-      const numStarsToPull = Math.floor(Math.random() * 4) + 1; // 1-4 stars
-      const selectedStars: number[] = [];
+      // Select 12 stars
+      const numStarsToPull = Math.min(12, nearbyStars.length);
 
       // Shuffle and pick
       const shuffled = nearbyStars.sort(() => Math.random() - 0.5);
-      for (let i = 0; i < Math.min(numStarsToPull, shuffled.length); i++) {
-        selectedStars.push(shuffled[i]);
-      }
-
-      // Assign each star a random pull start time
-      // Start shortly after black hole appears (4.5s) so effect is visible during intro
-      selectedStars.forEach(starIndex => {
-        const pullStartTime = 4.7 + Math.random() * 1.5; // 4.7s to 6.2s
+      for (let i = 0; i < numStarsToPull; i++) {
+        const starIndex = shuffled[i];
         pulledStars.push({
           index: starIndex,
-          pullStartTime: pullStartTime,
-          velocity: new THREE.Vector3(0, 0, 0), // Start at rest
+          pullStartTime: 4.5, // All start immediately when black hole forms
+          velocity: new THREE.Vector3(0, 0, 0),
           hasImpacted: false
         });
-      });
+        alreadyPulledStars.add(starIndex);
+      }
 
-      console.log(`Selected ${selectedStars.length} stars for gravitational pull`);
+      // Schedule first additional batch 2-5 seconds after black hole forms
+      nextBatchPullTime = 4.5 + 2.0 + Math.random() * 3.0;
+
+      console.log(`Initial batch: ${numStarsToPull} stars pulled at 4.5s`);
+    }
+
+    /**
+     * Pull additional batch of 1-4 stars (called periodically)
+     */
+    function pullNextBatchOfStars(currentTime: number) {
+      const blackHolePos = new THREE.Vector3(0, -8, 10);
+      const positions = starGeometry.attributes.position.array as Float32Array;
+
+      // Find nearby stars that haven't been pulled yet
+      const availableStars: number[] = [];
+      for (let i = 0; i < starCount; i++) {
+        if (alreadyPulledStars.has(i)) continue;
+
+        const i3 = i * 3;
+        const starPos = new THREE.Vector3(
+          positions[i3],
+          positions[i3 + 1],
+          positions[i3 + 2]
+        );
+        const distance = starPos.distanceTo(blackHolePos);
+        if (distance < 30) {
+          availableStars.push(i);
+        }
+      }
+
+      if (availableStars.length === 0) {
+        // No more stars available, reset and allow re-pulling
+        alreadyPulledStars.clear();
+        return;
+      }
+
+      // Select 1-4 stars
+      const numStarsToPull = Math.min(1 + Math.floor(Math.random() * 4), availableStars.length);
+
+      // Shuffle and pick
+      const shuffled = availableStars.sort(() => Math.random() - 0.5);
+      for (let i = 0; i < numStarsToPull; i++) {
+        const starIndex = shuffled[i];
+        pulledStars.push({
+          index: starIndex,
+          pullStartTime: currentTime,
+          velocity: new THREE.Vector3(0, 0, 0),
+          hasImpacted: false
+        });
+        alreadyPulledStars.add(starIndex);
+      }
+
+      // Schedule next batch 2-5 seconds from now
+      nextBatchPullTime = currentTime + 2.0 + Math.random() * 3.0;
+
+      console.log(`Additional batch: ${numStarsToPull} stars pulled at ${currentTime.toFixed(1)}s`);
     }
 
     // ============================================================================
@@ -1638,9 +1658,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           emitDebrisParticles();
         } else if (phase.name === 'crater_settle') {
           blackHoleGroup.visible = true;
-          selectStarsToPull();
+          selectInitialStarsToPull();
         }
         prevPhase = phase.name;
+      }
+
+      // Pull additional batches of stars periodically
+      if (introElapsed >= nextBatchPullTime && nextBatchPullTime > 0) {
+        pullNextBatchOfStars(introElapsed);
       }
 
       // ============================================================================
