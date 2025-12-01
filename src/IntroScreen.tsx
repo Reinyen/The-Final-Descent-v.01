@@ -169,10 +169,10 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
      * Time-based glitch trigger: Deterministic from elapsed time
      */
     function shouldGlitch(elapsed: number, lastGlitchTime: number, seed: number): boolean {
-      if (elapsed - lastGlitchTime < 3.0) return false; // Min 3s between glitches
+      if (elapsed - lastGlitchTime < 0.8) return false; // Min 0.8s between glitches
 
       // Use seed for deterministic "random" intervals
-      const interval = 3.0 + ((Math.sin(seed + lastGlitchTime * 0.7) * 0.5 + 0.5) * 4.0); // 3-7s
+      const interval = 0.8 + ((Math.sin(seed + lastGlitchTime * 0.7) * 0.5 + 0.5) * 1.5); // 0.8-2.3s (much more frequent)
       return elapsed - lastGlitchTime >= interval;
     }
 
@@ -267,8 +267,8 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           // Distance from crater center
           float dist = length(uv - center);
 
-          // Radial fade (soft outer edge)
-          float radialFade = smoothstep(0.55, 0.0, dist) * intensity;
+          // Radial fade (soft outer edge) - INCREASED RANGE for more visible cracks
+          float radialFade = smoothstep(0.75, 0.0, dist) * intensity;
 
           if (radialFade < 0.01) {
             gl_FragColor = texture2D(tDiffuse, uv);
@@ -283,54 +283,54 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           float cellDist2 = voronoiData.y;
           float cellId = voronoiData.z;
 
-          // Crack lines (Voronoi edges only)
+          // Crack lines (Voronoi edges only) - THICKER, MORE VISIBLE CRACKS
           float edgeDist = cellDist2 - cellDist1;
-          float cracks = smoothstep(0.08, 0.0, edgeDist);
+          float cracks = smoothstep(0.15, 0.0, edgeDist); // Increased from 0.08 to 0.15 for thicker cracks
 
-          // Per-shard distortion
+          // Per-shard distortion - MUCH MORE SEPARATION for visible shards
           float rotation = cellId * 6.28318;
-          float separation = crackPhase * 0.04;
+          float separation = crackPhase * 0.15; // Increased from 0.04 to 0.15
           vec2 shardOffset = vec2(cos(rotation), sin(rotation)) * sqrt(cellDist1) * separation * radialFade;
           vec2 distortedUv = uv + shardOffset;
 
-          // Chromatic aberration
-          float aberrationStrength = radialFade * 0.02 * (1.0 + cracks * 3.0);
+          // Chromatic aberration - MORE INTENSE
+          float aberrationStrength = radialFade * 0.06 * (1.0 + cracks * 5.0); // Increased from 0.02 and multiplier from 3.0 to 5.0
           float r = texture2D(tDiffuse, distortedUv + vec2(aberrationStrength, 0.0)).r;
           float g = texture2D(tDiffuse, distortedUv).g;
           float b = texture2D(tDiffuse, distortedUv - vec2(aberrationStrength, 0.0)).b;
           vec3 color = vec3(r, g, b);
 
-          // Crack rendering (semi-transparent darkness)
-          float crackDarkness = cracks * 0.5;
+          // Crack rendering - MUCH DARKER AND MORE VISIBLE
+          float crackDarkness = cracks * 0.9; // Increased from 0.5 to 0.9 for near-black cracks
           color = mix(color, vec3(0.0), crackDarkness);
 
-          // Hot edges (fresh cracks, fade over time)
-          float hotEdge = cracks * (1.0 - crackPhase * 0.7);
-          vec3 hotColor = vec3(2.0, 1.8, 1.5);
-          color += hotColor * hotEdge * 0.5;
+          // Hot edges (fresh cracks, fade over time) - BRIGHTER
+          float hotEdge = cracks * (1.0 - crackPhase * 0.5); // Reduced fade from 0.7 to 0.5
+          vec3 hotColor = vec3(3.5, 2.5, 1.8); // Increased brightness
+          color += hotColor * hotEdge * 1.2; // Increased from 0.5 to 1.2
 
-          // Cool glow (purple ↔ teal animated)
-          vec3 purple = vec3(0.4, 0.15, 0.5);
-          vec3 teal = vec3(0.15, 0.5, 0.45);
+          // Cool glow (purple ↔ teal animated) - MORE INTENSE
+          vec3 purple = vec3(0.7, 0.3, 1.0); // Brighter purple
+          vec3 teal = vec3(0.3, 1.0, 0.9); // Brighter teal
           vec3 coolGlow = mix(purple, teal, sin(time * 2.0) * 0.5 + 0.5);
-          color += coolGlow * cracks * 0.3;
+          color += coolGlow * cracks * 0.8; // Increased from 0.3 to 0.8
 
-          // Glass reflections (shimmer effect)
+          // Glass reflections (shimmer effect) - BRIGHTER
           float shimmer = sin(time * 3.0 + cellId * 6.28) * 0.5 + 0.5;
-          vec3 shimmerColor = vec3(0.2, 0.25, 0.3);
-          color += shimmerColor * shimmer * cellDist1 * 0.08;
+          vec3 shimmerColor = vec3(0.5, 0.6, 0.7); // Brighter shimmer
+          color += shimmerColor * shimmer * cellDist1 * 0.3; // Increased from 0.08 to 0.3
 
-          // Edge reflections (white on boundaries)
-          float edgeReflection = smoothstep(0.15, 0.05, edgeDist);
-          color += vec3(1.0) * edgeReflection * 0.4;
+          // Edge reflections (white on boundaries) - MUCH BRIGHTER
+          float edgeReflection = smoothstep(0.2, 0.02, edgeDist); // Wider and brighter
+          color += vec3(2.0, 1.8, 2.2) * edgeReflection * 1.5; // Increased brightness and added color tint
 
-          // Desaturate by 30%, darken by 25%
+          // REDUCED desaturation and darkening to keep effects visible
           float luminance = dot(color, vec3(0.299, 0.587, 0.114));
-          color = mix(color, vec3(luminance), 0.3);
-          color *= 0.75;
+          color = mix(color, vec3(luminance), 0.1); // Reduced from 0.3 to 0.1
+          color *= 0.95; // Reduced darkening from 0.75 to 0.95
 
-          // Final output with 50% opacity
-          gl_FragColor = vec4(color, radialFade * 0.5);
+          // Final output with INCREASED opacity for more visibility
+          gl_FragColor = vec4(color, radialFade * 0.85); // Increased from 0.5 to 0.85
         }
       `
     };
@@ -1479,19 +1479,19 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         camera.position.copy(cameraBasePosition);
       }
 
-      // PHASE 1 FIX: Deterministic glitch triggering
+      // PHASE 1 FIX: Deterministic glitch triggering - INCREASED DURATION
       if (showTitle && shouldGlitch(introElapsed, lastTitleGlitchTime, 12.34)) {
         lastTitleGlitchTime = introElapsed;
         setTitleGlitch(true);
-        // Schedule glitch-off after 150ms
-        setTimeout(() => setTitleGlitch(false), 150);
+        // Schedule glitch-off after 300ms to match animation duration
+        setTimeout(() => setTitleGlitch(false), 300);
       }
 
       if (showButton && shouldGlitch(introElapsed, lastButtonGlitchTime, 56.78)) {
         lastButtonGlitchTime = introElapsed;
         setButtonGlitch(true);
-        // Schedule glitch-off after 150ms
-        setTimeout(() => setButtonGlitch(false), 150);
+        // Schedule glitch-off after 300ms to match animation duration
+        setTimeout(() => setButtonGlitch(false), 300);
       }
 
       // Update particles
@@ -1582,7 +1582,7 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         aria-atomic="true"
       >
         <h1
-          className={`font-rajdhani font-bold text-8xl tracking-[0.25em] text-white text-center ${
+          className={`font-rajdhani font-bold text-5xl tracking-[0.25em] text-white text-center ${
             titleGlitch ? 'animate-glitch' : showTitle ? 'animate-glitch-in' : ''
           }`}
           style={{
