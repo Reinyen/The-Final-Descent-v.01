@@ -1300,6 +1300,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const debrisVelocities = new Float32Array(debrisCount * 3);
     const debrisColors = new Float32Array(debrisCount * 3);
     const debrisSizes = new Float32Array(debrisCount);
+    const debrisBaseSizes = new Float32Array(debrisCount); // PHASE 8: Store initial sizes
     const debrisLifetimes = new Float32Array(debrisCount);
     const debrisMaxLifetimes = new Float32Array(debrisCount);
 
@@ -1359,12 +1360,13 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const debrisParticles = new THREE.Points(debrisGeometry, debrisMaterial);
     scene.add(debrisParticles);
 
-    // 8.2 Glass Dust Particles
+    // 8.2 Glass Dust Particles (disabled but fixed for completeness)
     const glassCount = 1000;
     const glassGeometry = new THREE.BufferGeometry();
     const glassPositions = new Float32Array(glassCount * 3);
     const glassVelocities = new Float32Array(glassCount * 3);
     const glassSizes = new Float32Array(glassCount);
+    const glassBaseSizes = new Float32Array(glassCount); // PHASE 8: Store initial sizes
     // const glassRotations = new Float32Array(glassCount); // Unused - reserved for future rotation animation
     const glassLifetimes = new Float32Array(glassCount);
     const glassMaxLifetimes = new Float32Array(glassCount);
@@ -1512,12 +1514,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           debrisColors[i3 + 1] = color[1];
           debrisColors[i3 + 2] = color[2];
 
-          // Size
-          debrisSizes[i] = 12 + Math.random() * 8;
+          // PHASE 8: Size (store baseSize for dt-consistent fade)
+          const baseSize = 1.0 + Math.random() * 2.0; // 1.0-3.0 (matches shader expectation)
+          debrisBaseSizes[i] = baseSize;
+          debrisSizes[i] = baseSize; // Initial size
 
           // Lifetime
           debrisLifetimes[i] = 0;
-          debrisMaxLifetimes[i] = 0.6; // 0.6 seconds
+          debrisMaxLifetimes[i] = 0.6 + Math.random() * 0.4; // 0.6-1.0 seconds
 
           activeDebrisCount++;
         }
@@ -1555,9 +1559,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             debrisVelocities[i3 + 1] *= damping;
             debrisVelocities[i3 + 2] *= damping;
 
-            // Alpha fade (avoid per-frame random allocation - size set at emission)
+            // PHASE 8: dt-consistent size fade (computed from baseSize + lifeRatio)
+            // No per-frame multiplication - size is pure function of time
             const lifeRatio = debrisLifetimes[i] / debrisMaxLifetimes[i];
-            debrisSizes[i] *= (1.0 - lifeRatio * 0.3); // Gentle size fade
+            debrisSizes[i] = debrisBaseSizes[i] * (1.0 - lifeRatio * 0.5); // 50% fade over lifetime
           } else {
             // Hide dead particle
             debrisSizes[i] = 0;
@@ -1592,9 +1597,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             glassVelocities[i3 + 1] *= damping;
             glassVelocities[i3 + 2] *= damping;
 
-            // Alpha fade (avoid per-frame random allocation)
+            // PHASE 8: dt-consistent size fade (computed from baseSize + lifeRatio)
+            // No per-frame multiplication - size is pure function of time
             const lifeRatio = glassLifetimes[i] / glassMaxLifetimes[i];
-            glassSizes[i] *= (1.0 - lifeRatio * 0.4); // Fade out
+            glassSizes[i] = glassBaseSizes[i] * (1.0 - lifeRatio * 0.6); // 60% fade over lifetime
           } else {
             // Hide dead particle
             glassSizes[i] = 0;
