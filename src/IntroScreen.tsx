@@ -25,10 +25,31 @@ interface IntroScreenProps {
  */
 export default function IntroScreen({ onBegin }: IntroScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const [showTitle, setShowTitle] = useState(false);
   const [showButton, setShowButton] = useState(false);
   const [titleGlitch, setTitleGlitch] = useState(false);
   const [buttonGlitch, setButtonGlitch] = useState(false);
+
+  // PHASE 6: Keyboard accessibility handler
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (showButton && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        if (onBegin) onBegin();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [showButton, onBegin]);
+
+  // PHASE 6: Auto-focus button when it appears
+  useEffect(() => {
+    if (showButton && buttonRef.current) {
+      buttonRef.current.focus();
+    }
+  }, [showButton]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -1552,11 +1573,13 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
       {/* Three.js canvas container */}
       <div ref={containerRef} className="absolute inset-0" />
 
-      {/* Title Text */}
+      {/* Title Text - PHASE 6: Added semantic heading and aria-live */}
       <div
         className={`absolute top-[30%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-opacity duration-600 ${
           showTitle ? 'opacity-100' : 'opacity-0'
         }`}
+        aria-live="polite"
+        aria-atomic="true"
       >
         <h1
           className={`font-rajdhani font-bold text-8xl tracking-[0.25em] text-white text-center ${
@@ -1574,14 +1597,15 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         </h1>
       </div>
 
-      {/* Button */}
+      {/* PHASE 6: Enhanced button with accessibility and focus states */}
       <div
         className={`absolute top-[66%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-opacity duration-500 ${
           showButton ? 'opacity-100' : 'opacity-0'
         }`}
       >
         <button
-          className={`font-rajdhani font-semibold text-base tracking-[0.2em] text-white bg-transparent border-none px-4 py-2 cursor-pointer transition-transform duration-200 hover:scale-110 ${
+          ref={buttonRef}
+          className={`font-rajdhani font-semibold text-base tracking-[0.2em] text-white bg-transparent border-none px-4 py-2 cursor-pointer transition-all duration-200 hover:scale-110 focus:scale-110 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-60 ${
             buttonGlitch ? 'animate-glitch' : showButton ? 'animate-glitch-in' : ''
           }`}
           style={{
@@ -1595,6 +1619,9 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           onClick={() => {
             if (onBegin) onBegin();
           }}
+          disabled={!showButton}
+          aria-label="Begin the descent - Start the game"
+          tabIndex={showButton ? 0 : -1}
         >
           BEGIN THE DESCENT
         </button>
