@@ -8,6 +8,22 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
 /**
+ * PHASE 9: Scratch vectors for hot-loop operations (avoid per-frame allocations)
+ * These are reused across frames to eliminate GC pressure
+ */
+const _scratchVec3A = new THREE.Vector3();
+const _scratchVec3B = new THREE.Vector3();
+const _scratchVec3C = new THREE.Vector3();
+
+/**
+ * PHASE 9: Constant positions (hoisted to avoid repeated allocations)
+ */
+const BLACK_HOLE_POSITION = new THREE.Vector3(0, -8, -70);
+const IMPACT_POINT = new THREE.Vector3(0, -8, -70);
+const COMET_START_POSITION = new THREE.Vector3(0, 40, -30);
+const COMET_END_POSITION = new THREE.Vector3(0, -8, -70);
+
+/**
  * Animation timeline phases for the intro sequence
  */
 type AnimationPhase = 'fade_in' | 'comet_approach' | 'impact' | 'crater_settle' | 'button_reveal' | 'complete';
@@ -733,7 +749,8 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * Update ripple effects and apply distortion to nearby stars
+     * PHASE 9: Update ripple effects and apply distortion to nearby stars
+     * Optimized to eliminate per-frame Vector3 allocations using scratch vectors
      */
     function updateRippleEffects(introElapsed: number) {
       const positions = starGeometry.attributes.position.array as Float32Array;
@@ -783,28 +800,33 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       let colorChanged = false;
       let positionChanged = false;
 
-      // Apply ripple effects to all stars
+      // PHASE 9: Apply ripple effects to all stars (no allocations in hot loop)
       for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
-        const basePos = new THREE.Vector3(
-          basePositions[i3],
-          basePositions[i3 + 1],
-          basePositions[i3 + 2]
-        );
+
+        // PHASE 9: Use scratch vector instead of allocating
+        const basePosX = basePositions[i3];
+        const basePosY = basePositions[i3 + 1];
+        const basePosZ = basePositions[i3 + 2];
+        _scratchVec3A.set(basePosX, basePosY, basePosZ);
 
         let totalGlow = 0;
-        let totalDistortion = new THREE.Vector3(0, 0, 0);
+        // PHASE 9: Track distortion components directly (no Vector3 allocation)
+        let totalDistortionX = 0;
+        let totalDistortionY = 0;
+        let totalDistortionZ = 0;
 
         // Accumulate effects from all active ripples
-        activeRipples.forEach(ripple => {
+        for (let r = 0; r < activeRipples.length; r++) {
+          const ripple = activeRipples[r];
           const age = introElapsed - ripple.startTime;
           const progress = age / ripple.duration; // 0 to 1
 
           // Current ripple radius expands over time
           const currentRadius = progress * ripple.maxRadius;
 
-          // Distance from star base position to ripple center
-          const distance = basePos.distanceTo(ripple.position);
+          // PHASE 9: Distance calculation without allocation
+          const distance = _scratchVec3A.distanceTo(ripple.position);
 
           // Ripple wave is a thin ring that expands
           const ringThickness = ripple.maxRadius * 0.15; // 15% of max radius
@@ -818,12 +840,22 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
             const glowFalloff = 1.0 - progress; // Fade over time
             totalGlow += ringIntensity * glowFalloff * 0.8;
 
-            // Water-like distortion (radial displacement from base position)
-            const distortionStrength = ringIntensity * glowFalloff * 0.5;
-            const direction = new THREE.Vector3().subVectors(basePos, ripple.position).normalize();
-            totalDistortion.add(direction.multiplyScalar(distortionStrength * Math.sin(progress * Math.PI * 2.0)));
+            // PHASE 9: Water-like distortion (radial displacement) - no allocations
+            const distortionStrength = ringIntensity * glowFalloff * 0.5 * Math.sin(progress * Math.PI * 2.0);
+
+            // Direction from ripple to star (normalized)
+            const dx = basePosX - ripple.position.x;
+            const dy = basePosY - ripple.position.y;
+            const dz = basePosZ - ripple.position.z;
+            const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (len > 0.0001) {
+              const invLen = 1.0 / len;
+              totalDistortionX += dx * invLen * distortionStrength;
+              totalDistortionY += dy * invLen * distortionStrength;
+              totalDistortionZ += dz * invLen * distortionStrength;
+            }
           }
-        });
+        }
 
         // Apply warm golden glow to star color
         if (totalGlow > 0.01) {
@@ -839,12 +871,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           colorChanged = true;
         }
 
-        // Apply position distortion (warps star positions like ripples in water)
-        // Calculate new position from base position + distortion
-        if (totalDistortion.length() > 0.001) {
-          positions[i3] = basePositions[i3] + totalDistortion.x;
-          positions[i3 + 1] = basePositions[i3 + 1] + totalDistortion.y;
-          positions[i3 + 2] = basePositions[i3 + 2] + totalDistortion.z;
+        // PHASE 9: Apply position distortion (warps star positions like ripples in water)
+        const distortionLength = Math.sqrt(totalDistortionX * totalDistortionX + totalDistortionY * totalDistortionY + totalDistortionZ * totalDistortionZ);
+        if (distortionLength > 0.001) {
+          positions[i3] = basePosX + totalDistortionX;
+          positions[i3 + 1] = basePosY + totalDistortionY;
+          positions[i3 + 2] = basePosZ + totalDistortionZ;
           positionChanged = true;
         }
       }
@@ -1614,14 +1646,15 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * PHASE 5: Screen-space star-pulling physics with deltaTime integration
+     * PHASE 9: Screen-space star-pulling physics with deltaTime integration
      * - dt-based integration: works correctly at any framerate (30fps, 60fps, 144fps)
      * - Clamped velocity: prevents snapping on long frames
      * - Exponential absorption: smooth fade via GPU attribute
      * - Screen-space pull: visually consistent effect regardless of depth
+     * - Optimized to eliminate per-frame Vector3 allocations using scratch vectors
      */
     function updateStarPulling(deltaTime: number, introElapsed: number) {
-      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
+      // PHASE 9: Use hoisted constant instead of allocation
       const positions = starGeometry.attributes.position.array as Float32Array;
       const absorptionScales = starGeometry.attributes.absorptionScale.array as Float32Array;
 
@@ -1635,46 +1668,54 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         }
 
         const i3 = starData.index * 3;
-        const starPos = new THREE.Vector3(
-          positions[i3],
-          positions[i3 + 1],
-          positions[i3 + 2]
-        );
 
-        // Calculate direction from star to black hole
-        const direction = new THREE.Vector3()
-          .subVectors(blackHolePos, starPos)
-          .normalize();
+        // PHASE 9: Use scratch vector instead of allocating
+        const starPosX = positions[i3];
+        const starPosY = positions[i3 + 1];
+        const starPosZ = positions[i3 + 2];
+        _scratchVec3A.set(starPosX, starPosY, starPosZ);
+
+        // PHASE 9: Calculate direction from star to black hole (no allocations)
+        const dx = BLACK_HOLE_POSITION.x - starPosX;
+        const dy = BLACK_HOLE_POSITION.y - starPosY;
+        const dz = BLACK_HOLE_POSITION.z - starPosZ;
 
         // World-space distance for gravity calculation
-        const distance = starPos.distanceTo(blackHolePos);
+        const distance = _scratchVec3A.distanceTo(BLACK_HOLE_POSITION);
+
+        // PHASE 9: Normalize direction (no allocation)
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        let dirX = 0, dirY = 0, dirZ = 0;
+        if (len > 0.0001) {
+          const invLen = 1.0 / len;
+          dirX = dx * invLen;
+          dirY = dy * invLen;
+          dirZ = dz * invLen;
+        }
 
         // Gravitational acceleration: F = G * M / r^2
         // Using simplified constants: G * M = 200.0 for strong, visible pull
         const gravityConstant = 200.0;
         const acceleration = gravityConstant / (distance * distance + 0.1); // +0.1 to prevent division by zero
 
-        // Update velocity: v = v + a * dt
-        starData.velocity.add(
-          direction.clone().multiplyScalar(acceleration * deltaTime)
-        );
+        // PHASE 9: Update velocity: v = v + a * dt (no clone)
+        starData.velocity.x += dirX * acceleration * deltaTime;
+        starData.velocity.y += dirY * acceleration * deltaTime;
+        starData.velocity.z += dirZ * acceleration * deltaTime;
 
-        // Update position: p = p + v * dt
-        const displacement = starData.velocity.clone().multiplyScalar(deltaTime);
-        starPos.add(displacement);
-
-        // Write back to buffer
-        positions[i3] = starPos.x;
-        positions[i3 + 1] = starPos.y;
-        positions[i3 + 2] = starPos.z;
+        // PHASE 9: Update position: p = p + v * dt (no clone)
+        positions[i3] = starPosX + starData.velocity.x * deltaTime;
+        positions[i3 + 1] = starPosY + starData.velocity.y * deltaTime;
+        positions[i3 + 2] = starPosZ + starData.velocity.z * deltaTime;
         positionChanged = true;
 
         // Check for impact (distance < 2 units from black hole center)
         if (distance < 2.0 && !starData.hasImpacted) {
           starData.hasImpacted = true;
 
-          // Trigger impact explosion and ripple effect
-          createStarImpactRipple(starPos.clone(), introElapsed);
+          // PHASE 9: Trigger impact explosion and ripple effect (use scratch for cloning)
+          _scratchVec3B.set(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+          createStarImpactRipple(_scratchVec3B.clone(), introElapsed);
 
           // Start absorption effect
           absorptionScales[starData.index] = 1.0;
@@ -1709,24 +1750,21 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     const alreadyPulledStars = new Set<number>();
 
     /**
-     * PHASE 5: Select initial stars to pull immediately when black hole forms
+     * PHASE 9: Select initial stars to pull immediately when black hole forms
      * Now properly selects stars because black hole is inside star volume!
+     * Optimized to eliminate Vector3 allocations in loop
      */
     function selectInitialStarsToPull() {
-      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
+      // PHASE 9: Use hoisted constant instead of allocation
       const positions = starGeometry.attributes.position.array as Float32Array;
 
-      // PHASE 5: Find nearby stars (within 60 units - black hole at Z:-70, stars Z:-130 to -30)
-      // Many stars within 60 units now that black hole is inside star volume!
+      // PHASE 9: Find nearby stars (within 60 units) - no allocations in loop
       const nearbyStars: number[] = [];
       for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
-        const starPos = new THREE.Vector3(
-          positions[i3],
-          positions[i3 + 1],
-          positions[i3 + 2]
-        );
-        const distance = starPos.distanceTo(blackHolePos);
+        // PHASE 9: Use scratch vector instead of allocating
+        _scratchVec3A.set(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+        const distance = _scratchVec3A.distanceTo(BLACK_HOLE_POSITION);
         if (distance < 60) {
           nearbyStars.push(i);
         }
@@ -1755,24 +1793,22 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     }
 
     /**
-     * PHASE 5: Pull additional batch of 1-4 stars (called periodically)
+     * PHASE 9: Pull additional batch of 1-4 stars (called periodically)
+     * Optimized to eliminate Vector3 allocations in loop
      */
     function pullNextBatchOfStars(currentTime: number) {
-      const blackHolePos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
+      // PHASE 9: Use hoisted constant instead of allocation
       const positions = starGeometry.attributes.position.array as Float32Array;
 
-      // Find nearby stars that haven't been pulled yet (within 60 units)
+      // PHASE 9: Find nearby stars that haven't been pulled yet (within 60 units) - no allocations
       const availableStars: number[] = [];
       for (let i = 0; i < starCount; i++) {
         if (alreadyPulledStars.has(i)) continue;
 
         const i3 = i * 3;
-        const starPos = new THREE.Vector3(
-          positions[i3],
-          positions[i3 + 1],
-          positions[i3 + 2]
-        );
-        const distance = starPos.distanceTo(blackHolePos);
+        // PHASE 9: Use scratch vector instead of allocating
+        _scratchVec3A.set(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+        const distance = _scratchVec3A.distanceTo(BLACK_HOLE_POSITION);
         if (distance < 60) {
           availableStars.push(i);
         }
@@ -1873,13 +1909,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       if (phase.name === 'comet_approach') {
         const eased = phase.phaseT * phase.phaseT; // Quadratic ease-in for acceleration
 
-        // PHASE 5: Trajectory updated for depth coherence (impact inside star volume)
+        // PHASE 9: Trajectory updated for depth coherence (impact inside star volume)
         // Vertical drop: 48 units (40 to -8)
         // Depth motion: 40 units (-30 to -70) for dramatic diagonal approach into star field
         // Creates a coherent impact point where stars actually exist
-        const startPos = new THREE.Vector3(0, 40, -30);
-        const endPos = new THREE.Vector3(0, -8, -70); // PHASE 5: Match black hole depth
-        comet.position.lerpVectors(startPos, endPos, eased);
+        // Use hoisted constants to avoid per-frame allocation
+        comet.position.lerpVectors(COMET_START_POSITION, COMET_END_POSITION, eased);
 
         // PHASE 3: Size grows smoothly from tiny to full scale
         const scale = 0.01 + (1.0 - 0.01) * phase.phaseT;
