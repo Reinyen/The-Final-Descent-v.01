@@ -1044,82 +1044,97 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
     }
 
     /**
-     * Update particle systems
+     * PHASE 3: Optimized particle update system
+     * Only updates buffers when there are active particles
      */
     function updateParticles(deltaTime: number) {
-      // Update debris particles
-      for (let i = 0; i < activeDebrisCount; i++) {
-        const i3 = i * 3;
+      // Update debris particles (only if active)
+      if (activeDebrisCount > 0) {
+        for (let i = 0; i < activeDebrisCount; i++) {
+          const i3 = i * 3;
 
-        debrisLifetimes[i] += deltaTime;
+          debrisLifetimes[i] += deltaTime;
 
-        if (debrisLifetimes[i] < debrisMaxLifetimes[i]) {
-          // Update position
-          debrisPositions[i3] += debrisVelocities[i3] * deltaTime;
-          debrisPositions[i3 + 1] += debrisVelocities[i3 + 1] * deltaTime;
-          debrisPositions[i3 + 2] += debrisVelocities[i3 + 2] * deltaTime;
+          if (debrisLifetimes[i] < debrisMaxLifetimes[i]) {
+            // Update position
+            debrisPositions[i3] += debrisVelocities[i3] * deltaTime;
+            debrisPositions[i3 + 1] += debrisVelocities[i3 + 1] * deltaTime;
+            debrisPositions[i3 + 2] += debrisVelocities[i3 + 2] * deltaTime;
 
-          // PHASE 1 FIX: Time-based velocity damping (exponential decay)
-          // k=1.22 matches ~0.98 per frame at 60fps: exp(-1.22/60) ≈ 0.98
-          const damping = Math.exp(-1.22 * deltaTime);
-          debrisVelocities[i3] *= damping;
-          debrisVelocities[i3 + 1] *= damping;
-          debrisVelocities[i3 + 2] *= damping;
+            // PHASE 1 FIX: Time-based velocity damping (exponential decay)
+            // k=1.22 matches ~0.98 per frame at 60fps: exp(-1.22/60) ≈ 0.98
+            const damping = Math.exp(-1.22 * deltaTime);
+            debrisVelocities[i3] *= damping;
+            debrisVelocities[i3 + 1] *= damping;
+            debrisVelocities[i3 + 2] *= damping;
 
-          // Alpha fade (avoid per-frame random allocation - size set at emission)
-          const lifeRatio = debrisLifetimes[i] / debrisMaxLifetimes[i];
-          debrisSizes[i] *= (1.0 - lifeRatio * 0.3); // Gentle size fade
-        } else {
-          // Hide dead particle
-          debrisSizes[i] = 0;
+            // Alpha fade (avoid per-frame random allocation - size set at emission)
+            const lifeRatio = debrisLifetimes[i] / debrisMaxLifetimes[i];
+            debrisSizes[i] *= (1.0 - lifeRatio * 0.3); // Gentle size fade
+          } else {
+            // Hide dead particle
+            debrisSizes[i] = 0;
+          }
         }
+
+        // PHASE 3: Only update buffers when particles are active
+        debrisGeometry.attributes.position.needsUpdate = true;
+        debrisGeometry.attributes.size.needsUpdate = true;
       }
 
-      debrisGeometry.attributes.position.needsUpdate = true;
-      debrisGeometry.attributes.size.needsUpdate = true;
+      // Update glass particles (only if active)
+      if (activeGlassCount > 0) {
+        for (let i = 0; i < activeGlassCount; i++) {
+          const i3 = i * 3;
 
-      // Update glass particles
-      for (let i = 0; i < activeGlassCount; i++) {
-        const i3 = i * 3;
+          glassLifetimes[i] += deltaTime;
 
-        glassLifetimes[i] += deltaTime;
+          if (glassLifetimes[i] < glassMaxLifetimes[i]) {
+            // Update position
+            glassPositions[i3] += glassVelocities[i3] * deltaTime;
+            glassPositions[i3 + 1] += glassVelocities[i3 + 1] * deltaTime;
+            glassPositions[i3 + 2] += glassVelocities[i3 + 2] * deltaTime;
 
-        if (glassLifetimes[i] < glassMaxLifetimes[i]) {
-          // Update position
-          glassPositions[i3] += glassVelocities[i3] * deltaTime;
-          glassPositions[i3 + 1] += glassVelocities[i3 + 1] * deltaTime;
-          glassPositions[i3 + 2] += glassVelocities[i3 + 2] * deltaTime;
+            // Gravity
+            glassVelocities[i3 + 1] -= 9.8 * 0.3 * deltaTime;
 
-          // Gravity
-          glassVelocities[i3 + 1] -= 9.8 * 0.3 * deltaTime;
+            // PHASE 1 FIX: Time-based air resistance (exponential decay)
+            // k=0.92 matches ~0.985 per frame at 60fps: exp(-0.92/60) ≈ 0.985
+            const damping = Math.exp(-0.92 * deltaTime);
+            glassVelocities[i3] *= damping;
+            glassVelocities[i3 + 1] *= damping;
+            glassVelocities[i3 + 2] *= damping;
 
-          // PHASE 1 FIX: Time-based air resistance (exponential decay)
-          // k=0.92 matches ~0.985 per frame at 60fps: exp(-0.92/60) ≈ 0.985
-          const damping = Math.exp(-0.92 * deltaTime);
-          glassVelocities[i3] *= damping;
-          glassVelocities[i3 + 1] *= damping;
-          glassVelocities[i3 + 2] *= damping;
-
-          // Alpha fade (avoid per-frame random allocation)
-          const lifeRatio = glassLifetimes[i] / glassMaxLifetimes[i];
-          glassSizes[i] *= (1.0 - lifeRatio * 0.4); // Fade out
-        } else {
-          // Hide dead particle
-          glassSizes[i] = 0;
+            // Alpha fade (avoid per-frame random allocation)
+            const lifeRatio = glassLifetimes[i] / glassMaxLifetimes[i];
+            glassSizes[i] *= (1.0 - lifeRatio * 0.4); // Fade out
+          } else {
+            // Hide dead particle
+            glassSizes[i] = 0;
+          }
         }
-      }
 
-      glassGeometry.attributes.position.needsUpdate = true;
-      glassGeometry.attributes.size.needsUpdate = true;
+        // PHASE 3: Only update buffers when particles are active
+        glassGeometry.attributes.position.needsUpdate = true;
+        glassGeometry.attributes.size.needsUpdate = true;
+      }
     }
 
     /**
-     * Star-pulling physics system
+     * PHASE 3: Screen-space star-pulling physics system
+     * Pulls stars toward black hole in screen space for visually consistent effect
      */
-    function updateStarPulling(deltaTime: number) {
+    function updateStarPulling(deltaTime: number, camera: THREE.Camera) {
       const blackHolePos = new THREE.Vector3(0, -8, 10);
       const positions = starGeometry.attributes.position.array as Float32Array;
       const sizes = starGeometry.attributes.size.array as Float32Array;
+
+      // Project black hole to screen space once
+      const blackHoleScreen = blackHolePos.clone();
+      blackHoleScreen.project(camera);
+
+      let positionChanged = false;
+      let sizeChanged = false;
 
       pulledStars.forEach(starIndex => {
         const i3 = starIndex * 3;
@@ -1130,28 +1145,55 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
           positions[i3 + 2]
         );
 
-        // Direction to black hole
-        const direction = new THREE.Vector3().subVectors(blackHolePos, starPos).normalize();
-        const distance = starPos.distanceTo(blackHolePos);
+        // Project star to screen space
+        const starScreen = starPos.clone();
+        starScreen.project(camera);
 
-        // Pull strength (inverse-square falloff)
-        const pullStrength = deltaTime * 15 / (distance * 0.5 + 1);
+        // Calculate screen-space distance and direction
+        const screenDist = Math.sqrt(
+          Math.pow(blackHoleScreen.x - starScreen.x, 2) +
+          Math.pow(blackHoleScreen.y - starScreen.y, 2)
+        );
+
+        // Screen-space pull direction (normalized)
+        const screenDirX = (blackHoleScreen.x - starScreen.x) / (screenDist + 0.001);
+        const screenDirY = (blackHoleScreen.y - starScreen.y) / (screenDist + 0.001);
+
+        // Pull strength based on screen distance (inverse-square falloff)
+        const pullStrength = deltaTime * 0.08 / (screenDist * screenDist + 0.01);
+
+        // Apply pull in screen space
+        starScreen.x += screenDirX * pullStrength;
+        starScreen.y += screenDirY * pullStrength;
+        // Keep original Z depth in screen space
+
+        // Unproject back to world space
+        starScreen.unproject(camera);
 
         // Update position
-        starPos.add(direction.multiplyScalar(pullStrength));
-        positions[i3] = starPos.x;
-        positions[i3 + 1] = starPos.y;
-        positions[i3 + 2] = starPos.z;
+        positions[i3] = starScreen.x;
+        positions[i3 + 1] = starScreen.y;
+        positions[i3 + 2] = starScreen.z;
+        positionChanged = true;
+
+        // World-space distance for absorption effect
+        const worldDist = starPos.distanceTo(blackHolePos);
 
         // PHASE 1 FIX: Time-based absorption shrink (exponential decay)
-        if (distance < 3) {
+        if (worldDist < 3) {
           // Continuous decay: exp(-k * dt) where k=3.0 matches ~0.95 at 60fps
           sizes[starIndex] *= Math.exp(-3.0 * deltaTime);
+          sizeChanged = true;
         }
       });
 
-      starGeometry.attributes.position.needsUpdate = true;
-      starGeometry.attributes.size.needsUpdate = true;
+      // PHASE 3: Only update buffers if changes were made
+      if (positionChanged) {
+        starGeometry.attributes.position.needsUpdate = true;
+      }
+      if (sizeChanged) {
+        starGeometry.attributes.size.needsUpdate = true;
+      }
     }
 
     /**
@@ -1308,8 +1350,8 @@ export default function IntroScreen({ onBegin }: IntroScreenProps) {
         innerCore.rotation.y -= 0.8 * deltaTime;
         accretionDisk.rotation.z += 2.0 * deltaTime;
 
-        // Star pulling (continuous)
-        updateStarPulling(deltaTime);
+        // PHASE 3: Star pulling in screen space (continuous)
+        updateStarPulling(deltaTime, camera);
 
         // Button reveal (only during button_reveal phase at 0.2s mark = 5.7s global)
         if (phase.name === 'button_reveal' && phase.phaseT >= 0.2 && !showButton) {
