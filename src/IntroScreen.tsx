@@ -252,15 +252,6 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     );
     camera.position.set(0, 0, 30);
 
-    // TEST: Add a bright red sphere to verify rendering works AT ALL
-    const testSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(5, 32, 32),
-      new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: false })
-    );
-    testSphere.position.set(0, 0, -50);
-    scene.add(testSphere);
-    console.log('[IntroScreen] TEST: Added bright red sphere at (0, 0, -50) to verify rendering');
-
     // ============================================================================
     // PHASE 3: RENDERER CONFIGURATION (LINEAR WORKFLOW)
     // ============================================================================
@@ -1086,18 +1077,13 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
     // COMET COMPONENT
     // ============================================================================
     const cometGeometry = new THREE.IcosahedronGeometry(1.2, 4);
-    // TEMP DEBUG: Use simple material instead of shader to test visibility
-    const simpleCometMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: false });
-    const comet = new THREE.Mesh(cometGeometry, simpleCometMaterial);
-    // const comet = new THREE.Mesh(cometGeometry, cometMaterial);
+    const comet = new THREE.Mesh(cometGeometry, cometMaterial);
     comet.position.set(0, 40, -30);
     comet.scale.set(0.01, 0.01, 0.01);
     comet.visible = false;
     scene.add(comet);
-    console.log('[IntroScreen] Comet created at position:', comet.position.x, comet.position.y, comet.position.z, 'using SIMPLE GREEN material (debug)');
 
     // PHASE 4: Dynamic comet glow aura (heat-reactive)
-    // TEMP DEBUG: Disabled while using simple comet material
     const glowGeometry = new THREE.IcosahedronGeometry(1.8, 2);
     const glowMaterial = new THREE.ShaderMaterial({
       uniforms: {
@@ -1141,8 +1127,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       side: THREE.BackSide
     });
     const cometGlow = new THREE.Mesh(glowGeometry, glowMaterial);
-    // TEMP DEBUG: Don't add glow while using simple material
-    // comet.add(cometGlow);
+    comet.add(cometGlow);
 
     // ============================================================================
     // PHASE 5: BLACK HOLE COMPONENT (4 layered meshes) - DEPTH COHERENCE FIX
@@ -1504,30 +1489,29 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
      * This triggers shader compilation before they're visible to the user
      */
     function prewarmShaders() {
-      // TEMP DEBUG: Disabled while using simple comet material
-      // // Temporarily show comet offscreen for one render
-      // const originalCometPos = comet.position.clone();
-      // const originalCometVisible = comet.visible;
+      // Temporarily show comet offscreen for one render
+      const originalCometPos = comet.position.clone();
+      const originalCometVisible = comet.visible;
 
-      // comet.position.set(10000, 10000, -10000); // Far offscreen
-      // comet.visible = true;
+      comet.position.set(10000, 10000, -10000); // Far offscreen
+      comet.visible = true;
 
-      // // Set non-zero heat for full shader path compilation
-      // cometMaterial.uniforms.heatIntensity.value = 0.5;
-      // glowMaterial.uniforms.heatIntensity.value = 0.5;
+      // Set non-zero heat for full shader path compilation
+      cometMaterial.uniforms.heatIntensity.value = 0.5;
+      glowMaterial.uniforms.heatIntensity.value = 0.5;
 
-      // // Render once (forces shader compilation)
-      // renderer.render(scene, camera);
+      // Render once (forces shader compilation)
+      renderer.render(scene, camera);
 
-      // // Restore original state
-      // comet.position.copy(originalCometPos);
-      // comet.visible = originalCometVisible;
-      // cometMaterial.uniforms.heatIntensity.value = 0.0;
-      // glowMaterial.uniforms.heatIntensity.value = 0.0;
+      // Restore original state
+      comet.position.copy(originalCometPos);
+      comet.visible = originalCometVisible;
+      cometMaterial.uniforms.heatIntensity.value = 0.0;
+      glowMaterial.uniforms.heatIntensity.value = 0.0;
     }
 
-    // Prewarm shaders before starting animation (disabled for debug)
-    // prewarmShaders();
+    // Prewarm shaders before starting animation
+    prewarmShaders();
 
     // ============================================================================
     // PARTICLE EMISSION FUNCTIONS
@@ -1909,8 +1893,7 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
       // Update shader time uniforms (use introElapsed for consistency)
       starMaterial.uniforms.time.value = introElapsed;
-      // TEMP DEBUG: Disabled while using simple comet material
-      // cometMaterial.uniforms.time.value = introElapsed;
+      cometMaterial.uniforms.time.value = introElapsed;
       innerCoreMaterial.uniforms.time.value = introElapsed;
       accretionDiskMaterial.uniforms.time.value = introElapsed;
       outerGlowMaterial.uniforms.time.value = introElapsed;
@@ -1996,10 +1979,9 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           : 1 - Math.pow(-2 * t + 2, 3) / 2;
         const heatIntensity = cubicEase * 0.85; // Max 0.85 to avoid over-brightness
 
-        // TEMP DEBUG: Disabled while using simple material
-        // cometMaterial.uniforms.heatIntensity.value = heatIntensity;
-        // glowMaterial.uniforms.heatIntensity.value = heatIntensity;
-        // glowMaterial.uniforms.time.value = introElapsed;
+        cometMaterial.uniforms.heatIntensity.value = heatIntensity;
+        glowMaterial.uniforms.heatIntensity.value = heatIntensity;
+        glowMaterial.uniforms.time.value = introElapsed;
       }
 
       // PHASE 7: Impact explosion with controlled bloom spike
@@ -2017,11 +1999,10 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           comet.scale.set(explosionScale, explosionScale, explosionScale);
 
           // CRITICAL FIX: Minimal glow during explosion (flash comes from scale, not glow)
-          // TEMP DEBUG: Disabled while using simple comet material
-          // if (glowMaterial.uniforms) {
-          //   const explosionGlow = easeOut * 0.2; // MINIMAL: 0.2 (was 0.4, originally 0.7)
-          //   glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.6 + explosionGlow);
-          // }
+          if (glowMaterial.uniforms) {
+            const explosionGlow = easeOut * 0.2; // MINIMAL: 0.2 (was 0.4, originally 0.7)
+            glowMaterial.uniforms.heatIntensity.value = Math.min(1.0, 0.6 + explosionGlow);
+          }
         } else {
           // Hide comet after explosion burst
           comet.visible = false;
