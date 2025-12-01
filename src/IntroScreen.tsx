@@ -91,8 +91,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
   const [buttonGlitch, setButtonGlitch] = useState(false);
 
   // BLUEPRINT 11.3: Track initialization and glitch timeouts for cleanup
-  const initializedRef = useRef(false);
-  const glitchTimeoutsRef = useRef<Set<number>>(new Set());
+const initializedRef = useRef(false);
+const glitchTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+const showTitleRef = useRef(false);
+const showButtonRef = useRef(false);
+
 
   // BLUEPRINT 12 & 13: Quality and accessibility configuration
   const activeQuality = quality === 'auto' ? detectQuality() : quality;
@@ -110,25 +114,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
   // PHASE 1: Diagnostic toggles for isolating rendering issues
   const [diagnostics, setDiagnostics] = useState({
-    showPanel: false,
-    composerEnabled: true,
-    bloomEnabled: true,
-    fxaaEnabled: true,
-    outputPassEnabled: true,
-    crackPassEnabled: true, // Future: for Phase 6
-    starsEnabled: true,
-    cometEnabled: true,
-    particlesEnabled: true,
-    blackHoleEnabled: true,
-    uiEnabled: true,
-    parityMode: false, // Golden parity: composer with ONLY RenderPass
-    timeFrozen: false,
-    scrubbedTime: 0,
-    renderTargetType: 'detecting...' as string,
-    renderSize: { width: 0, height: 0 },
-    toneMapping: 'unknown' as string,
-    outputColorSpace: 'unknown' as string
-  });
+  // ...
+});
+
+const diagnosticsRef = useRef(diagnostics);
+useEffect(() => {
+  diagnosticsRef.current = diagnostics;
+}, [diagnostics]);
+
 
   // PHASE 6: Keyboard accessibility handler
   useEffect(() => {
@@ -607,14 +600,17 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       starBaseColors[i3 + 2] = starColors[i3 + 2];
     }
 
-    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    starGeometry.setAttribute('basePosition', new THREE.BufferAttribute(starOriginalPositions, 3));
-    starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-    starGeometry.setAttribute('baseColor', new THREE.BufferAttribute(starBaseColors, 3));
-    starGeometry.setAttribute('baseSize', new THREE.BufferAttribute(starBaseSizes, 1));
-    starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
-    starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
-    starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOffsets, 3));
+const starRippleOffsets = new Float32Array(starCount * 3); // ✅ additive warp (starts at 0)
+
+starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+starGeometry.setAttribute('basePosition', new THREE.BufferAttribute(starOriginalPositions, 3));
+starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+starGeometry.setAttribute('baseColor', new THREE.BufferAttribute(starBaseColors, 3));
+starGeometry.setAttribute('baseSize', new THREE.BufferAttribute(starBaseSizes, 1));
+starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
+starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
+starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOffsets, 3)); // ✅ new
+
 
     // ============================================================================
     // PHASE 3 & 4: STARFIELD SHADER (LINEAR COLOR OUTPUT)
@@ -638,96 +634,86 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         viewportHeight: { value: window.innerHeight },
         maxPointSize: { value: maxPointSize } // PHASE 4: Device max point size
       },
-      vertexShader: `
-        attribute float baseSize;
-        attribute float twinkleSeed;
-        attribute float absorptionScale;
-        attribute vec3 color;
-        attribute vec3 rippleOffset;
+      const starMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    time: { value: 0.0 },
+    starTexture: { value: starTexture },
+    baseOpacity: { value: 1.0 },
+    starIntensity: { value: 0.85 },
+    pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
+    viewportHeight: { value: window.innerHeight },
+    maxPointSize: { value: maxPointSize }
+  },
+  vertexShader: `
+    attribute float baseSize;
+    attribute float twinkleSeed;
+    attribute float absorptionScale;
+    attribute vec3 color;
+    attribute vec3 rippleOffset;  // ✅ additive ripple warp
 
-        uniform float time;
-        uniform float baseOpacity;
-        uniform float starIntensity;
-        uniform float pixelRatio;
-        uniform float viewportHeight;
-        uniform float maxPointSize;
+    uniform float time;
+    uniform float baseOpacity;
+    uniform float starIntensity;
+    uniform float pixelRatio;
+    uniform float viewportHeight;
+    uniform float maxPointSize;
 
-        varying vec3 vColor;
-        varying float vAlpha;
-        varying float vDepth;
+    varying vec3 vColor;
+    varying float vAlpha;
+    varying float vDepth;
 
-        void main() {
-          vColor = color;
+    void main() {
+      vColor = color;
 
-          // Apply ripple offset to position (physics updates position, ripples add distortion)
-          vec3 finalPosition = position + rippleOffset;
+      float twinkle = sin(time * 1.5 + twinkleSeed * 0.5) * 0.1 + 0.9;
 
-          // PHASE 4: Twinkle with controlled range [0.8, 1.0] (never exceeds 1.0!)
-          // Reduced amplitude (0.1 instead of 0.25) for subtlety
-          float twinkle = sin(time * 1.5 + twinkleSeed * 0.5) * 0.1 + 0.9;
+      float sizeMultiplier = twinkle * absorptionScale;
+      float brightnessMultiplier = twinkle * absorptionScale * starIntensity;
 
-          // PHASE 4: Size modulation (twinkle affects brightness more than size)
-          float sizeMultiplier = twinkle * absorptionScale;
-          float brightnessMultiplier = twinkle * absorptionScale * starIntensity;
+      // ✅ IMPORTANT: do not mutate CPU 'position' buffer; apply ripples in shader
+      vec3 warpedPos = position + rippleOffset;
 
-          // Transform to view space using final position (physics + ripple offset)
-          vec4 mvPosition = modelViewMatrix * vec4(finalPosition, 1.0);
-          float viewDistance = -mvPosition.z;
+      vec4 mvPosition = modelViewMatrix * vec4(warpedPos, 1.0);
+      float viewDistance = -mvPosition.z;
 
-          // PHASE 4: Depth cueing - distant stars smaller and dimmer (subtle)
-          float depthFactor = 1.0 - (viewDistance - 30.0) / 100.0; // 30-130 range
-          depthFactor = clamp(depthFactor, 0.6, 1.0); // Min 60% size/brightness at far plane
+      float depthFactor = 1.0 - (viewDistance - 30.0) / 100.0;
+      depthFactor = clamp(depthFactor, 0.6, 1.0);
 
-          // PHASE 4: Final size calculation (recalibrated for crisp pinpoints)
-          // Target: ~3-5px at Z=-80 for median star (baseSize=0.45)
-          // Formula simplified: pixels = baseSize * factors * screenScale / distance
-          float screenScale = viewportHeight * pixelRatio * 1.5; // FIXED: Was 0.025 (way too small!)
-          float pixelSize = baseSize * sizeMultiplier * depthFactor * screenScale / viewDistance;
+      float screenScale = viewportHeight * pixelRatio * 1.5;
+      float pixelSize = baseSize * sizeMultiplier * depthFactor * screenScale / max(0.0001, viewDistance);
 
-          // PHASE 4: Clamp to device limits and aesthetic max (4px)
-          gl_PointSize = clamp(pixelSize, 1.0, min(maxPointSize, 4.0 * pixelRatio));
+      gl_PointSize = clamp(pixelSize, 1.0, min(maxPointSize, 4.0 * pixelRatio));
 
-          // PHASE 4: Alpha with clamping discipline (never > 1.0)
-          vAlpha = clamp(baseOpacity * brightnessMultiplier * depthFactor, 0.0, 1.0);
+      vAlpha = clamp(baseOpacity * brightnessMultiplier * depthFactor, 0.0, 1.0);
+      vDepth = (viewDistance - 30.0) / 100.0;
 
-          // PHASE 4: Pass normalized depth for fragment shader
-          vDepth = (viewDistance - 30.0) / 100.0; // 0=near, 1=far
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D starTexture;
 
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D starTexture;
+    varying vec3 vColor;
+    varying float vAlpha;
+    varying float vDepth;
 
-        varying vec3 vColor;
-        varying float vAlpha;
-        varying float vDepth;
+    void main() {
+      vec4 texColor = texture2D(starTexture, gl_PointCoord);
 
-        void main() {
-          // PHASE 4: Sample star texture
-          vec4 texColor = texture2D(starTexture, gl_PointCoord);
+      float dist = length(gl_PointCoord - vec2(0.5));
+      float coreBrightness = smoothstep(0.5, 0.0, dist);
 
-          // PHASE 4: Depth is already baked into vAlpha from vertex shader
-          // No double-application of depth cueing
+      vec3 finalColor = vColor * (0.9 + coreBrightness * 0.1);
+      float finalAlpha = texColor.a * vAlpha;
 
-          // PHASE 4: Subtle core brightness boost for pinpoint crispness
-          float dist = length(gl_PointCoord - vec2(0.5));
-          float coreBrightness = smoothstep(0.5, 0.0, dist); // Sharper falloff
+      gl_FragColor = vec4(finalColor, clamp(finalAlpha, 0.0, 1.0));
+    }
+  `,
+  transparent: true,
+  blending: THREE.NormalBlending,
+  depthWrite: false
+});
 
-          // PHASE 4: Final color with subtle core highlight
-          vec3 finalColor = vColor * (0.9 + coreBrightness * 0.1);
-
-          // PHASE 4: Final alpha (depth already applied in vertex shader)
-          float finalAlpha = texColor.a * vAlpha;
-
-          // PHASE 4: Ensure clamping (redundant safeguard)
-          gl_FragColor = vec4(finalColor, clamp(finalAlpha, 0.0, 1.0));
-        }
-      `,
-      transparent: true,
-      blending: THREE.NormalBlending,
-      depthWrite: false
-    });
 
     const starField = new THREE.Points(starGeometry, starMaterial);
     scene.add(starField);
@@ -773,141 +759,150 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
      * Optimized to eliminate per-frame Vector3 allocations using scratch vectors
      */
     function updateRippleEffects(introElapsed: number) {
-      const rippleOffsets = starGeometry.attributes.rippleOffset.array as Float32Array;
-      const basePositions = starGeometry.attributes.basePosition.array as Float32Array;
-      const colors = starGeometry.attributes.color.array as Float32Array;
-      const baseColors = starGeometry.attributes.baseColor.array as Float32Array;
+  const positions = starGeometry.attributes.position.array as Float32Array;      // star-pull writes here
+  const colors = starGeometry.attributes.color.array as Float32Array;
+  const baseColors = starGeometry.attributes.baseColor.array as Float32Array;
+  const rippleOffsets = starGeometry.attributes.rippleOffset.array as Float32Array; // ✅ additive warp only
 
-      // Clean up expired ripples
-      for (let i = activeRipples.length - 1; i >= 0; i--) {
-        const ripple = activeRipples[i];
-        const age = introElapsed - ripple.startTime;
-        if (age > ripple.duration) {
-          activeRipples.splice(i, 1);
-        }
+  // Prune expired ripples
+  for (let i = activeRipples.length - 1; i >= 0; i--) {
+    const r = activeRipples[i];
+    if (introElapsed - r.startTime > r.duration) activeRipples.splice(i, 1);
+  }
+
+  let colorChanged = false;
+  let offsetChanged = false;
+
+  // No ripples: restore base colors + clear offsets (DO NOT touch positions)
+  if (activeRipples.length === 0) {
+    for (let i = 0; i < starCount; i++) {
+      const i3 = i * 3;
+
+      // Clear offset if needed
+      if (rippleOffsets[i3] !== 0 || rippleOffsets[i3 + 1] !== 0 || rippleOffsets[i3 + 2] !== 0) {
+        rippleOffsets[i3] = 0;
+        rippleOffsets[i3 + 1] = 0;
+        rippleOffsets[i3 + 2] = 0;
+        offsetChanged = true;
       }
 
-      // If no active ripples, reset all stars to base colors and zero ripple offsets
-      if (activeRipples.length === 0) {
-        let needsColorReset = false;
-        let needsOffsetReset = false;
-        for (let i = 0; i < starCount; i++) {
-          const i3 = i * 3;
-          // Reset colors
-          if (colors[i3] !== baseColors[i3] || colors[i3 + 1] !== baseColors[i3 + 1] || colors[i3 + 2] !== baseColors[i3 + 2]) {
-            colors[i3] = baseColors[i3];
-            colors[i3 + 1] = baseColors[i3 + 1];
-            colors[i3 + 2] = baseColors[i3 + 2];
-            needsColorReset = true;
-          }
-          // Reset ripple offsets to zero (not position!)
-          if (rippleOffsets[i3] !== 0 || rippleOffsets[i3 + 1] !== 0 || rippleOffsets[i3 + 2] !== 0) {
-            rippleOffsets[i3] = 0;
-            rippleOffsets[i3 + 1] = 0;
-            rippleOffsets[i3 + 2] = 0;
-            needsOffsetReset = true;
-          }
-        }
-        if (needsColorReset) {
-          starGeometry.attributes.color.needsUpdate = true;
-        }
-        if (needsOffsetReset) {
-          starGeometry.attributes.rippleOffset.needsUpdate = true;
-        }
-        return;
-      }
-
-      let colorChanged = false;
-      let positionChanged = false;
-
-      // PHASE 9: Apply ripple effects to all stars (no allocations in hot loop)
-      for (let i = 0; i < starCount; i++) {
-        const i3 = i * 3;
-
-        // PHASE 9: Use scratch vector instead of allocating
-        const basePosX = basePositions[i3];
-        const basePosY = basePositions[i3 + 1];
-        const basePosZ = basePositions[i3 + 2];
-        _scratchVec3A.set(basePosX, basePosY, basePosZ);
-
-        let totalGlow = 0;
-        // PHASE 9: Track distortion components directly (no Vector3 allocation)
-        let totalDistortionX = 0;
-        let totalDistortionY = 0;
-        let totalDistortionZ = 0;
-
-        // Accumulate effects from all active ripples
-        for (let r = 0; r < activeRipples.length; r++) {
-          const ripple = activeRipples[r];
-          const age = introElapsed - ripple.startTime;
-          const progress = age / ripple.duration; // 0 to 1
-
-          // Current ripple radius expands over time
-          const currentRadius = progress * ripple.maxRadius;
-
-          // PHASE 9: Distance calculation without allocation
-          const distance = _scratchVec3A.distanceTo(ripple.position);
-
-          // Ripple wave is a thin ring that expands
-          const ringThickness = ripple.maxRadius * 0.15; // 15% of max radius
-          const distanceToRing = Math.abs(distance - currentRadius);
-
-          if (distanceToRing < ringThickness) {
-            // Star is near the expanding ring
-            const ringIntensity = 1.0 - (distanceToRing / ringThickness); // 0 to 1
-
-            // Warm golden glow
-            const glowFalloff = 1.0 - progress; // Fade over time
-            totalGlow += ringIntensity * glowFalloff * 0.8;
-
-            // PHASE 9: Water-like distortion (radial displacement) - no allocations
-            const distortionStrength = ringIntensity * glowFalloff * 0.5 * Math.sin(progress * Math.PI * 2.0);
-
-            // Direction from ripple to star (normalized)
-            const dx = basePosX - ripple.position.x;
-            const dy = basePosY - ripple.position.y;
-            const dz = basePosZ - ripple.position.z;
-            const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (len > 0.0001) {
-              const invLen = 1.0 / len;
-              totalDistortionX += dx * invLen * distortionStrength;
-              totalDistortionY += dy * invLen * distortionStrength;
-              totalDistortionZ += dz * invLen * distortionStrength;
-            }
-          }
-        }
-
-        // Apply warm golden glow to star color
-        if (totalGlow > 0.01) {
-          const baseR = baseColors[i3];
-          const baseG = baseColors[i3 + 1];
-          const baseB = baseColors[i3 + 2];
-
-          // Add warm golden tint
-          colors[i3] = Math.min(1.0, baseR + totalGlow * 0.8); // More red
-          colors[i3 + 1] = Math.min(1.0, baseG + totalGlow * 0.6); // Medium green
-          colors[i3 + 2] = Math.min(1.0, baseB + totalGlow * 0.2); // Less blue
-
-          colorChanged = true;
-        }
-
-        // PHASE 9: Apply ripple offset distortion (warps star positions like ripples in water)
-        const distortionLength = Math.sqrt(totalDistortionX * totalDistortionX + totalDistortionY * totalDistortionY + totalDistortionZ * totalDistortionZ);
-        if (distortionLength > 0.001) {
-          rippleOffsets[i3] = totalDistortionX;
-          rippleOffsets[i3 + 1] = totalDistortionY;
-          rippleOffsets[i3 + 2] = totalDistortionZ;
-          positionChanged = true;
-        }
-      }
-
-      if (colorChanged) {
-        starGeometry.attributes.color.needsUpdate = true;
-      }
-      if (positionChanged) {
-        starGeometry.attributes.rippleOffset.needsUpdate = true;
+      // Restore base color if needed
+      if (
+        colors[i3] !== baseColors[i3] ||
+        colors[i3 + 1] !== baseColors[i3 + 1] ||
+        colors[i3 + 2] !== baseColors[i3 + 2]
+      ) {
+        colors[i3] = baseColors[i3];
+        colors[i3 + 1] = baseColors[i3 + 1];
+        colors[i3 + 2] = baseColors[i3 + 2];
+        colorChanged = true;
       }
     }
+
+    if (offsetChanged) starGeometry.attributes.rippleOffset.needsUpdate = true;
+    if (colorChanged) starGeometry.attributes.color.needsUpdate = true;
+    return;
+  }
+
+  // With ripples: compute color glow + additive offset based on CURRENT star position
+  for (let i = 0; i < starCount; i++) {
+    const i3 = i * 3;
+
+    const px = positions[i3];
+    const py = positions[i3 + 1];
+    const pz = positions[i3 + 2];
+
+    let totalGlow = 0.0;
+    let totalDX = 0.0, totalDY = 0.0, totalDZ = 0.0;
+
+    _scratchVec3A.set(px, py, pz);
+
+    for (let r = 0; r < activeRipples.length; r++) {
+      const ripple = activeRipples[r];
+      const age = introElapsed - ripple.startTime;
+      const progress = age / ripple.duration; // 0..1
+      if (progress < 0 || progress > 1) continue;
+
+      const currentRadius = progress * ripple.maxRadius;
+      const distance = _scratchVec3A.distanceTo(ripple.position);
+
+      const ringThickness = ripple.maxRadius * 0.15;
+      const distanceToRing = Math.abs(distance - currentRadius);
+
+      if (distanceToRing < ringThickness) {
+        const ringIntensity = 1.0 - (distanceToRing / ringThickness); // 0..1
+        const glowFalloff = 1.0 - progress;
+
+        totalGlow += ringIntensity * glowFalloff * 0.8;
+
+        const distortionStrength =
+          ringIntensity * glowFalloff * 0.5 * Math.sin(progress * Math.PI * 2.0);
+
+        const dx = px - ripple.position.x;
+        const dy = py - ripple.position.y;
+        const dz = pz - ripple.position.z;
+
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len > 0.0001) {
+          const invLen = 1.0 / len;
+          totalDX += dx * invLen * distortionStrength;
+          totalDY += dy * invLen * distortionStrength;
+          totalDZ += dz * invLen * distortionStrength;
+        }
+      }
+    }
+
+    // Color: glow or restore base
+    if (totalGlow > 0.01) {
+      const baseR = baseColors[i3];
+      const baseG = baseColors[i3 + 1];
+      const baseB = baseColors[i3 + 2];
+
+      const nr = Math.min(1.0, baseR + totalGlow * 0.8);
+      const ng = Math.min(1.0, baseG + totalGlow * 0.6);
+      const nb = Math.min(1.0, baseB + totalGlow * 0.2);
+
+      if (colors[i3] !== nr || colors[i3 + 1] !== ng || colors[i3 + 2] !== nb) {
+        colors[i3] = nr;
+        colors[i3 + 1] = ng;
+        colors[i3 + 2] = nb;
+        colorChanged = true;
+      }
+    } else {
+      if (
+        colors[i3] !== baseColors[i3] ||
+        colors[i3 + 1] !== baseColors[i3 + 1] ||
+        colors[i3 + 2] !== baseColors[i3 + 2]
+      ) {
+        colors[i3] = baseColors[i3];
+        colors[i3 + 1] = baseColors[i3 + 1];
+        colors[i3 + 2] = baseColors[i3 + 2];
+        colorChanged = true;
+      }
+    }
+
+    // Offset: set or clear
+    const mag = Math.sqrt(totalDX * totalDX + totalDY * totalDY + totalDZ * totalDZ);
+    const ox = mag > 0.001 ? totalDX : 0.0;
+    const oy = mag > 0.001 ? totalDY : 0.0;
+    const oz = mag > 0.001 ? totalDZ : 0.0;
+
+    if (
+      rippleOffsets[i3] !== ox ||
+      rippleOffsets[i3 + 1] !== oy ||
+      rippleOffsets[i3 + 2] !== oz
+    ) {
+      rippleOffsets[i3] = ox;
+      rippleOffsets[i3 + 1] = oy;
+      rippleOffsets[i3 + 2] = oz;
+      offsetChanged = true;
+    }
+  }
+
+  if (offsetChanged) starGeometry.attributes.rippleOffset.needsUpdate = true;
+  if (colorChanged) starGeometry.attributes.color.needsUpdate = true;
+}
+
 
     // ============================================================================
     // COMET SHADER MATERIALS
@@ -1362,52 +1357,47 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
 
     // PHASE 7: Debris material with pixel-consistent sizing
     const debrisMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0.0 },
-        pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
-        maxPointSize: { value: maxPointSize } // Device max from Phase 4
-      },
-      vertexShader: `
-        attribute float size;
-        varying vec3 vColor;
+  uniforms: {
+    time: { value: 0.0 },
+    pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
+    maxPointSize: { value: maxPointSize }
+  },
+  vertexShader: `
+    attribute float size;
+    attribute vec3 color;       // ✅ required: geometry provides 'color'
+    varying vec3 vColor;
 
-        uniform float pixelRatio;
-        uniform float maxPointSize;
+    uniform float pixelRatio;
+    uniform float maxPointSize;
 
-        void main() {
-          vColor = color;
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    void main() {
+      vColor = color;
 
-          // PHASE 7: Pixel-consistent sizing (calibrated for 3-8px range)
-          // size attribute: 1.0-3.0 (set at emission)
-          // depth factor: compensate for perspective
-          float viewDistance = -mvPosition.z;
-          float pixelSize = size * (50.0 / viewDistance) * pixelRatio;
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      float viewDistance = max(0.0001, -mvPosition.z);
 
-          // PHASE 7: Clamp to device max and aesthetic max (12px)
-          gl_PointSize = clamp(pixelSize, 1.0, min(maxPointSize, 12.0 * pixelRatio));
+      float pixelSize = size * (50.0 / viewDistance) * pixelRatio;
+      gl_PointSize = clamp(pixelSize, 1.0, min(maxPointSize, 12.0 * pixelRatio));
 
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        varying vec3 vColor;
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vColor;
 
-        void main() {
-          // PHASE 7: Circular particle with smooth falloff
-          float dist = length(gl_PointCoord - vec2(0.5));
-          if (dist > 0.5) discard;
+    void main() {
+      float dist = length(gl_PointCoord - vec2(0.5));
+      if (dist > 0.5) discard;
 
-          // Smoother gradient for less harsh edges
-          float alpha = smoothstep(0.5, 0.2, dist);
-          gl_FragColor = vec4(vColor, alpha);
-        }
-      `,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      vertexColors: true
-    });
+      float alpha = smoothstep(0.5, 0.2, dist);
+      gl_FragColor = vec4(vColor, alpha);
+    }
+  `,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
 
     const debrisParticles = new THREE.Points(debrisGeometry, debrisMaterial);
     scene.add(debrisParticles);
@@ -1882,11 +1872,14 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
       const deltaTime = Math.min(rawDelta, 1 / 30); // Clamp to 30fps max step
 
       // PHASE 1: Time freeze/scrub support for diagnostics
-      if (debugMode && diagnostics.timeFrozen) {
-        introElapsed = diagnostics.scrubbedTime;
-      } else {
-        introElapsed += deltaTime;
-      }
+      const diag = debugMode ? diagnosticsRef.current : null;
+
+if (debugMode && diag?.timeFrozen) {
+  introElapsed = diag.scrubbedTime;
+} else {
+  introElapsed += deltaTime;
+}
+
 
       const phase = getPhaseInfo(introElapsed);
 
@@ -2045,23 +2038,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
           // (Reality crack shader and glass effects removed entirely)
 
           // Title reveal at 0.4s mark (40% through phase = 4.9s global)
-          if (phase.phaseT >= 0.4 && !showTitle) {
-            setShowTitle(true);
-            // PHASE 11: Trigger glitch on reveal (respects reduced motion)
-            if (!prefersReducedMotion) {
-              setTitleGlitch(true);
-              // PHASE 11: Cinematic duration 120-180ms (was 300ms)
-              const glitchDuration = 120 + Math.random() * 60;
-              const timeout = setTimeout(() => setTitleGlitch(false), glitchDuration);
-              glitchTimeoutsRef.current.add(timeout);
-            }
-            // Set timer to allow next glitch soon after
-            lastTitleGlitchTime = introElapsed - 1.5;
-          }
-        } else {
-          // Maintain full scale
-          blackHoleGroup.scale.setScalar(1.0);
-        }
+          if (phase.phaseT >= 0.4 && !showTitleRef.current) {
+  showTitleRef.current = true;
+  setShowTitle(true);
+  // ...
+}
+
 
         // Black hole rotation (continuous)
         blackHoleGroup.rotation.y += 0.3 * deltaTime;
@@ -2076,20 +2058,12 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         updateRippleEffects(introElapsed);
 
         // Button reveal (only during button_reveal phase at 0.2s mark = 5.7s global)
-        if (phase.name === 'button_reveal' && phase.phaseT >= 0.2 && !showButton) {
-          setShowButton(true);
-          // PHASE 11: Trigger glitch on reveal (respects reduced motion)
-          if (!prefersReducedMotion) {
-            setButtonGlitch(true);
-            // PHASE 11: Cinematic duration 120-180ms (was 300ms)
-            const glitchDuration = 120 + Math.random() * 60;
-            const timeout = setTimeout(() => setButtonGlitch(false), glitchDuration);
-            glitchTimeoutsRef.current.add(timeout);
-          }
-          // Set timer to allow next glitch soon after
-          lastButtonGlitchTime = introElapsed - 1.5;
-        }
-      }
+        if (phase.name === 'button_reveal' && phase.phaseT >= 0.2 && !showButtonRef.current) {
+  showButtonRef.current = true;
+  setShowButton(true);
+  // ...
+}
+
 
       // ============================================================================
       // DETERMINISTIC CONTINUOUS UPDATES
@@ -2156,11 +2130,24 @@ export default function IntroScreen({ onBegin, quality = 'auto', debugMode = fal
         }
 
         // Control scene object visibility
-        starField.visible = diagnostics.starsEnabled;
-        comet.visible = comet.visible && diagnostics.cometEnabled; // Respect phase visibility
-        debrisParticles.visible = diagnostics.particlesEnabled;
-        glassParticles.visible = diagnostics.particlesEnabled;
-        blackHoleGroup.visible = blackHoleGroup.visible && diagnostics.blackHoleEnabled; // Respect phase visibility
+      const diag2 = debugMode ? diagnosticsRef.current : diagnostics;
+
+starField.visible = diag2.starsEnabled;
+debrisParticles.visible = diag2.particlesEnabled;
+glassParticles.visible = diag2.particlesEnabled;
+
+// Deterministic vis (so toggling back ON works immediately)
+const cometShouldBeVisible =
+  (phase.name === 'comet_approach') ||
+  (phase.name === 'impact' && phase.phaseT < 0.24);
+
+comet.visible = diag2.cometEnabled && cometShouldBeVisible;
+
+const blackHoleShouldBeVisible =
+  phase.name === 'crater_settle' || phase.name === 'button_reveal' || phase.name === 'complete';
+
+blackHoleGroup.visible = diag2.blackHoleEnabled && blackHoleShouldBeVisible;
+
 
         // DEBUG: Log final visibility states
         if (frameCount <= 500 && (frameCount === 1 || phase.name === 'comet_approach' || phase.name === 'crater_settle')) {
