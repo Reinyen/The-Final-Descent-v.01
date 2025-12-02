@@ -52,6 +52,18 @@ export class IntroScene {
     // Create scene
     this.scene = new THREE.Scene();
 
+    // Add lighting for reflective materials
+    const ambientLight = new THREE.AmbientLight(0x404060, 0.8);
+    this.scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0x8080ff, 0.5);
+    directionalLight.position.set(5, 10, 7.5);
+    this.scene.add(directionalLight);
+
+    const rimLight = new THREE.DirectionalLight(0xff80ff, 0.3);
+    rimLight.position.set(-5, -5, -10);
+    this.scene.add(rimLight);
+
     // Create camera
     this.camera = new THREE.PerspectiveCamera(
       75,
