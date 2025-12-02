@@ -81,7 +81,7 @@ export class Timeline {
     this.scene.updateStarfield(phase, elapsedTime);
 
     // Update comet (position, heat)
-    this.scene.updateComet(phase, elapsedTime);
+    this.scene.updateComet(phase, elapsedTime, deltaTime);
 
     // Update explosion (explosion, implosion, shockwave)
     this.scene.updateExplosion(phase, elapsedTime, deltaTime);
