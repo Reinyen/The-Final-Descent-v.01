@@ -206,16 +206,10 @@ class IntroPageApp {
     this.isTransitioning = true;
     this.transition.start(() => {
       // This callback is called when transition completes
-      console.log('[IntroPage] Transition complete, navigating to next page');
+      console.log('[IntroPage] Transition complete, navigating to Roster Selection');
 
       // Navigate to Roster Selection UI
-      // For now, show alert. Replace with actual navigation:
-      // window.location.href = '/roster-selection';
-      alert('🌌 Welcome to The Final Descent!\n\nTransitioning to Roster Selection...\n\n(This would navigate to the next page)');
-
-      // Reset for demo purposes (remove in production)
-      this.isTransitioning = false;
-      window.location.reload();
+      window.location.href = 'roster-selection.html';
     });
   }
 

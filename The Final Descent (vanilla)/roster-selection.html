@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roster Selection - The Final Descent</title>
+
+  <!-- Google Fonts per GDD §7.2 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+  <!-- Roster Selection Styles -->
+  <link rel="stylesheet" href="styles/roster-main.css">
+  <link rel="stylesheet" href="styles/roster-animations.css">
+</head>
+<body>
+  <!-- Three.js Canvas Container (Layer A per GDD §3.1) -->
+  <!-- Per GDD §3.2: pointer-events: none to prevent input interception -->
+  <div id="roster-canvas-container"></div>
+
+  <!-- UI Overlay (Layer B per GDD §3.1) -->
+  <div id="roster-ui-overlay">
+
+    <!-- Title Area (Top 20% per GDD §6.1) -->
+    <div id="roster-title-area" class="hidden">
+      <h1 id="roster-title">Choose Your Souls</h1>
+    </div>
+
+    <!-- Living Cards Row (Middle 50% per GDD §6.1) -->
+    <div id="living-container">
+      <div id="living-cards-scroll-wrapper">
+        <div id="living-cards-row">
+          <!-- 3 Living cards will be dynamically generated here -->
+          <!-- Template structure:
+          <div class="living-card" data-char-id="char_001_voidwalker">
+            <div class="living-card-inner">
+              <div class="card-constellation"></div>
+              <div class="card-particles"></div>
+              <div class="card-content">
+                <h2 class="char-name">Kael the Voidwalker</h2>
+                <p class="char-role">Shadow Assassin</p>
+              </div>
+              <div class="selection-marker hidden">✦</div>
+            </div>
+          </div>
+          -->
+        </div>
+      </div>
+      <!-- Scroll edge fades per GDD §6.2 -->
+      <div class="scroll-edge-fade left hidden"></div>
+      <div class="scroll-edge-fade right hidden"></div>
+    </div>
+
+    <!-- Popover (appears on hover per GDD §8.2) -->
+    <div id="hover-popover" class="hidden">
+      <div class="popover-header">
+        <h3 id="popover-name"></h3>
+        <p id="popover-role"></p>
+      </div>
+      <div class="popover-divider"></div>
+      <div class="popover-stats">
+        <div class="stat-item">
+          <span class="stat-label">HP</span>
+          <span class="stat-value stat-hp" id="popover-hp"></span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">CON</span>
+          <span class="stat-value stat-con" id="popover-con"></span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">SPD</span>
+          <span class="stat-value stat-spd" id="popover-spd"></span>
+        </div>
+      </div>
+      <div class="popover-divider"></div>
+      <div class="popover-abilities">
+        <h4>Abilities</h4>
+        <div id="popover-abilities-list">
+          <!-- Abilities will be dynamically generated -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Zone (Bottom 30% per GDD §6.1) -->
+    <div id="bottom-zone">
+
+      <!-- Fallen Portraits Row (Left) per GDD §6.3 -->
+      <div id="fallen-container">
+        <div id="fallen-portraits-row">
+          <!-- 3 Fallen portraits will be dynamically generated here -->
+          <!-- Template structure:
+          <div class="fallen-portrait" data-char-id="char_004_grimkeeper">
+            <div class="fallen-portrait-inner">
+              <div class="fracture-overlay"></div>
+              <div class="fallen-shimmer"></div>
+              <p class="fallen-name">Mordain Grimkeeper</p>
+            </div>
+          </div>
+          -->
+        </div>
+      </div>
+
+      <!-- Reroll Controls (Center) per GDD §6.4 -->
+      <div id="reroll-controls">
+        <div id="reroll-display">
+          <p id="reroll-label">Celestial Rerolls</p>
+          <div id="reroll-stars">
+            <span class="reroll-star active" data-index="0">⭐</span>
+            <span class="reroll-star active" data-index="1">⭐</span>
+            <span class="reroll-star active" data-index="2">⭐</span>
+          </div>
+        </div>
+        <div id="reroll-buttons">
+          <button
+            id="single-reroll-btn"
+            class="reroll-btn"
+            aria-label="Single Reroll - Replace selected soul (costs 2 rerolls)"
+            disabled>
+            <span class="btn-icon">⟲</span>
+            <span class="btn-text">Single Reroll</span>
+            <span class="btn-cost">(2)</span>
+          </button>
+          <button
+            id="total-reroll-btn"
+            class="reroll-btn"
+            aria-label="Total Reroll - Replace all souls (costs 1 reroll)"
+            disabled>
+            <span class="btn-icon">⟳</span>
+            <span class="btn-text">Total Reroll</span>
+            <span class="btn-cost">(1)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Primary Confirm Button (Right) per GDD §6.4 and §10 -->
+      <div id="confirm-container">
+        <button
+          id="descend-btn"
+          aria-label="Descend with these souls - Start the descent"
+          disabled>
+          DESCEND WITH THESE SOULS
+        </button>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Load Three.js from CDN -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.181.2/examples/jsm/"
+      }
+    }
+  </script>
+
+  <!-- Main application entry -->
+  <script type="module" src="scripts/roster-main.js"></script>
+</body>
+</html>

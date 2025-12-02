@@ -1,0 +1,357 @@
+/**
+ * Roster Selection - Animations
+ * Implements animation effects per GDD requirements
+ */
+
+/* ========================================
+   CARD PULSE ANIMATION (Per GDD §7.3)
+   Gentle 3s cycle pulse on Living cards
+   ======================================== */
+
+@keyframes cardPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(232, 244, 253, 0.3),
+      inset 0 0 60px rgba(232, 244, 253, 0.05);
+  }
+  50% {
+    box-shadow:
+      0 0 30px rgba(232, 244, 253, 0.5),
+      inset 0 0 80px rgba(232, 244, 253, 0.08);
+  }
+}
+
+.living-card-inner {
+  animation: cardPulse 3s ease-in-out infinite;
+}
+
+/* Stronger pulse when selected */
+@keyframes selectedPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 40px rgba(255, 215, 0, 0.5),
+      inset 0 0 80px rgba(255, 215, 0, 0.08);
+  }
+  50% {
+    box-shadow:
+      0 0 60px rgba(255, 215, 0, 0.8),
+      inset 0 0 120px rgba(255, 215, 0, 0.12);
+  }
+}
+
+.living-card.selected .living-card-inner {
+  animation: selectedPulse 2s ease-in-out infinite;
+}
+
+/* ========================================
+   REROLL STAR CRUMBLE (Per GDD §8.4)
+   Crumble to ash when spent
+   ======================================== */
+
+@keyframes starCrumble {
+  0% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.7) translateY(5px);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(0.3) translateY(20px);
+    opacity: 0;
+  }
+}
+
+.reroll-star.crumbling {
+  animation: starCrumble 0.6s ease-out forwards;
+}
+
+/* ========================================
+   MEMORY FLICKER (Per GDD §12)
+   Fallen portraits briefly brighten
+   Every 20-30 seconds
+   ======================================== */
+
+@keyframes memoryFlicker {
+  0% {
+    opacity: 0.5;
+  }
+  10% {
+    opacity: 0.85;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.9;
+  }
+  90% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0.5;
+  }
+}
+
+.fallen-portrait-inner.flickering {
+  animation: memoryFlicker 2s ease-in-out;
+}
+
+/* Shimmer during flicker (150-250ms) */
+@keyframes shimmerFlash {
+  0%, 100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.fallen-shimmer.active {
+  animation: shimmerFlash 0.2s ease-in-out;
+}
+
+/* ========================================
+   PARTICLE FLOW (For confirm button)
+   Per GDD §10
+   ======================================== */
+
+@keyframes particleFlow {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(50px);
+  }
+}
+
+/* ========================================
+   FADE IN ANIMATIONS (Entry)
+   Per GDD §9.2 Phase E
+   ======================================== */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.9s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.9s ease-out forwards;
+}
+
+/* ========================================
+   CARD PARTICLES DRIFT (Subtle)
+   Per GDD §7.3 - subtle stars drifting
+   ======================================== */
+
+@keyframes particleDrift {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(-10px, 30px);
+    opacity: 0;
+  }
+}
+
+/* Individual particle elements can use this */
+.card-particle {
+  animation: particleDrift 4s linear infinite;
+}
+
+/* Stagger particle animations */
+.card-particle:nth-child(1) { animation-delay: 0s; }
+.card-particle:nth-child(2) { animation-delay: 0.5s; }
+.card-particle:nth-child(3) { animation-delay: 1s; }
+.card-particle:nth-child(4) { animation-delay: 1.5s; }
+.card-particle:nth-child(5) { animation-delay: 2s; }
+
+/* ========================================
+   HOVER ACCELERATION
+   Per GDD §7.3 - particles speed up on hover
+   ======================================== */
+
+.living-card:hover .card-particle {
+  animation-duration: 2s; /* Speed up from 4s to 2s */
+}
+
+/* ========================================
+   CHROMATIC ABERRATION SHADOW
+   Per GDD §7.3 and §10
+   Intro-style glitch effect (controlled)
+   ======================================== */
+
+.chromatic-shadow {
+  position: relative;
+}
+
+.chromatic-shadow::before,
+.chromatic-shadow::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: inherit;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.3;
+}
+
+.chromatic-shadow::before {
+  transform: translate(-1px, -1px);
+  border-color: rgba(150, 50, 200, 0.5); /* Purple */
+}
+
+.chromatic-shadow::after {
+  transform: translate(1px, 1px);
+  border-color: rgba(50, 200, 100, 0.5); /* Teal */
+}
+
+/* Apply to selected card halo */
+.living-card.selected .living-card-inner {
+  position: relative;
+}
+
+/* ========================================
+   BUTTON CHROMATIC PULSE
+   Per GDD §10 - intro-style glitch on confirm
+   ======================================== */
+
+@keyframes chromaticPulse {
+  0%, 100% {
+    text-shadow:
+      -1px -1px 0 rgba(150, 50, 200, 0.3),
+      1px 1px 0 rgba(50, 200, 100, 0.3);
+  }
+  50% {
+    text-shadow:
+      -2px -2px 0 rgba(150, 50, 200, 0.5),
+      2px 2px 0 rgba(50, 200, 100, 0.5);
+  }
+}
+
+#descend-btn:hover:not(:disabled) {
+  animation: chromaticPulse 1s ease-in-out infinite;
+}
+
+/* ========================================
+   SHATTER EFFECT (Reroll animations)
+   Per GDD §10.1 and §10.2
+   ======================================== */
+
+@keyframes shatter {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  30% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.8) rotate(5deg);
+  }
+}
+
+.living-card.shattering {
+  animation: shatter 0.5s ease-out forwards;
+  pointer-events: none;
+}
+
+/* ========================================
+   COALESCE EFFECT (Reroll animations)
+   Per GDD §10.1 and §10.2
+   ======================================== */
+
+@keyframes coalesce {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) rotate(-5deg);
+  }
+  70% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.living-card.coalescing {
+  animation: coalesce 0.6s ease-out forwards;
+}
+
+/* ========================================
+   CRACK SETTLE (Fallen portrait updates)
+   Per GDD §10.1 - brief effect when Fallen updates
+   ======================================== */
+
+@keyframes crackSettle {
+  0% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0.5;
+  }
+}
+
+.fallen-portrait-inner.settling {
+  animation: crackSettle 0.4s ease-out;
+}
+
+/* ========================================
+   REDUCED MOTION OVERRIDES
+   Per GDD §14
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Disable all animations except essential fades */
+  .living-card-inner,
+  .living-card.selected .living-card-inner,
+  .reroll-star.crumbling,
+  .fallen-portrait-inner.flickering,
+  .fallen-shimmer.active,
+  .card-particle,
+  #descend-btn:hover:not(:disabled),
+  .living-card.shattering,
+  .living-card.coalescing,
+  .fallen-portrait-inner.settling {
+    animation: none !important;
+  }
+
+  /* Keep only opacity transitions */
+  * {
+    transition-property: opacity !important;
+  }
+}
