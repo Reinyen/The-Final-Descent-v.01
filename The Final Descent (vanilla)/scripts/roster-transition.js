@@ -173,41 +173,77 @@ export class RosterTransition {
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
     // Shader material for particles
-    const material = new THREE.ShaderMaterial({
-      uniforms: {},
-      vertexShader: `
-        attribute float size;
-        attribute float lifetime;
-        attribute float maxLifetime;
-        varying float vAlpha;
+    // Using PointsMaterial as fallback if ShaderMaterial fails
+    let material;
+    try {
+      material = new THREE.ShaderMaterial({
+        uniforms: {},
+        vertexShader: `
+          attribute float size;
+          attribute float lifetime;
+          attribute float maxLifetime;
+          varying float vAlpha;
 
-        void main() {
-          vAlpha = smoothstep(0.0, 0.2, lifetime / maxLifetime) * smoothstep(1.0, 0.7, lifetime / maxLifetime);
+          void main() {
+            // Safe division to avoid divide-by-zero
+            float lifetimeRatio = maxLifetime > 0.0 ? lifetime / maxLifetime : 0.0;
+            vAlpha = smoothstep(0.0, 0.2, lifetimeRatio) * smoothstep(1.0, 0.7, lifetimeRatio);
 
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = size * (300.0 / -mvPosition.z);
-          gl_Position = projectionMatrix * mvPosition;
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            float viewDistance = max(abs(mvPosition.z), 0.1);
+            gl_PointSize = size * (300.0 / viewDistance);
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          varying float vAlpha;
+
+          void main() {
+            float dist = length(gl_PointCoord - vec2(0.5));
+            if (dist > 0.5) discard;
+
+            float alpha = (1.0 - smoothstep(0.3, 0.5, dist)) * vAlpha;
+
+            vec3 color = vec3(1.0, 0.843, 0.0);
+            gl_FragColor = vec4(color, alpha);
+          }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+
+      console.log('[RosterTransition] ShaderMaterial created successfully');
+    } catch (error) {
+      console.error('[RosterTransition] ShaderMaterial failed, using fallback:', error);
+      // Fallback to basic PointsMaterial
+      material = new THREE.PointsMaterial({
+        color: 0xFFD700,
+        size: 0.1,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+    }
+
+    const points = new THREE.Points(geometry, material);
+
+    // Log shader compilation status
+    if (material.isShaderMaterial) {
+      points.onBeforeRender = function(renderer) {
+        const gl = renderer.getContext();
+        const program = renderer.properties.get(material).programs?.values().next().value;
+        if (program && program.diagnostics) {
+          if (!program.diagnostics.runnable) {
+            console.error('[RosterTransition] Shader not runnable:', program.diagnostics);
+          }
         }
-      `,
-      fragmentShader: `
-        varying float vAlpha;
+        points.onBeforeRender = () => {}; // Only check once
+      };
+    }
 
-        void main() {
-          float dist = length(gl_PointCoord - vec2(0.5));
-          if (dist > 0.5) discard;
-
-          float alpha = (1.0 - smoothstep(0.3, 0.5, dist)) * vAlpha;
-
-          vec3 color = vec3(1.0, 0.843, 0.0);
-          gl_FragColor = vec4(color, alpha);
-        }
-      `,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    return new THREE.Points(geometry, material);
+    return points;
   }
 
   /**
