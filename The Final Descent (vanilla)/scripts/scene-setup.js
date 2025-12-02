@@ -103,17 +103,19 @@ export class IntroScene {
       this.qualityConfig
     );
 
-    // Initialize starfield
+    // Initialize starfield (Layer 1 for lensing)
     this.starfield = new Starfield(this.qualityConfig, maxPointSize);
-    this.scene.add(this.starfield.getMesh());
+    const starfieldMesh = this.starfield.getMesh();
+    starfieldMesh.layers.set(1); // Starfield on layer 1 for selective lensing
+    this.scene.add(starfieldMesh);
 
-    // Initialize comet
+    // Initialize comet (default layer 0)
     this.comet = new Comet();
     this.scene.add(this.comet.getMesh());
     this.scene.add(this.comet.getTrail()); // Add trail particles
     this.scene.add(this.comet.getDebrisParticles()); // Add debris particles
 
-    // Initialize black hole
+    // Initialize black hole (default layer 0 - not affected by lensing)
     this.blackHole = new BlackHole();
     this.scene.add(this.blackHole.getGroup());
 
