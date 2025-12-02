@@ -44,43 +44,6 @@
   }
 }
 
-/* Floating animation for title - moves around screen */
-@keyframes float-around {
-  0% {
-    transform: translate(-50%, -50%) translate(0px, 0px);
-  }
-  10% {
-    transform: translate(-50%, -50%) translate(80px, -40px);
-  }
-  20% {
-    transform: translate(-50%, -50%) translate(-60px, 60px);
-  }
-  30% {
-    transform: translate(-50%, -50%) translate(100px, 30px);
-  }
-  40% {
-    transform: translate(-50%, -50%) translate(-40px, -70px);
-  }
-  50% {
-    transform: translate(-50%, -50%) translate(70px, 80px);
-  }
-  60% {
-    transform: translate(-50%, -50%) translate(-90px, -30px);
-  }
-  70% {
-    transform: translate(-50%, -50%) translate(50px, -60px);
-  }
-  80% {
-    transform: translate(-50%, -50%) translate(-70px, 40px);
-  }
-  90% {
-    transform: translate(-50%, -50%) translate(60px, -50px);
-  }
-  100% {
-    transform: translate(-50%, -50%) translate(0px, 0px);
-  }
-}
-
 /* Apply glitch-in animation */
 .glitch-in {
   animation: glitch-in 600ms ease-out forwards;
@@ -91,9 +54,28 @@
   animation: glitch 150ms ease-in-out;
 }
 
-/* Apply floating animation to title - floats all around */
-#main-title {
-  animation: float-around 12s ease-in-out infinite;
+/* Glitch out animation - title disappears */
+@keyframes glitch-out {
+  0% {
+    opacity: 1;
+    transform: translate(0);
+  }
+  20% {
+    opacity: 0.7;
+    transform: translate(-5px, 5px);
+  }
+  40% {
+    opacity: 0.3;
+    transform: translate(5px, -5px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0);
+  }
+}
+
+.glitch-out {
+  animation: glitch-out 300ms ease-out forwards;
 }
 
 /* Eerie pulsating glow animation for button (purple/green) */
@@ -113,7 +95,8 @@
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   .glitch-in,
-  .glitching {
+  .glitching,
+  .glitch-out {
     animation: none !important;
   }
 

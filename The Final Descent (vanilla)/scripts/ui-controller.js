@@ -14,6 +14,10 @@ export class UIController {
     this.lastTitleGlitch = -10;
     this.lastButtonGlitch = -10;
 
+    // Glitch teleport state
+    this.nextTitleGlitchTime = null;
+    this.titleGlitchInProgress = false;
+
     // Glitch timeouts for cleanup
     this.glitchTimeouts = new Set();
 
@@ -62,6 +66,10 @@ export class UIController {
     if (this.titleVisible) return;
 
     this.titleVisible = true;
+
+    // Set initial random position
+    this.teleportTitle();
+
     this.titleContainer.classList.remove('hidden');
     this.titleContainer.classList.add('visible');
     this.mainTitle.classList.add('glitch-in');
@@ -85,15 +93,71 @@ export class UIController {
   }
 
   checkTitleGlitch(elapsedTime) {
-    if (elapsedTime - this.lastTitleGlitch < 1.0) return;
+    // Skip if glitch is already in progress
+    if (this.titleGlitchInProgress) return;
 
-    // Random interval: 1-5 seconds
-    const interval = 1.0 + Math.random() * 4.0;
-
-    if (elapsedTime - this.lastTitleGlitch >= interval) {
-      this.triggerGlitch(this.mainTitle, 120 + Math.random() * 60);
-      this.lastTitleGlitch = elapsedTime;
+    // Initialize next glitch time on first call
+    if (this.nextTitleGlitchTime === null) {
+      // Random interval: 0.8-4.8 seconds
+      this.nextTitleGlitchTime = elapsedTime + 0.8 + Math.random() * 4.0;
+      return;
     }
+
+    // Check if it's time to glitch
+    if (elapsedTime >= this.nextTitleGlitchTime) {
+      this.titleGlitchInProgress = true;
+
+      // Start glitch-out animation
+      this.mainTitle.classList.remove('glitch-in');
+      this.mainTitle.classList.add('glitch-out');
+
+      // After 300ms (glitch-out duration), teleport and glitch back in
+      const timeout1 = setTimeout(() => {
+        // Teleport to new random position
+        this.teleportTitle();
+
+        // Remove glitch-out and add glitch-in
+        this.mainTitle.classList.remove('glitch-out');
+        this.mainTitle.classList.add('glitch-in');
+
+        // Schedule next glitch (0.8-4.8 seconds)
+        this.nextTitleGlitchTime = elapsedTime + 0.8 + Math.random() * 4.0;
+        this.titleGlitchInProgress = false;
+
+        this.glitchTimeouts.delete(timeout1);
+      }, 300);
+
+      this.glitchTimeouts.add(timeout1);
+    }
+  }
+
+  teleportTitle() {
+    // Get viewport dimensions
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Get title dimensions (approximate based on font size)
+    // Using 3rem = 48px, and rough estimate of text width
+    const titleWidth = 500; // Approximate width for "THE FINAL DESCENT"
+    const titleHeight = 60; // Approximate height for 3rem font
+
+    // Calculate safe bounds (keep title fully visible with some padding)
+    const padding = 20;
+    const minX = padding + titleWidth / 2;
+    const maxX = viewportWidth - padding - titleWidth / 2;
+    const minY = padding + titleHeight / 2;
+    const maxY = viewportHeight - padding - titleHeight / 2;
+
+    // Generate random position within safe bounds
+    const randomX = minX + Math.random() * (maxX - minX);
+    const randomY = minY + Math.random() * (maxY - minY);
+
+    // Update position
+    this.titleContainer.style.left = `${randomX}px`;
+    this.titleContainer.style.top = `${randomY}px`;
+    this.titleContainer.style.transform = 'translate(-50%, -50%)';
+
+    console.log(`[UI] Title teleported to (${randomX.toFixed(0)}, ${randomY.toFixed(0)})`);
   }
 
   checkButtonGlitch(elapsedTime) {
