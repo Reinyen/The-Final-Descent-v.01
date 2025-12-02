@@ -43,24 +43,11 @@ export class Starfield {
       starOriginalPositions[i3 + 1] = starPositions[i3 + 1];
       starOriginalPositions[i3 + 2] = starPositions[i3 + 2];
 
-      // Star color distribution
-      const colorRand = Math.random();
-      if (colorRand < 0.7) {
-        // 70% white stars
-        starColors[i3] = 0.95 + Math.random() * 0.05;
-        starColors[i3 + 1] = 0.95 + Math.random() * 0.05;
-        starColors[i3 + 2] = 1.0;
-      } else if (colorRand < 0.9) {
-        // 20% blue-tinted
-        starColors[i3] = 0.85;
-        starColors[i3 + 1] = 0.9;
-        starColors[i3 + 2] = 1.0;
-      } else {
-        // 10% yellow-tinted
-        starColors[i3] = 1.0;
-        starColors[i3 + 1] = 0.9;
-        starColors[i3 + 2] = 0.8;
-      }
+      // Star color distribution - ALL WHITE with slight brightness variations
+      const brightness = 0.9 + Math.random() * 0.1; // 0.9 to 1.0
+      starColors[i3] = brightness;
+      starColors[i3 + 1] = brightness;
+      starColors[i3 + 2] = brightness;
 
       // Base size: weighted distribution for crisp pinpoints
       const sizeRand = Math.random();
@@ -219,6 +206,11 @@ export class Starfield {
     } else {
       this.starMaterial.uniforms.baseOpacity.value = 1.0;
     }
+
+    // Automatic slow rotation (inspired by canvas 3D rotation)
+    // Rotate on both axes for interesting motion
+    this.starField.rotation.x += 0.0002;
+    this.starField.rotation.y += 0.0003;
   }
 
   getMesh() {
