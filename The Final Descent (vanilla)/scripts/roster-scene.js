@@ -108,6 +108,61 @@ export class RosterScene {
   }
 
   /**
+   * Create star-shaped texture for particles
+   */
+  createStarTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+
+    const centerX = 32;
+    const centerY = 32;
+    const outerRadius = 30;
+    const innerRadius = 12;
+    const numPoints = 5;
+
+    // Draw star shape
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.beginPath();
+
+    for (let i = 0; i < numPoints * 2; i++) {
+      const angle = (i * Math.PI) / numPoints - Math.PI / 2;
+      const radius = i % 2 === 0 ? outerRadius : innerRadius;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius;
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+
+    ctx.closePath();
+
+    // Create radial gradient for glow
+    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, outerRadius);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
+    gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // Add bright center
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  /**
    * Create starfield
    * Per GDD §12: Subtle stardust drifting downward
    */
@@ -146,19 +201,23 @@ export class RosterScene {
       }
 
       // Size variation
-      sizes[i] = Math.random() * 2 + 0.5;
+      sizes[i] = Math.random() * 3 + 1;
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-    // Shader material for stars - Using PointsMaterial to avoid shader errors
+    // Create star-shaped texture
+    const starTexture = this.createStarTexture();
+
+    // Material with star texture
     const material = new THREE.PointsMaterial({
+      map: starTexture,
       color: 0xFFFFFF,
-      size: 1.5,
+      size: 2.5,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9,
       vertexColors: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -200,11 +259,15 @@ export class RosterScene {
     geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
     geometry.setAttribute('lifetime', new THREE.BufferAttribute(lifetimes, 1));
 
+    // Create star-shaped texture
+    const starTexture = this.createStarTexture();
+
     const material = new THREE.PointsMaterial({
+      map: starTexture,
       color: 0xFFD700, // Golden
-      size: 2.5,
+      size: 3.5,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.7,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       sizeAttenuation: true
