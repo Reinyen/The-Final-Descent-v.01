@@ -50,6 +50,30 @@ body {
 }
 
 /* ========================================
+   SELECTION PARTICLE EFFECT CONTAINER
+   Positioned behind selected card
+   ======================================== */
+
+#selection-effect-container {
+  position: fixed;
+  width: 350px;
+  height: 450px;
+  z-index: 5; /* Between background and UI overlay */
+  pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+#selection-effect-container.hidden {
+  opacity: 0;
+}
+
+#selection-effect-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ========================================
    UI OVERLAY (Layer B)
    Per GDD §3.1
    ======================================== */
@@ -175,6 +199,7 @@ body {
   box-shadow:
     0 0 20px rgba(232, 244, 253, 0.3),
     inset 0 0 60px rgba(232, 244, 253, 0.05);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* Constellation background (placeholder) */
@@ -229,12 +254,14 @@ body {
   letter-spacing: 0.05em;
 }
 
-/* Hover state per GDD §7.3 */
+/* Hover state - Golden glow that fades in */
 .living-card:hover .living-card-inner {
-  border-color: rgba(232, 244, 253, 0.8);
+  border-color: rgba(255, 215, 0, 0.5);
   box-shadow:
-    0 0 30px rgba(232, 244, 253, 0.5),
-    inset 0 0 60px rgba(232, 244, 253, 0.08);
+    0 0 30px rgba(255, 215, 0, 0.4),
+    0 0 60px rgba(255, 215, 0, 0.2),
+    inset 0 0 60px rgba(255, 215, 0, 0.08);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* Selection marker per GDD §7.3 and §8.3 */
@@ -367,12 +394,26 @@ body {
   margin-bottom: 0;
 }
 
+.ability-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
 .ability-name {
   font-family: 'Inter', sans-serif;
   font-size: 0.9rem;
   font-weight: 600;
   color: #E8F4FD;
-  margin-bottom: 0.25rem;
+}
+
+.ability-sp-cost {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #FFD700; /* Golden SP cost */
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
 }
 
 .ability-description {
