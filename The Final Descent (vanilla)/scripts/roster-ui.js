@@ -98,7 +98,7 @@ export class RosterUI {
    */
   createLivingCard(char) {
     const card = document.createElement('div');
-    card.className = 'living-card';
+    card.className = 'living-card golden-glow'; // Add golden-glow class for persistent glow
     card.dataset.charId = char.id;
 
     card.innerHTML = `
