@@ -175,9 +175,14 @@ export class RosterTransition {
     // Shader material for particles
     const material = new THREE.ShaderMaterial({
       vertexShader: `
+        attribute vec3 position;
         attribute float size;
         attribute float lifetime;
         attribute float maxLifetime;
+
+        uniform mat4 modelViewMatrix;
+        uniform mat4 projectionMatrix;
+
         varying float vAlpha;
 
         void main() {
@@ -189,6 +194,8 @@ export class RosterTransition {
         }
       `,
       fragmentShader: `
+        precision highp float;
+
         varying float vAlpha;
 
         void main() {
