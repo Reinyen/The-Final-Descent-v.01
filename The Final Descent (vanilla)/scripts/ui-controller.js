@@ -85,10 +85,10 @@ export class UIController {
   }
 
   checkTitleGlitch(elapsedTime) {
-    if (elapsedTime - this.lastTitleGlitch < 3.0) return;
+    if (elapsedTime - this.lastTitleGlitch < 1.0) return;
 
-    // Random interval: 3-7 seconds
-    const interval = 3.0 + Math.random() * 4.0;
+    // Random interval: 1-5 seconds
+    const interval = 1.0 + Math.random() * 4.0;
 
     if (elapsedTime - this.lastTitleGlitch >= interval) {
       this.triggerGlitch(this.mainTitle, 120 + Math.random() * 60);

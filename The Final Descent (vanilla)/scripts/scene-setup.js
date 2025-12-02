@@ -231,6 +231,18 @@ export class IntroScene {
     this.starfield.handleResize();
   }
 
+  getCamera() {
+    return this.camera;
+  }
+
+  getStarfield() {
+    return this.starfield;
+  }
+
+  getBlackHole() {
+    return this.blackHole;
+  }
+
   destroy() {
     console.log('[IntroScene] Destroying...');
 

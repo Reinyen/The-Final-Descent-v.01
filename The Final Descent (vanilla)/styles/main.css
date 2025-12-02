@@ -87,7 +87,7 @@ body {
 #begin-button {
   font-family: 'Rajdhani', Arial, sans-serif;
   font-weight: 600;
-  font-size: 1rem;
+  font-size: 0.75rem; /* Reduced by 25% from 1rem */
   letter-spacing: 0.2em;
   color: #ffffff;
   background: transparent;
@@ -111,8 +111,8 @@ body {
 }
 
 #begin-button:focus-visible {
-  box-shadow: 0 0 0 2px rgba(0, 255, 255, 0.6);
-  border-radius: 4px;
+  /* Removed teal border - no box-shadow */
+  outline: none;
 }
 
 #begin-button:disabled {
@@ -167,7 +167,7 @@ body {
   }
 
   #begin-button {
-    font-size: 0.875rem;
+    font-size: 0.65625rem; /* 25% reduced from 0.875rem */
   }
 }
 
