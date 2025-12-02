@@ -118,7 +118,7 @@ export class RosterTransition {
           positions: particleSystem.geometry.attributes.position,
           velocities: particleSystem.geometry.attributes.velocity,
           lifetimes: particleSystem.geometry.attributes.lifetime,
-          maxLifetime: particleSystem.geometry.attributes.maxLifetime,
+          maxLifetimes: particleSystem.geometry.attributes.maxLifetime,
           particleCount: 600
         }
       });
