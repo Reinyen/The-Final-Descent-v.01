@@ -44,19 +44,40 @@
   }
 }
 
-/* Floating animation for title */
-@keyframes float {
-  0%, 100% {
-    transform: translate(0, 0);
+/* Floating animation for title - moves around screen */
+@keyframes float-around {
+  0% {
+    transform: translate(-50%, -50%) translate(0px, 0px);
   }
-  25% {
-    transform: translate(8px, -12px);
+  10% {
+    transform: translate(-50%, -50%) translate(80px, -40px);
+  }
+  20% {
+    transform: translate(-50%, -50%) translate(-60px, 60px);
+  }
+  30% {
+    transform: translate(-50%, -50%) translate(100px, 30px);
+  }
+  40% {
+    transform: translate(-50%, -50%) translate(-40px, -70px);
   }
   50% {
-    transform: translate(-6px, 8px);
+    transform: translate(-50%, -50%) translate(70px, 80px);
   }
-  75% {
-    transform: translate(10px, 6px);
+  60% {
+    transform: translate(-50%, -50%) translate(-90px, -30px);
+  }
+  70% {
+    transform: translate(-50%, -50%) translate(50px, -60px);
+  }
+  80% {
+    transform: translate(-50%, -50%) translate(-70px, 40px);
+  }
+  90% {
+    transform: translate(-50%, -50%) translate(60px, -50px);
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(0px, 0px);
   }
 }
 
@@ -70,9 +91,9 @@
   animation: glitch 150ms ease-in-out;
 }
 
-/* Apply floating animation to title */
+/* Apply floating animation to title - floats all around */
 #main-title {
-  animation: float 8s ease-in-out infinite;
+  animation: float-around 12s ease-in-out infinite;
 }
 
 /* Eerie pulsating glow animation for button (purple/green) */

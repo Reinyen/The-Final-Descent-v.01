@@ -1,6 +1,7 @@
 import { IntroScene } from './scene-setup.js';
 import { Timeline } from './timeline.js';
 import { UIController } from './ui-controller.js';
+import { BlackHoleTransition } from './transition.js';
 
 class IntroPageApp {
   constructor() {
@@ -12,8 +13,10 @@ class IntroPageApp {
     this.scene = null;
     this.timeline = null;
     this.uiController = null;
+    this.transition = null;
     this.animationFrameId = null;
     this.isInitialized = false;
+    this.isTransitioning = false;
   }
 
   async init() {
@@ -42,6 +45,14 @@ class IntroPageApp {
     this.uiController = new UIController({
       onBegin: () => this.handleBegin()
     });
+
+    // Initialize transition controller
+    this.transition = new BlackHoleTransition(
+      this.scene.scene,
+      this.scene.getCamera(),
+      this.scene.getStarfield(),
+      this.scene.getBlackHole()
+    );
 
     // Start animation loop
     this.startAnimationLoop();
@@ -119,6 +130,13 @@ class IntroPageApp {
       const deltaTime = this.scene.clock.getDelta();
       const elapsedTime = this.scene.clock.getElapsedTime();
 
+      // If transitioning, only update transition
+      if (this.isTransitioning) {
+        this.transition.update(deltaTime);
+        this.scene.render(null, elapsedTime);
+        return;
+      }
+
       // Update timeline and get phase info
       const phase = this.timeline.update(elapsedTime, deltaTime);
 
@@ -183,9 +201,22 @@ class IntroPageApp {
 
   handleBegin() {
     console.log('[IntroPage] User clicked BEGIN');
-    // Transition to main game
-    // Example: window.location.href = '/game';
-    alert('🌌 Welcome to The Final Descent!\n\nThe game would start here.\n\nThis is a demo of the intro sequence.');
+
+    // Start black hole descent transition
+    this.isTransitioning = true;
+    this.transition.start(() => {
+      // This callback is called when transition completes
+      console.log('[IntroPage] Transition complete, navigating to next page');
+
+      // Navigate to Roster Selection UI
+      // For now, show alert. Replace with actual navigation:
+      // window.location.href = '/roster-selection';
+      alert('🌌 Welcome to The Final Descent!\n\nTransitioning to Roster Selection...\n\n(This would navigate to the next page)');
+
+      // Reset for demo purposes (remove in production)
+      this.isTransitioning = false;
+      window.location.reload();
+    });
   }
 
   destroy() {
