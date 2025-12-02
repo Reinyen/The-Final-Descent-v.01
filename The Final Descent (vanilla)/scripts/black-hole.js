@@ -6,6 +6,12 @@ export class BlackHole {
     this.innerCoreMaterial = null;
     this.accretionDiskMaterial = null;
     this.outerGlowMaterial = null;
+    this.eventHorizonMaterial = null;
+    this.eventHorizonMesh = null;
+
+    // CubeCamera for reflections
+    this.cubeCamera = null;
+    this.cubeRenderTarget = null;
 
     // Position at Z=-70 (inside star volume for depth coherence)
     this.position = new THREE.Vector3(0, -8, -70);
@@ -19,18 +25,28 @@ export class BlackHole {
     this.blackHoleGroup.scale.set(0, 0, 0);
     this.blackHoleGroup.visible = false;
 
-    // Layer 1: Event Horizon (reflective glass-like sphere) - 3x larger
+    // Create CubeCamera for real-time reflections
+    this.cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
+      format: THREE.RGBAFormat,
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter
+    });
+    this.cubeCamera = new THREE.CubeCamera(0.1, 1000, this.cubeRenderTarget);
+    this.cubeCamera.position.copy(this.position);
+
+    // Layer 1: Event Horizon (reflective dark mirror sphere) - 3x larger
     const eventHorizonGeometry = new THREE.SphereGeometry(7.5, 64, 64); // Higher segments for smooth reflections
-    const eventHorizonMaterial = new THREE.MeshStandardMaterial({
-      color: 0x000000,
-      metalness: 1.0,      // Fully metallic for reflections
-      roughness: 0.05,     // Very smooth/glossy surface
-      envMapIntensity: 1.5, // Enhance reflection intensity
+    this.eventHorizonMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0a0a0a,     // Very dark gray (not pure black) for subtle tint
+      metalness: 1.0,      // Fully metallic for mirror-like reflections
+      roughness: 0.0,      // Perfectly smooth for glass-like appearance
+      envMap: this.cubeRenderTarget.texture, // Dynamic reflection map
+      envMapIntensity: 0.9, // Strong reflections
       depthWrite: true,
       depthTest: true
     });
-    const eventHorizon = new THREE.Mesh(eventHorizonGeometry, eventHorizonMaterial);
-    this.blackHoleGroup.add(eventHorizon);
+    this.eventHorizonMesh = new THREE.Mesh(eventHorizonGeometry, this.eventHorizonMaterial);
+    this.blackHoleGroup.add(this.eventHorizonMesh);
 
     // Layer 2: Inner Core (volumetric with spiral patterns) - 3x larger
     const innerCoreGeometry = new THREE.SphereGeometry(10.5, 32, 32);
@@ -244,6 +260,20 @@ export class BlackHole {
     }
   }
 
+  // Update reflection map - call this before rendering
+  updateReflections(renderer, scene) {
+    if (!this.cubeCamera || !this.eventHorizonMesh) return;
+
+    // Hide the event horizon temporarily to avoid self-reflection
+    this.eventHorizonMesh.visible = false;
+
+    // Update the cube camera to capture the environment
+    this.cubeCamera.update(renderer, scene);
+
+    // Show the event horizon again
+    this.eventHorizonMesh.visible = true;
+  }
+
   getGroup() {
     return this.blackHoleGroup;
   }
@@ -253,6 +283,9 @@ export class BlackHole {
   }
 
   destroy() {
+    if (this.eventHorizonMaterial) {
+      this.eventHorizonMaterial.dispose();
+    }
     if (this.innerCoreMaterial) {
       this.innerCoreMaterial.dispose();
     }
@@ -261,6 +294,9 @@ export class BlackHole {
     }
     if (this.outerGlowMaterial) {
       this.outerGlowMaterial.dispose();
+    }
+    if (this.cubeRenderTarget) {
+      this.cubeRenderTarget.dispose();
     }
   }
 }
