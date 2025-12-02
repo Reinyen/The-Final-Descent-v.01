@@ -95,6 +95,7 @@ export class IntroScene {
     // Initialize comet
     this.comet = new Comet();
     this.scene.add(this.comet.getMesh());
+    this.scene.add(this.comet.getTrail()); // Add trail particles
 
     // Initialize black hole
     this.blackHole = new BlackHole();
