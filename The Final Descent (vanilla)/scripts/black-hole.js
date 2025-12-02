@@ -19,11 +19,13 @@ export class BlackHole {
     this.blackHoleGroup.scale.set(0, 0, 0);
     this.blackHoleGroup.visible = false;
 
-    // Layer 1: Event Horizon (solid black sphere) - 3x larger
-    const eventHorizonGeometry = new THREE.SphereGeometry(7.5, 32, 32);
-    const eventHorizonMaterial = new THREE.MeshBasicMaterial({
+    // Layer 1: Event Horizon (reflective glass-like sphere) - 3x larger
+    const eventHorizonGeometry = new THREE.SphereGeometry(7.5, 64, 64); // Higher segments for smooth reflections
+    const eventHorizonMaterial = new THREE.MeshStandardMaterial({
       color: 0x000000,
-      opacity: 1.0,
+      metalness: 1.0,      // Fully metallic for reflections
+      roughness: 0.05,     // Very smooth/glossy surface
+      envMapIntensity: 1.5, // Enhance reflection intensity
       depthWrite: true,
       depthTest: true
     });
