@@ -15,6 +15,8 @@ export class PostProcessing {
 
     this.composer = null;
     this.renderPass = null;
+    this.starfieldRenderTarget = null; // Render target for starfield with lensing
+    this.sceneRenderTarget = null; // Render target for rest of scene
     this.bloomPass = null;
     this.lensingPass = null; // Gravitational lensing pass
     this.fxaaPass = null;
@@ -27,19 +29,37 @@ export class PostProcessing {
     // Check HDR support
     const actualHDRSupport = this.checkHDRSupport();
 
+    const renderTargetParams = actualHDRSupport
+      ? {
+          type: THREE.HalfFloatType,
+          colorSpace: THREE.LinearSRGBColorSpace
+        }
+      : {};
+
+    // Create separate render targets for layered rendering
+    this.starfieldRenderTarget = new THREE.WebGLRenderTarget(
+      window.innerWidth,
+      window.innerHeight,
+      renderTargetParams
+    );
+
+    this.sceneRenderTarget = new THREE.WebGLRenderTarget(
+      window.innerWidth,
+      window.innerHeight,
+      renderTargetParams
+    );
+
     // Create composer with HDR render targets if supported
     this.composer = new EffectComposer(
       this.renderer,
       actualHDRSupport
-        ? new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-            type: THREE.HalfFloatType,
-            colorSpace: THREE.LinearSRGBColorSpace
-          })
+        ? new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, renderTargetParams)
         : undefined
     );
 
-    // Render Pass
+    // Render Pass - will be used for final composite
     this.renderPass = new RenderPass(this.scene, this.camera);
+    this.renderPass.clear = false; // Don't clear, we'll handle that manually
     this.composer.addPass(this.renderPass);
 
     // Bloom Pass - minimal constant bloom
@@ -181,11 +201,65 @@ export class PostProcessing {
   }
 
   render() {
+    // Save current camera layers
+    const originalLayers = this.camera.layers.mask;
+
+    // Step 1: Render starfield (layer 1) to separate render target
+    this.camera.layers.set(1); // Only render layer 1 (starfield)
+    this.renderer.setRenderTarget(this.starfieldRenderTarget);
+    this.renderer.clear();
+    this.renderer.render(this.scene, this.camera);
+
+    // Step 2: Apply lensing to starfield if enabled
+    if (this.lensingPass && this.lensingPass.uniforms.lensingStrength.value > 0.0) {
+      // Apply lensing shader to starfield texture
+      const lensedTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+      this.lensingPass.uniforms.tDiffuse.value = this.starfieldRenderTarget.texture;
+      this.renderer.setRenderTarget(lensedTarget);
+      this.lensingPass.render(this.renderer, lensedTarget, this.starfieldRenderTarget);
+
+      // Copy lensed result back to starfield target
+      this.renderer.setRenderTarget(this.starfieldRenderTarget);
+      this.renderer.render(this.lensingPass.fsQuad.material, lensedTarget);
+      lensedTarget.dispose();
+    }
+
+    // Step 3: Restore camera layers and render normally with starfield as background
+    this.camera.layers.mask = originalLayers;
+    this.camera.layers.enable(0); // Render layer 0 (everything except starfield)
+    this.camera.layers.disable(1); // Don't render starfield again
+
+    // Render main scene to composer with starfield as background
+    this.renderer.setRenderTarget(this.composer.writeBuffer);
+    this.renderer.clear();
+
+    // First blit the lensed starfield
+    const starfieldMaterial = new THREE.MeshBasicMaterial({
+      map: this.starfieldRenderTarget.texture,
+      depthTest: false,
+      depthWrite: false
+    });
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), starfieldMaterial);
+    quad.frustumCulled = false;
+    const quadScene = new THREE.Scene();
+    quadScene.add(quad);
+    const quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.renderer.render(quadScene, quadCamera);
+
+    // Then render the rest of the scene on top
+    this.renderer.render(this.scene, this.camera);
+
+    // Restore camera layers
+    this.camera.layers.mask = originalLayers;
+
+    // Apply remaining post-processing (bloom, FXAA, output)
     this.composer.render();
   }
 
   handleResize() {
     this.composer.setSize(window.innerWidth, window.innerHeight);
+    this.starfieldRenderTarget.setSize(window.innerWidth, window.innerHeight);
+    this.sceneRenderTarget.setSize(window.innerWidth, window.innerHeight);
     this.fxaaPass.uniforms['resolution'].value.set(
       1 / window.innerWidth,
       1 / window.innerHeight
@@ -195,6 +269,12 @@ export class PostProcessing {
   destroy() {
     if (this.composer) {
       this.composer.dispose();
+    }
+    if (this.starfieldRenderTarget) {
+      this.starfieldRenderTarget.dispose();
+    }
+    if (this.sceneRenderTarget) {
+      this.sceneRenderTarget.dispose();
     }
   }
 }
