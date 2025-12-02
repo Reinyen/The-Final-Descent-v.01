@@ -628,22 +628,12 @@ starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOf
         time: { value: 0.0 },
         starTexture: { value: starTexture },
         baseOpacity: { value: 1.0 },
-        starIntensity: { value: 0.85 }, // PHASE 4: Global intensity scalar (tunable)
+        starIntensity: { value: 0.85 },
         pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
         viewportHeight: { value: window.innerHeight },
-        maxPointSize: { value: maxPointSize } // PHASE 4: Device max point size
+        maxPointSize: { value: maxPointSize }
       },
-      const starMaterial = new THREE.ShaderMaterial({
-  uniforms: {
-    time: { value: 0.0 },
-    starTexture: { value: starTexture },
-    baseOpacity: { value: 1.0 },
-    starIntensity: { value: 0.85 },
-    pixelRatio: { value: Math.min(window.devicePixelRatio, qualityConfig.pixelRatioMax) },
-    viewportHeight: { value: window.innerHeight },
-    maxPointSize: { value: maxPointSize }
-  },
-  vertexShader: `
+      vertexShader: `
     attribute float baseSize;
     attribute float twinkleSeed;
     attribute float absorptionScale;
@@ -688,8 +678,8 @@ starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOf
 
       gl_Position = projectionMatrix * mvPosition;
     }
-  `,
-  fragmentShader: `
+      `,
+      fragmentShader: `
     uniform sampler2D starTexture;
 
     varying vec3 vColor;
@@ -707,11 +697,11 @@ starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOf
 
       gl_FragColor = vec4(finalColor, clamp(finalAlpha, 0.0, 1.0));
     }
-  `,
-  transparent: true,
-  blending: THREE.NormalBlending,
-  depthWrite: false
-});
+      `,
+      transparent: true,
+      blending: THREE.NormalBlending,
+      depthWrite: false
+    });
 
 
     const starField = new THREE.Points(starGeometry, starMaterial);
