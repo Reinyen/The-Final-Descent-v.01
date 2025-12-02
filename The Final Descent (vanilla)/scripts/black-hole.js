@@ -25,31 +25,36 @@ export class BlackHole {
     this.blackHoleGroup.scale.set(0, 0, 0);
     this.blackHoleGroup.visible = false;
 
-    // Create CubeCamera for real-time reflections
-    this.cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
+    // Create CubeCamera for real-time reflections with high resolution for glass-like clarity
+    this.cubeRenderTarget = new THREE.WebGLCubeRenderTarget(512, {
       format: THREE.RGBAFormat,
       generateMipmaps: true,
-      minFilter: THREE.LinearMipmapLinearFilter
+      minFilter: THREE.LinearMipmapLinearFilter,
+      magFilter: THREE.LinearFilter
     });
     this.cubeCamera = new THREE.CubeCamera(0.1, 1000, this.cubeRenderTarget);
     this.cubeCamera.position.copy(this.position);
 
-    // Layer 1: Event Horizon (reflective dark mirror sphere) - 3x larger
-    const eventHorizonGeometry = new THREE.SphereGeometry(7.5, 64, 64); // Higher segments for smooth reflections
+    // Layer 1: Event Horizon (reflective dark mirror sphere) - LARGEST solid sphere
+    const eventHorizonGeometry = new THREE.SphereGeometry(10.5, 64, 64); // Higher segments for smooth reflections
     this.eventHorizonMaterial = new THREE.MeshStandardMaterial({
-      color: 0x0a0a0a,     // Very dark gray (not pure black) for subtle tint
-      metalness: 1.0,      // Fully metallic for mirror-like reflections
-      roughness: 0.0,      // Perfectly smooth for glass-like appearance
+      color: 0x1a1a1a,     // Dark gray base to show reflections clearly
+      metalness: 1.0,      // Fully metallic for perfect mirror reflections
+      roughness: 0.0,      // Perfectly smooth glass surface
       envMap: this.cubeRenderTarget.texture, // Dynamic reflection map
-      envMapIntensity: 0.9, // Strong reflections
-      depthWrite: true,
+      envMapIntensity: 3.5, // Very strong reflections for visible mirror effect
+      side: THREE.FrontSide,
+      transparent: false,   // Completely opaque - no transparency
+      opacity: 1.0,
+      depthWrite: true,     // Write to depth buffer to occlude objects behind
       depthTest: true
     });
     this.eventHorizonMesh = new THREE.Mesh(eventHorizonGeometry, this.eventHorizonMaterial);
+    this.eventHorizonMesh.renderOrder = -1; // Render first to ensure it occludes properly
     this.blackHoleGroup.add(this.eventHorizonMesh);
 
-    // Layer 2: Inner Core (volumetric with spiral patterns) - 3x larger
-    const innerCoreGeometry = new THREE.SphereGeometry(10.5, 32, 32);
+    // Layer 2: Inner Core (volumetric with spiral patterns) - INSIDE event horizon
+    const innerCoreGeometry = new THREE.SphereGeometry(9.5, 32, 32);
     this.innerCoreMaterial = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       transparent: true,
@@ -86,7 +91,7 @@ export class BlackHole {
 
         void main() {
           // Polar coordinates
-          float radius = length(vPosition.xy) / 10.5;
+          float radius = length(vPosition.xy) / 9.5;
           float angle = atan(vPosition.y, vPosition.x);
 
           // 3 counter-rotating spiral layers
