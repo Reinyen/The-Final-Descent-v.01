@@ -103,10 +103,9 @@ export class IntroScene {
       this.qualityConfig
     );
 
-    // Initialize starfield (Layer 1 for lensing)
+    // Initialize starfield
     this.starfield = new Starfield(this.qualityConfig, maxPointSize);
     const starfieldMesh = this.starfield.getMesh();
-    starfieldMesh.layers.set(1); // Starfield on layer 1 for selective lensing
     this.scene.add(starfieldMesh);
 
     // Initialize comet (default layer 0)
