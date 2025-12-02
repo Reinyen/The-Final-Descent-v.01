@@ -52,8 +52,55 @@ class IntroPageApp {
     // Setup window resize handler
     this.setupResizeHandler();
 
+    // Initialize ripple effect (after scene is ready)
+    this.initializeRipples();
+
     this.isInitialized = true;
     console.log('[IntroPage] Initialization complete');
+  }
+
+  initializeRipples() {
+    // Wait for jQuery to be loaded
+    if (typeof jQuery === 'undefined') {
+      console.warn('[IntroPage] jQuery not loaded, skipping ripples');
+      return;
+    }
+
+    // Create ripple overlay element centered on black hole
+    const rippleOverlay = document.createElement('div');
+    rippleOverlay.id = 'ripple-overlay';
+    rippleOverlay.style.cssText = `
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 800px;
+      height: 800px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.6;
+    `;
+    document.getElementById('canvas-container').appendChild(rippleOverlay);
+
+    // Initialize ripples with specified settings
+    jQuery('#ripple-overlay').ripples({
+      resolution: 512,
+      dropRadius: 20,
+      perturbance: 0.04,
+      interactive: false
+    });
+
+    // Create automatic continuous ripples at reduced speed (0.2x)
+    setInterval(() => {
+      const centerX = 400; // Center of 800px overlay
+      const centerY = 400;
+      const radius = Math.random() * 150; // Within 150px from center
+      const angle = Math.random() * Math.PI * 2;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius;
+
+      jQuery('#ripple-overlay').ripples('drop', x, y, 20, 0.02);
+    }, 1000); // New ripple every second (slower than default)
   }
 
   detectQuality() {

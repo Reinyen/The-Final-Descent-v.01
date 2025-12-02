@@ -312,13 +312,13 @@ export class Comet {
       this.glowMaterial.uniforms.intensity.value = intensity;
 
       // Scale grows as it approaches (starts small, gets larger)
-      const scale = 0.3 + t * 0.7; // 0.3 to 1.0
+      // Final size is 2.5x larger than original
+      const scale = 0.3 + t * 2.2; // 0.3 to 2.5
       this.comet.scale.setScalar(scale);
 
-      // Scale down during impact
+      // Keep size at 2.5x during impact phase (for explosion)
       if (phase.name === 'impact') {
-        const impactScale = scale * (1.0 - phase.phaseT * 0.8); // Shrink to 20%
-        this.comet.scale.setScalar(impactScale);
+        this.comet.scale.setScalar(2.5);
       }
 
       // Update trail
