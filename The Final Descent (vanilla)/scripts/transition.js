@@ -23,7 +23,7 @@ export class BlackHoleTransition {
 
     // Black hole animation parameters
     this.startBlackHoleScale = 1.0;
-    this.targetBlackHoleScale = 15.0; // Gets much bigger
+    this.targetBlackHoleScale = 50.0; // Grows to fill entire screen
 
     // Fade overlay
     this.createFadeOverlay();
@@ -75,14 +75,15 @@ export class BlackHoleTransition {
     this.transitionTime += deltaTime;
     const t = Math.min(this.transitionTime / this.transitionDuration, 1.0);
 
-    // Easing function: starts slow, accelerates exponentially
-    const easedT = this.easeInExpo(t);
+    // Black hole growth: spans full 4 seconds with ease-in (starts slow, accelerates)
+    this.updateBlackHoleGrowth(t);
 
     // Phase 1: Fall into black hole (0-60% of transition)
     if (t < 0.6) {
-      this.updateCameraFall(easedT / 0.6);
-      this.updateBlackHoleGrowth(easedT / 0.6);
-      this.updateStarWarp(easedT / 0.6);
+      const phaseT = t / 0.6;
+      const easedT = this.easeInExpo(phaseT);
+      this.updateCameraFall(easedT);
+      this.updateStarWarp(easedT);
     }
 
     // Phase 2: Warp speed stars (40-80% of transition)
@@ -120,11 +121,14 @@ export class BlackHoleTransition {
   }
 
   updateBlackHoleGrowth(t) {
-    // Black hole grows larger as we approach
+    // Black hole grows larger over full 4 seconds
+    // Ease-in quartic: starts very slow, accelerates dramatically
+    const easedT = t * t * t * t;
+
     const scale = THREE.MathUtils.lerp(
       this.startBlackHoleScale,
       this.targetBlackHoleScale,
-      t * t // Quadratic easing
+      easedT
     );
 
     const blackHoleGroup = this.blackHole.getGroup();
