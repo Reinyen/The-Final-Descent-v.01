@@ -291,6 +291,31 @@ body {
   opacity: 1;
 }
 
+/* Golden glow retention after orb morph */
+.living-card.golden-glow .living-card-inner {
+  border-color: rgba(255, 215, 0, 0.3);
+  box-shadow:
+    0 0 25px rgba(255, 215, 0, 0.3),
+    0 0 50px rgba(255, 215, 0, 0.15),
+    inset 0 0 60px rgba(255, 215, 0, 0.06);
+  animation: subtle-golden-pulse 3s ease-in-out infinite;
+}
+
+@keyframes subtle-golden-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 25px rgba(255, 215, 0, 0.3),
+      0 0 50px rgba(255, 215, 0, 0.15),
+      inset 0 0 60px rgba(255, 215, 0, 0.06);
+  }
+  50% {
+    box-shadow:
+      0 0 30px rgba(255, 215, 0, 0.4),
+      0 0 60px rgba(255, 215, 0, 0.2),
+      inset 0 0 70px rgba(255, 215, 0, 0.08);
+  }
+}
+
 /* Disabled state (when UI locked) */
 .living-card.disabled {
   pointer-events: none;
