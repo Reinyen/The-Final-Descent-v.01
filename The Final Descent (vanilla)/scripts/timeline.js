@@ -83,6 +83,9 @@ export class Timeline {
     // Update comet (position, heat)
     this.scene.updateComet(phase, elapsedTime);
 
+    // Update explosion (explosion, implosion, shockwave)
+    this.scene.updateExplosion(phase, elapsedTime, deltaTime);
+
     // Update camera (shake during impact)
     this.scene.updateCamera(phase, elapsedTime);
 

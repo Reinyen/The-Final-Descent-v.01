@@ -5,6 +5,7 @@ import { Comet } from './comet.js';
 import { BlackHole } from './black-hole.js';
 import { ParticleSystem } from './particles.js';
 import { StarPhysics } from './physics.js';
+import { Explosion } from './explosion.js';
 
 const QUALITY_CONFIGS = {
   high: {
@@ -38,9 +39,11 @@ export class IntroScene {
     this.blackHole = null;
     this.particleSystem = null;
     this.starPhysics = null;
+    this.explosion = null;
 
     this.cameraBasePosition = new THREE.Vector3(0, 0, 30);
     this.prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.explosionTriggered = false;
   }
 
   async init() {
@@ -115,6 +118,11 @@ export class IntroScene {
       this.blackHole.getPosition()
     );
 
+    // Initialize explosion system
+    this.explosion = new Explosion();
+    this.scene.add(this.explosion.getExplosionMesh());
+    this.scene.add(this.explosion.getShockwave());
+
     console.log('[IntroScene] Initialization complete');
   }
 
@@ -124,6 +132,19 @@ export class IntroScene {
 
   updateComet(phase, elapsedTime) {
     this.comet.update(phase, elapsedTime);
+
+    // Trigger explosion at the end of comet approach
+    if (phase.name === 'impact' && !this.explosionTriggered) {
+      this.explosion.trigger();
+      this.explosionTriggered = true;
+      // Hide comet once explosion starts
+      this.comet.getMesh().visible = false;
+      this.comet.getTrail().visible = false;
+    }
+  }
+
+  updateExplosion(phase, elapsedTime, deltaTime) {
+    this.explosion.update(deltaTime, elapsedTime);
   }
 
   updateCamera(phase, elapsedTime) {
@@ -163,6 +184,13 @@ export class IntroScene {
   }
 
   updateBlackHole(phase, elapsedTime) {
+    // Only show black hole after explosion is complete
+    if (this.explosion.isComplete()) {
+      this.blackHole.getGroup().visible = true;
+    } else {
+      this.blackHole.getGroup().visible = false;
+    }
+
     this.blackHole.update(phase, elapsedTime, this.camera);
   }
 
@@ -197,6 +225,7 @@ export class IntroScene {
     if (this.comet) this.comet.destroy();
     if (this.blackHole) this.blackHole.destroy();
     if (this.particleSystem) this.particleSystem.destroy();
+    if (this.explosion) this.explosion.destroy();
     if (this.postProcessing) this.postProcessing.destroy();
 
     if (this.renderer) {
