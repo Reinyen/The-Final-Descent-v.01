@@ -73,8 +73,12 @@ export class Comet {
     this.comet = null;
     this.cometMaterial = null;
     this.glowMaterial = null;
+    this.plasmaGlowMaterial = null;
+    this.heatShieldMaterial = null;
     this.trail = null;
     this.trailParticles = [];
+    this.sonicBoomWaves = [];
+    this.fragmentDebris = [];
 
     // Comet trajectory: starts far away, comes toward viewer at angle
     // Start: upper right, far back
@@ -222,10 +226,131 @@ export class Comet {
     const cometGlow = new THREE.Mesh(glowGeometry, this.glowMaterial);
     this.comet.add(cometGlow);
 
+    // Create plasma glow layer (atmospheric entry effect)
+    const plasmaGeometry = new THREE.IcosahedronGeometry(3.5, 2);
+    this.plasmaGlowMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0.0 },
+        intensity: { value: 0.0 }
+      },
+      vertexShader: `
+        ${SIMPLEX_NOISE_3D}
+
+        uniform float time;
+        uniform float intensity;
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = position;
+
+          // Turbulent plasma distortion
+          vec3 noisePos = position + time * 2.0;
+          float turbulence = snoise(noisePos * 3.0) * intensity * 0.3;
+          vec3 displaced = position * (1.0 + turbulence);
+
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        uniform float intensity;
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+
+        void main() {
+          // Hot plasma colors (white-hot to orange-yellow)
+          vec3 color = mix(
+            vec3(1.0, 0.6, 0.2),  // Orange
+            vec3(1.0, 1.0, 0.9),  // White-hot
+            intensity
+          );
+
+          // Fresnel for edge glow
+          float fresnel = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 3.0);
+          float opacity = fresnel * intensity * 0.6;
+
+          gl_FragColor = vec4(color, opacity);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      side: THREE.FrontSide,
+      depthWrite: false
+    });
+
+    const plasmaGlow = new THREE.Mesh(plasmaGeometry, this.plasmaGlowMaterial);
+    this.comet.add(plasmaGlow);
+
+    // Create heat shield effect (compression heating)
+    const heatGeometry = new THREE.SphereGeometry(4.0, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    this.heatShieldMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0.0 },
+        intensity: { value: 0.0 }
+      },
+      vertexShader: `
+        uniform float time;
+        uniform float intensity;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+
+        void main() {
+          vUv = uv;
+          vNormal = normalize(normalMatrix * normal);
+
+          // Bow shock shape - compressed at front
+          vec3 pos = position;
+          pos.z += sin(vUv.y * 3.14159) * intensity * 0.5;
+
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        uniform float intensity;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+
+        void main() {
+          // Shock heating colors
+          vec3 shockColor = mix(
+            vec3(1.0, 0.4, 0.1),  // Red-orange
+            vec3(1.0, 1.0, 1.0),  // White
+            intensity * 0.7
+          );
+
+          // Brighter at center, fade to edges
+          float radial = 1.0 - length(vUv - vec2(0.5, 0.5)) * 2.0;
+          radial = max(0.0, radial);
+
+          float opacity = radial * intensity * 0.5;
+
+          gl_FragColor = vec4(shockColor, opacity);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    const heatShield = new THREE.Mesh(heatGeometry, this.heatShieldMaterial);
+    // Position heat shield in front of comet (direction of motion)
+    heatShield.rotation.x = Math.PI;
+    this.comet.add(heatShield);
+
     // Create trail particle system
     this.createTrailSystem();
 
-    console.log('[Comet] Created with purple/green fire trail');
+    // Create sonic boom waves container
+    this.createSonicBoomSystem();
+
+    // Create fragment debris system
+    this.createFragmentDebrisSystem();
+
+    console.log('[Comet] Created with enhanced atmospheric entry effects');
   }
 
   createTrailSystem() {
@@ -285,15 +410,123 @@ export class Comet {
     this.trail.visible = false;
   }
 
-  update(phase, elapsedTime) {
+  createSonicBoomSystem() {
+    // Sonic boom waves are expanding rings that trail behind the comet
+    // We'll create them dynamically during flight
+  }
+
+  createFragmentDebrisSystem() {
+    // Small debris fragments that break off during atmospheric entry
+    const debrisGeometry = new THREE.BufferGeometry();
+    const maxDebris = 50;
+
+    const positions = new Float32Array(maxDebris * 3);
+    const velocities = new Float32Array(maxDebris * 3);
+    const sizes = new Float32Array(maxDebris);
+    const alphas = new Float32Array(maxDebris);
+
+    debrisGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    debrisGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    debrisGeometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+
+    const debrisMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0.0 }
+      },
+      vertexShader: `
+        attribute float size;
+        attribute float alpha;
+
+        varying float vAlpha;
+
+        void main() {
+          vAlpha = alpha;
+
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying float vAlpha;
+
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+
+          // Hot debris glow
+          vec3 color = vec3(1.0, 0.5, 0.2);
+          float alpha = (1.0 - dist * 2.0) * vAlpha;
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.debrisParticles = new THREE.Points(debrisGeometry, debrisMaterial);
+    this.debrisParticles.visible = false;
+  }
+
+  spawnSonicBoomWave(position) {
+    // Create a sonic boom shockwave ring
+    const waveGeometry = new THREE.RingGeometry(0.5, 1.5, 32);
+    const waveMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0.0 },
+        opacity: { value: 1.0 }
+      },
+      vertexShader: `
+        uniform float time;
+
+        void main() {
+          vec3 pos = position * (1.0 + time * 15.0);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float opacity;
+
+        void main() {
+          vec3 color = vec3(0.8, 0.9, 1.0); // Light blue shock wave
+          gl_FragColor = vec4(color, opacity);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    const wave = new THREE.Mesh(waveGeometry, waveMaterial);
+    wave.position.copy(position);
+
+    // Orient perpendicular to direction of motion
+    const direction = new THREE.Vector3().subVectors(this.endPosition, this.startPosition).normalize();
+    wave.lookAt(wave.position.clone().add(direction));
+
+    this.sonicBoomWaves.push({
+      mesh: wave,
+      life: 0,
+      maxLife: 0.5 // Half second duration
+    });
+
+    return wave;
+  }
+
+  update(phase, elapsedTime, deltaTime = 0.016) {
     // Update time uniforms
     this.cometMaterial.uniforms.time.value = elapsedTime;
     this.glowMaterial.uniforms.time.value = elapsedTime;
+    this.plasmaGlowMaterial.uniforms.time.value = elapsedTime;
+    this.heatShieldMaterial.uniforms.time.value = elapsedTime;
 
     // Comet visible during approach and impact
     if (phase.name === 'comet_approach' || phase.name === 'impact') {
       this.comet.visible = true;
       this.trail.visible = true;
+      this.debrisParticles.visible = true;
 
       // Acceleration: starts slow, speeds up (ease-in cubic)
       let t = phase.name === 'comet_approach' ? phase.phaseT : 1.0;
@@ -302,14 +535,20 @@ export class Comet {
       // Position along trajectory
       this.comet.position.lerpVectors(this.startPosition, this.endPosition, t);
 
-      // Rotation for spinning effect
-      this.comet.rotation.x = elapsedTime * 2.0;
-      this.comet.rotation.y = elapsedTime * 1.5;
+      // Rotation for spinning effect (faster as it accelerates)
+      const spinSpeed = 2.0 + t * 3.0;
+      this.comet.rotation.x = elapsedTime * spinSpeed;
+      this.comet.rotation.y = elapsedTime * spinSpeed * 0.7;
 
       // Intensity increases as comet approaches
       const intensity = t;
       this.cometMaterial.uniforms.intensity.value = intensity;
       this.glowMaterial.uniforms.intensity.value = intensity;
+
+      // Atmospheric effects intensify as it enters atmosphere (last 70%)
+      const atmosphericIntensity = Math.max(0, (t - 0.3) / 0.7);
+      this.plasmaGlowMaterial.uniforms.intensity.value = atmosphericIntensity;
+      this.heatShieldMaterial.uniforms.intensity.value = atmosphericIntensity;
 
       // Scale grows as it approaches (starts small, gets larger)
       // Final size is 2.5x larger than original
@@ -321,11 +560,36 @@ export class Comet {
         this.comet.scale.setScalar(2.5);
       }
 
+      // Spawn sonic boom waves periodically at high speed
+      if (t > 0.5 && Math.random() < 0.15) {
+        this.spawnSonicBoomWave(this.comet.position.clone());
+      }
+
+      // Spawn debris fragments during atmospheric entry
+      if (atmosphericIntensity > 0.2 && Math.random() < 0.3) {
+        this.spawnDebrisFragment();
+      }
+
       // Update trail
       this.updateTrail(t, intensity);
+
+      // Update sonic boom waves
+      this.updateSonicBoomWaves(deltaTime);
+
+      // Update debris
+      this.updateDebris(deltaTime);
     } else {
       this.comet.visible = false;
       this.trail.visible = false;
+      this.debrisParticles.visible = false;
+
+      // Hide sonic boom waves
+      this.sonicBoomWaves.forEach(wave => {
+        if (wave.mesh.parent) {
+          wave.mesh.parent.remove(wave.mesh);
+        }
+      });
+      this.sonicBoomWaves = [];
     }
   }
 
@@ -392,12 +656,114 @@ export class Comet {
     this.trail.geometry.attributes.alpha.needsUpdate = true;
   }
 
+  updateSonicBoomWaves(deltaTime) {
+    // Update and remove expired sonic boom waves
+    for (let i = this.sonicBoomWaves.length - 1; i >= 0; i--) {
+      const wave = this.sonicBoomWaves[i];
+      wave.life += deltaTime;
+
+      // Update wave expansion and fade
+      const t = wave.life / wave.maxLife;
+      wave.mesh.material.uniforms.time.value = t;
+      wave.mesh.material.uniforms.opacity.value = 1.0 - t;
+
+      // Remove expired waves
+      if (wave.life >= wave.maxLife) {
+        if (wave.mesh.parent) {
+          wave.mesh.parent.remove(wave.mesh);
+        }
+        wave.mesh.geometry.dispose();
+        wave.mesh.material.dispose();
+        this.sonicBoomWaves.splice(i, 1);
+      }
+    }
+  }
+
+  spawnDebrisFragment() {
+    const positions = this.debrisParticles.geometry.attributes.position.array;
+    const sizes = this.debrisParticles.geometry.attributes.size.array;
+    const alphas = this.debrisParticles.geometry.attributes.alpha.array;
+
+    // Find empty slot
+    let index = this.fragmentDebris.findIndex(d => d.life <= 0);
+    if (index === -1 && this.fragmentDebris.length < 50) {
+      index = this.fragmentDebris.length;
+    } else if (index === -1) {
+      index = 0; // Replace oldest
+    }
+
+    // Random offset from comet position
+    const offset = new THREE.Vector3(
+      (Math.random() - 0.5) * 3,
+      (Math.random() - 0.5) * 3,
+      (Math.random() - 0.5) * 3
+    );
+
+    // Velocity perpendicular to comet motion
+    const velocity = new THREE.Vector3(
+      (Math.random() - 0.5) * 10,
+      (Math.random() - 0.5) * 10,
+      Math.random() * 5
+    );
+
+    this.fragmentDebris[index] = {
+      position: this.comet.position.clone().add(offset),
+      velocity: velocity,
+      life: 1.0,
+      size: 1 + Math.random() * 2
+    };
+
+    const i3 = index * 3;
+    positions[i3] = this.fragmentDebris[index].position.x;
+    positions[i3 + 1] = this.fragmentDebris[index].position.y;
+    positions[i3 + 2] = this.fragmentDebris[index].position.z;
+    sizes[index] = this.fragmentDebris[index].size;
+    alphas[index] = 1.0;
+  }
+
+  updateDebris(deltaTime) {
+    const positions = this.debrisParticles.geometry.attributes.position.array;
+    const alphas = this.debrisParticles.geometry.attributes.alpha.array;
+
+    for (let i = 0; i < this.fragmentDebris.length; i++) {
+      if (this.fragmentDebris[i].life > 0) {
+        // Update position with velocity
+        this.fragmentDebris[i].position.add(
+          this.fragmentDebris[i].velocity.clone().multiplyScalar(deltaTime)
+        );
+
+        // Apply gravity
+        this.fragmentDebris[i].velocity.y -= 20 * deltaTime;
+
+        // Fade out
+        this.fragmentDebris[i].life -= deltaTime * 2;
+
+        const i3 = i * 3;
+        positions[i3] = this.fragmentDebris[i].position.x;
+        positions[i3 + 1] = this.fragmentDebris[i].position.y;
+        positions[i3 + 2] = this.fragmentDebris[i].position.z;
+        alphas[i] = Math.max(0, this.fragmentDebris[i].life);
+      }
+    }
+
+    this.debrisParticles.geometry.attributes.position.needsUpdate = true;
+    this.debrisParticles.geometry.attributes.alpha.needsUpdate = true;
+  }
+
   getMesh() {
     return this.comet;
   }
 
   getTrail() {
     return this.trail;
+  }
+
+  getDebrisParticles() {
+    return this.debrisParticles;
+  }
+
+  getSonicBoomWaves() {
+    return this.sonicBoomWaves.map(w => w.mesh);
   }
 
   destroy() {
@@ -407,9 +773,28 @@ export class Comet {
     if (this.glowMaterial) {
       this.glowMaterial.dispose();
     }
+    if (this.plasmaGlowMaterial) {
+      this.plasmaGlowMaterial.dispose();
+    }
+    if (this.heatShieldMaterial) {
+      this.heatShieldMaterial.dispose();
+    }
     if (this.trail) {
       this.trail.geometry.dispose();
       this.trail.material.dispose();
     }
+    if (this.debrisParticles) {
+      this.debrisParticles.geometry.dispose();
+      this.debrisParticles.material.dispose();
+    }
+    // Clean up sonic boom waves
+    this.sonicBoomWaves.forEach(wave => {
+      if (wave.mesh.parent) {
+        wave.mesh.parent.remove(wave.mesh);
+      }
+      wave.mesh.geometry.dispose();
+      wave.mesh.material.dispose();
+    });
+    this.sonicBoomWaves = [];
   }
 }

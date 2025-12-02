@@ -99,6 +99,7 @@ export class IntroScene {
     this.comet = new Comet();
     this.scene.add(this.comet.getMesh());
     this.scene.add(this.comet.getTrail()); // Add trail particles
+    this.scene.add(this.comet.getDebrisParticles()); // Add debris particles
 
     // Initialize black hole
     this.blackHole = new BlackHole();
@@ -121,6 +122,9 @@ export class IntroScene {
     // Initialize explosion system
     this.explosion = new Explosion();
     this.scene.add(this.explosion.getExplosionMesh());
+    this.scene.add(this.explosion.getImpactFlash());
+    this.scene.add(this.explosion.getEjectaParticles());
+    this.scene.add(this.explosion.getFireballParticles());
     this.scene.add(this.explosion.getShockwave());
 
     console.log('[IntroScene] Initialization complete');
@@ -130,8 +134,16 @@ export class IntroScene {
     this.starfield.update(phase, elapsedTime);
   }
 
-  updateComet(phase, elapsedTime) {
-    this.comet.update(phase, elapsedTime);
+  updateComet(phase, elapsedTime, deltaTime = 0.016) {
+    this.comet.update(phase, elapsedTime, deltaTime);
+
+    // Add sonic boom waves to scene dynamically
+    const sonicBoomWaves = this.comet.getSonicBoomWaves();
+    sonicBoomWaves.forEach(wave => {
+      if (!wave.parent) {
+        this.scene.add(wave);
+      }
+    });
 
     // Trigger explosion at the end of comet approach
     if (phase.name === 'impact' && !this.explosionTriggered) {
@@ -140,6 +152,7 @@ export class IntroScene {
       // Hide comet once explosion starts
       this.comet.getMesh().visible = false;
       this.comet.getTrail().visible = false;
+      this.comet.getDebrisParticles().visible = false;
     }
   }
 
