@@ -114,8 +114,25 @@ const showButtonRef = useRef(false);
 
   // PHASE 1: Diagnostic toggles for isolating rendering issues
   const [diagnostics, setDiagnostics] = useState({
-  // ...
-});
+    showPanel: false,
+    composerEnabled: true,
+    bloomEnabled: true,
+    fxaaEnabled: true,
+    starsEnabled: true,
+    cometEnabled: true,
+    particlesEnabled: true,
+    blackHoleEnabled: true,
+    outputPassEnabled: true,
+    crackPassEnabled: false,
+    uiEnabled: true,
+    parityMode: false,
+    timeFrozen: false,
+    scrubbedTime: 0,
+    renderSize: { width: 0, height: 0 },
+    renderTargetType: '',
+    toneMapping: '',
+    outputColorSpace: ''
+  });
 
 const diagnosticsRef = useRef(diagnostics);
 useEffect(() => {
