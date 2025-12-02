@@ -153,41 +153,16 @@ export class RosterScene {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-    // Shader material for stars
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0 }
-      },
-      vertexShader: `
-        attribute float size;
-        attribute vec3 color;
-        varying vec3 vColor;
-        uniform float time;
-
-        void main() {
-          vColor = color;
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = size * (300.0 / -mvPosition.z);
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        varying vec3 vColor;
-
-        void main() {
-          float dist = length(gl_PointCoord - vec2(0.5));
-          if (dist > 0.5) discard;
-
-          float alpha = 1.0 - (dist * 2.0);
-          alpha = smoothstep(0.0, 1.0, alpha);
-
-          gl_FragColor = vec4(vColor, alpha);
-        }
-      `,
+    // Shader material for stars - Using PointsMaterial to avoid shader errors
+    const material = new THREE.PointsMaterial({
+      color: 0xFFFFFF,
+      size: 1.5,
       transparent: true,
+      opacity: 0.8,
       vertexColors: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true
     });
 
     this.starfield = new THREE.Points(geometry, material);
@@ -245,10 +220,7 @@ export class RosterScene {
   update(deltaTime) {
     const elapsedTime = this.clock.getElapsedTime();
 
-    // Update starfield time uniform
-    if (this.starfield && this.starfield.material.uniforms.time) {
-      this.starfield.material.uniforms.time.value = elapsedTime;
-    }
+    // Starfield uses PointsMaterial now (no time uniform needed)
 
     // Update global particles (drift downward)
     if (this.globalParticles) {
