@@ -227,13 +227,6 @@ export class IntroScene {
 
   updatePostProcessing(phase, elapsedTime) {
     this.postProcessing.update(phase, elapsedTime);
-
-    // Update gravitational lensing effect based on black hole position
-    if (this.blackHole) {
-      const blackHoleVisible = this.blackHole.getGroup().visible;
-      const blackHoleWorldPos = this.blackHole.getPosition();
-      this.postProcessing.updateLensing(blackHoleWorldPos, blackHoleVisible);
-    }
   }
 
   render(phase, elapsedTime) {
