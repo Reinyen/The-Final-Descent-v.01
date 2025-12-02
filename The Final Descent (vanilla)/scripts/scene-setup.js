@@ -228,11 +228,6 @@ export class IntroScene {
   }
 
   render(phase, elapsedTime) {
-    // Update black hole reflections before rendering
-    if (this.blackHole && this.blackHole.getGroup().visible) {
-      this.blackHole.updateReflections(this.renderer, this.scene);
-    }
-
     this.postProcessing.render();
   }
 
