@@ -126,23 +126,23 @@ export class RosterScene {
       positions[i3 + 1] = (Math.random() - 0.5) * 100;
       positions[i3 + 2] = (Math.random() - 0.5) * 50 - 20; // Behind camera
 
-      // Star colors (mostly white with slight tint)
+      // Star colors - GOLDEN
       const tint = Math.random();
-      if (tint < 0.1) {
-        // Purple tint
-        colors[i3] = 0.9 + Math.random() * 0.1;
-        colors[i3 + 1] = 0.6 + Math.random() * 0.2;
-        colors[i3 + 2] = 1.0;
-      } else if (tint < 0.2) {
-        // Teal tint
-        colors[i3] = 0.6 + Math.random() * 0.2;
-        colors[i3 + 1] = 0.9 + Math.random() * 0.1;
-        colors[i3 + 2] = 0.8 + Math.random() * 0.2;
+      if (tint < 0.7) {
+        // Bright golden
+        colors[i3] = 1.0;
+        colors[i3 + 1] = 0.84 + Math.random() * 0.16; // 0.84-1.0
+        colors[i3 + 2] = 0.0;
+      } else if (tint < 0.9) {
+        // Warm golden
+        colors[i3] = 1.0;
+        colors[i3 + 1] = 0.7 + Math.random() * 0.2; // 0.7-0.9
+        colors[i3 + 2] = 0.1 + Math.random() * 0.1; // 0.1-0.2
       } else {
-        // White
-        colors[i3] = 0.9 + Math.random() * 0.1;
+        // Pale golden
+        colors[i3] = 1.0;
         colors[i3 + 1] = 0.9 + Math.random() * 0.1;
-        colors[i3 + 2] = 0.9 + Math.random() * 0.1;
+        colors[i3 + 2] = 0.6 + Math.random() * 0.2;
       }
 
       // Size variation
@@ -201,12 +201,13 @@ export class RosterScene {
     geometry.setAttribute('lifetime', new THREE.BufferAttribute(lifetimes, 1));
 
     const material = new THREE.PointsMaterial({
-      color: 0xE8F4FD,
-      size: 1.5,
+      color: 0xFFD700, // Golden
+      size: 2.5,
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.6,
       blending: THREE.AdditiveBlending,
-      depthWrite: false
+      depthWrite: false,
+      sizeAttenuation: true
     });
 
     this.globalParticles = new THREE.Points(geometry, material);

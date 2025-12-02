@@ -141,7 +141,9 @@ export class RosterTransition {
         sphereColor1: { value: this.goldenPalette.sphereColor1.clone() },
         sphereColor2: { value: this.goldenPalette.sphereColor2.clone() },
         sphereRimColor: { value: this.goldenPalette.sphereRimColor.clone() }
-      }
+      },
+      transparent: true,
+      opacity: 0 // Start invisible
     });
 
     return new THREE.Mesh(geometry, material);
@@ -167,6 +169,7 @@ export class RosterTransition {
           ringColor2: { value: this.goldenPalette.ringColor2.clone() }
         },
         transparent: true,
+        opacity: 0, // Start invisible
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
         depthWrite: false
@@ -249,7 +252,7 @@ export class RosterTransition {
       size: 3,
       vertexColors: true,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0, // Start invisible
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       sizeAttenuation: true
@@ -321,7 +324,7 @@ export class RosterTransition {
         size: 2,
         vertexColors: true,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0, // Start invisible
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         sizeAttenuation: true
