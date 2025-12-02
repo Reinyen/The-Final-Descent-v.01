@@ -600,8 +600,6 @@ useEffect(() => {
       starBaseColors[i3 + 2] = starColors[i3 + 2];
     }
 
-// starRippleOffsets is already declared above (keep only ONE declaration in the file)
-
 starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
 starGeometry.setAttribute('basePosition', new THREE.BufferAttribute(starOriginalPositions, 3));
 starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
