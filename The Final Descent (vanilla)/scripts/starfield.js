@@ -32,10 +32,11 @@ export class Starfield {
     for (let i = 0; i < this.starCount; i++) {
       const i3 = i * 3;
 
-      // Position: X: -100 to 100, Y: -75 to 75, Z: -130 to -30
-      starPositions[i3] = (Math.random() - 0.5) * 200;
-      starPositions[i3 + 1] = (Math.random() - 0.5) * 150;
-      starPositions[i3 + 2] = -130 + Math.random() * 100;
+      // Position: Evenly distributed across visible frustum
+      // Larger distribution to avoid center clustering with perspective
+      starPositions[i3] = (Math.random() - 0.5) * 400; // X: -200 to 200
+      starPositions[i3 + 1] = (Math.random() - 0.5) * 300; // Y: -150 to 150
+      starPositions[i3 + 2] = -130 + Math.random() * 100; // Z: -130 to -30
 
       // Store original positions
       starOriginalPositions[i3] = starPositions[i3];
@@ -182,23 +183,28 @@ export class Starfield {
 
   createStarTexture() {
     const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
+    canvas.width = 128; // Higher resolution for crisper stars
+    canvas.height = 128;
     const ctx = canvas.getContext('2d');
 
-    const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    const center = 64;
+
+    // Create a sharper, more realistic star with tight bright core
+    const gradient = ctx.createRadialGradient(center, center, 0, center, center, center);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
-    gradient.addColorStop(0.2, 'rgba(255, 255, 255, 1.0)');
-    gradient.addColorStop(0.35, 'rgba(255, 255, 255, 0.8)');
-    gradient.addColorStop(0.55, 'rgba(255, 255, 255, 0.3)');
-    gradient.addColorStop(0.8, 'rgba(255, 255, 255, 0.1)');
+    gradient.addColorStop(0.1, 'rgba(255, 255, 255, 1.0)'); // Tight bright core
+    gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.9)');
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.5)'); // Sharp falloff
+    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillRect(0, 0, 128, 128);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
+    texture.minFilter = THREE.LinearFilter; // Better filtering for crisp look
+    texture.magFilter = THREE.LinearFilter;
 
     return texture;
   }

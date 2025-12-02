@@ -19,8 +19,8 @@ export class BlackHole {
     this.blackHoleGroup.scale.set(0, 0, 0);
     this.blackHoleGroup.visible = false;
 
-    // Layer 1: Event Horizon (solid black sphere)
-    const eventHorizonGeometry = new THREE.SphereGeometry(2.5, 32, 32);
+    // Layer 1: Event Horizon (solid black sphere) - 3x larger
+    const eventHorizonGeometry = new THREE.SphereGeometry(7.5, 32, 32);
     const eventHorizonMaterial = new THREE.MeshBasicMaterial({
       color: 0x000000,
       opacity: 1.0,
@@ -30,8 +30,8 @@ export class BlackHole {
     const eventHorizon = new THREE.Mesh(eventHorizonGeometry, eventHorizonMaterial);
     this.blackHoleGroup.add(eventHorizon);
 
-    // Layer 2: Inner Core (volumetric with spiral patterns)
-    const innerCoreGeometry = new THREE.SphereGeometry(3.5, 32, 32);
+    // Layer 2: Inner Core (volumetric with spiral patterns) - 3x larger
+    const innerCoreGeometry = new THREE.SphereGeometry(10.5, 32, 32);
     this.innerCoreMaterial = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       transparent: true,
@@ -68,7 +68,7 @@ export class BlackHole {
 
         void main() {
           // Polar coordinates
-          float radius = length(vPosition.xy) / 3.5;
+          float radius = length(vPosition.xy) / 10.5;
           float angle = atan(vPosition.y, vPosition.x);
 
           // 3 counter-rotating spiral layers
@@ -99,8 +99,8 @@ export class BlackHole {
     const innerCore = new THREE.Mesh(innerCoreGeometry, this.innerCoreMaterial);
     this.blackHoleGroup.add(innerCore);
 
-    // Layer 3: Accretion Disk
-    const accretionDiskGeometry = new THREE.RingGeometry(3, 10, 64);
+    // Layer 3: Accretion Disk - 3x larger
+    const accretionDiskGeometry = new THREE.RingGeometry(9, 30, 64);
     this.accretionDiskMaterial = new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       transparent: true,
@@ -127,7 +127,7 @@ export class BlackHole {
 
         void main() {
           // Polar coordinates
-          float dist = length(vPosition.xy) / 10.0;
+          float dist = length(vPosition.xy) / 30.0;
           float angle = atan(vPosition.y, vPosition.x);
 
           // 3 spiral arms
@@ -159,8 +159,8 @@ export class BlackHole {
     accretionDisk.rotation.x = -Math.PI / 2.5; // Tilted
     this.blackHoleGroup.add(accretionDisk);
 
-    // Layer 4: Outer Glow (atmosphere)
-    const outerGlowGeometry = new THREE.SphereGeometry(5, 32, 32);
+    // Layer 4: Outer Glow (atmosphere) - 3x larger
+    const outerGlowGeometry = new THREE.SphereGeometry(15, 32, 32);
     this.outerGlowMaterial = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       transparent: true,

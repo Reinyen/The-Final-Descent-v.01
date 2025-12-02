@@ -73,10 +73,14 @@ export class Comet {
     this.comet = null;
     this.cometMaterial = null;
     this.glowMaterial = null;
+    this.trail = null;
+    this.trailParticles = [];
 
-    // Comet trajectory
-    this.startPosition = new THREE.Vector3(0, 40, -30);
-    this.endPosition = new THREE.Vector3(0, -8, -70);
+    // Comet trajectory: starts far away, comes toward viewer at angle
+    // Start: upper right, far back
+    // End: impact point (0, -8, -70)
+    this.startPosition = new THREE.Vector3(80, 60, -200); // Far away, angled
+    this.endPosition = new THREE.Vector3(0, -8, -70); // Impact point
 
     this.init();
   }
@@ -88,13 +92,13 @@ export class Comet {
     this.cometMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0.0 },
-        heatIntensity: { value: 0.0 }
+        intensity: { value: 0.0 }
       },
       vertexShader: `
         ${SIMPLEX_NOISE_3D}
 
         uniform float time;
-        uniform float heatIntensity;
+        uniform float intensity;
         varying vec3 vNormal;
         varying vec3 vPosition;
         varying vec3 vWorldPosition;
@@ -111,10 +115,10 @@ export class Comet {
 
           float totalNoise = (noise1 + noise2 + noise3) * 0.15;
 
-          // Heat turbulence (more displacement when hot)
-          float heatDisplacement = snoise(position * 5.0 + time * 3.0) * heatIntensity * 0.1;
+          // Turbulence increases with intensity
+          float turbulence = snoise(position * 5.0 + time * 3.0) * intensity * 0.1;
 
-          vec3 displaced = position + normal * (totalNoise + heatDisplacement);
+          vec3 displaced = position + normal * (totalNoise + turbulence);
 
           vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
           vWorldPosition = worldPosition.xyz;
@@ -126,7 +130,7 @@ export class Comet {
         ${SIMPLEX_NOISE_3D}
 
         uniform float time;
-        uniform float heatIntensity;
+        uniform float intensity;
         varying vec3 vNormal;
         varying vec3 vPosition;
         varying vec3 vWorldPosition;
@@ -140,19 +144,19 @@ export class Comet {
 
           float rockPattern = (tex1 + tex2 + tex3) * 0.5 + 0.5;
 
-          // Base rocky color
-          vec3 rockColor = vec3(0.3, 0.25, 0.2) * (0.7 + rockPattern * 0.3);
+          // Dark rocky base color
+          vec3 rockColor = vec3(0.2, 0.18, 0.22) * (0.7 + rockPattern * 0.3);
 
-          // Heat color shift
+          // Purple/green glow intensifies as it approaches
           vec3 coldColor = rockColor;
-          vec3 warmColor = vec3(0.6, 0.3, 0.1);
-          vec3 hotColor = vec3(1.0, 0.4, 0.1);
+          vec3 warmColor = vec3(0.4, 0.15, 0.5); // Purple
+          vec3 hotColor = vec3(0.2, 0.8, 0.3); // Green
 
           vec3 finalColor;
-          if (heatIntensity < 0.5) {
-            finalColor = mix(coldColor, warmColor, heatIntensity / 0.5);
+          if (intensity < 0.5) {
+            finalColor = mix(coldColor, warmColor, intensity / 0.5);
           } else {
-            finalColor = mix(warmColor, hotColor, (heatIntensity - 0.5) / 0.5);
+            finalColor = mix(warmColor, hotColor, (intensity - 0.5) / 0.5);
           }
 
           // Simple lighting
@@ -167,54 +171,118 @@ export class Comet {
     this.comet = new THREE.Mesh(cometGeometry, this.cometMaterial);
     this.comet.visible = false;
 
-    // Create outer glow
-    const glowGeometry = new THREE.IcosahedronGeometry(1.8, 2);
+    // Create outer glow with purple/green colors
+    const glowGeometry = new THREE.IcosahedronGeometry(2.5, 2);
     this.glowMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0.0 },
-        heatIntensity: { value: 0.0 }
+        intensity: { value: 0.0 }
       },
       vertexShader: `
         varying vec3 vNormal;
+        varying vec3 vViewPosition;
+
         void main() {
           vNormal = normalize(normalMatrix * normal);
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vViewPosition = cameraPosition - worldPosition.xyz;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
         uniform float time;
-        uniform float heatIntensity;
+        uniform float intensity;
         varying vec3 vNormal;
+        varying vec3 vViewPosition;
 
         void main() {
-          // Heat-reactive color shift
-          vec3 coldColor = vec3(0.4, 0.2, 1.0);
-          vec3 warmColor = vec3(1.0, 0.4, 0.1);
-          vec3 hotColor = vec3(0.6, 0.3, 0.9);
+          // Purple to green gradient based on intensity
+          vec3 purple = vec3(0.6, 0.2, 0.8);
+          vec3 green = vec3(0.3, 0.9, 0.4);
 
-          vec3 glowColor;
-          if (heatIntensity < 0.5) {
-            glowColor = mix(coldColor, warmColor, heatIntensity / 0.5);
-          } else {
-            glowColor = mix(warmColor, hotColor, (heatIntensity - 0.5) / 0.5);
-          }
+          vec3 glowColor = mix(purple, green, intensity);
+
+          // Fresnel effect for atmospheric glow
+          vec3 viewDir = normalize(vViewPosition);
+          float fresnel = pow(1.0 - abs(dot(vNormal, viewDir)), 2.0);
 
           // Pulsing opacity
-          float pulse = sin(time * 3.0) * 0.05 + 0.95;
-          float opacity = (0.15 + heatIntensity * 0.25) * pulse;
+          float pulse = sin(time * 4.0) * 0.1 + 0.9;
+          float opacity = (0.2 + intensity * 0.5) * pulse * fresnel;
 
           gl_FragColor = vec4(glowColor, opacity);
         }
       `,
       transparent: true,
       blending: THREE.AdditiveBlending,
-      side: THREE.BackSide
+      side: THREE.BackSide,
+      depthWrite: false
     });
 
     const cometGlow = new THREE.Mesh(glowGeometry, this.glowMaterial);
     this.comet.add(cometGlow);
 
-    console.log('[Comet] Created');
+    // Create trail particle system
+    this.createTrailSystem();
+
+    console.log('[Comet] Created with purple/green fire trail');
+  }
+
+  createTrailSystem() {
+    // Trail consists of fading particles left behind
+    const trailGeometry = new THREE.BufferGeometry();
+    const maxTrailParticles = 100;
+
+    const positions = new Float32Array(maxTrailParticles * 3);
+    const colors = new Float32Array(maxTrailParticles * 3);
+    const sizes = new Float32Array(maxTrailParticles);
+    const alphas = new Float32Array(maxTrailParticles);
+
+    trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    trailGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    trailGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    trailGeometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+
+    const trailMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0.0 }
+      },
+      vertexShader: `
+        attribute float size;
+        attribute float alpha;
+        attribute vec3 color;
+
+        varying vec3 vColor;
+        varying float vAlpha;
+
+        void main() {
+          vColor = color;
+          vAlpha = alpha;
+
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+
+          float alpha = (1.0 - dist * 2.0) * vAlpha;
+          gl_FragColor = vec4(vColor, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.trail = new THREE.Points(trailGeometry, trailMaterial);
+    this.trail.visible = false;
   }
 
   update(phase, elapsedTime) {
@@ -225,33 +293,111 @@ export class Comet {
     // Comet visible during approach and impact
     if (phase.name === 'comet_approach' || phase.name === 'impact') {
       this.comet.visible = true;
+      this.trail.visible = true;
+
+      // Acceleration: starts slow, speeds up (ease-in cubic)
+      let t = phase.name === 'comet_approach' ? phase.phaseT : 1.0;
+      t = t * t * t; // Cubic easing for acceleration
 
       // Position along trajectory
-      const t = phase.name === 'comet_approach'
-        ? phase.phaseT
-        : 1.0;
-
       this.comet.position.lerpVectors(this.startPosition, this.endPosition, t);
 
-      // Heat intensity increases as comet approaches
-      const heatIntensity = t;
-      this.cometMaterial.uniforms.heatIntensity.value = heatIntensity;
-      this.glowMaterial.uniforms.heatIntensity.value = heatIntensity;
+      // Rotation for spinning effect
+      this.comet.rotation.x = elapsedTime * 2.0;
+      this.comet.rotation.y = elapsedTime * 1.5;
+
+      // Intensity increases as comet approaches
+      const intensity = t;
+      this.cometMaterial.uniforms.intensity.value = intensity;
+      this.glowMaterial.uniforms.intensity.value = intensity;
+
+      // Scale grows as it approaches (starts small, gets larger)
+      const scale = 0.3 + t * 0.7; // 0.3 to 1.0
+      this.comet.scale.setScalar(scale);
 
       // Scale down during impact
       if (phase.name === 'impact') {
-        const impactScale = 1.0 - phase.phaseT * 0.8; // Shrink to 20%
+        const impactScale = scale * (1.0 - phase.phaseT * 0.8); // Shrink to 20%
         this.comet.scale.setScalar(impactScale);
-      } else {
-        this.comet.scale.setScalar(1.0);
       }
+
+      // Update trail
+      this.updateTrail(t, intensity);
     } else {
       this.comet.visible = false;
+      this.trail.visible = false;
     }
+  }
+
+  updateTrail(t, intensity) {
+    // Emit new trail particle
+    if (t > 0.1 && Math.random() < 0.5) { // Don't emit at very start
+      const positions = this.trail.geometry.attributes.position.array;
+      const colors = this.trail.geometry.attributes.color.array;
+      const sizes = this.trail.geometry.attributes.size.array;
+      const alphas = this.trail.geometry.attributes.alpha.array;
+
+      // Find empty slot or replace oldest
+      let index = this.trailParticles.findIndex(p => p.life <= 0);
+      if (index === -1 && this.trailParticles.length < 100) {
+        index = this.trailParticles.length;
+      } else if (index === -1) {
+        index = 0; // Replace oldest
+      }
+
+      // Purple or green
+      const isGreen = Math.random() > 0.5;
+      const color = isGreen
+        ? new THREE.Color(0.3, 0.9, 0.4)
+        : new THREE.Color(0.6, 0.2, 0.8);
+
+      // Add slight offset for spread
+      const offset = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2
+      );
+
+      this.trailParticles[index] = {
+        position: this.comet.position.clone().add(offset),
+        color: color,
+        life: 1.0,
+        size: 2 + Math.random() * 3
+      };
+
+      // Update buffers
+      const i3 = index * 3;
+      positions[i3] = this.trailParticles[index].position.x;
+      positions[i3 + 1] = this.trailParticles[index].position.y;
+      positions[i3 + 2] = this.trailParticles[index].position.z;
+      colors[i3] = color.r;
+      colors[i3 + 1] = color.g;
+      colors[i3 + 2] = color.b;
+      sizes[index] = this.trailParticles[index].size;
+      alphas[index] = 1.0;
+    }
+
+    // Update existing particles
+    const alphas = this.trail.geometry.attributes.alpha.array;
+    for (let i = 0; i < this.trailParticles.length; i++) {
+      if (this.trailParticles[i].life > 0) {
+        this.trailParticles[i].life -= 0.03; // Fade out
+        alphas[i] = Math.max(0, this.trailParticles[i].life);
+      }
+    }
+
+    this.trail.geometry.attributes.position.needsUpdate = true;
+    this.trail.geometry.attributes.color.needsUpdate = true;
+    this.trail.geometry.attributes.size.needsUpdate = true;
+    this.trail.geometry.attributes.alpha.needsUpdate = true;
   }
 
   getMesh() {
     return this.comet;
+  }
+
+  getTrail() {
+    return this.trail;
   }
 
   destroy() {
@@ -260,6 +406,10 @@ export class Comet {
     }
     if (this.glowMaterial) {
       this.glowMaterial.dispose();
+    }
+    if (this.trail) {
+      this.trail.geometry.dispose();
+      this.trail.material.dispose();
     }
   }
 }

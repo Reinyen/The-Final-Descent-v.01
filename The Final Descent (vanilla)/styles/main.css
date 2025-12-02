@@ -97,9 +97,11 @@ body {
   transition: transform 200ms ease;
   pointer-events: auto;
   text-shadow:
-    1px 0 0 rgba(255, 0, 255, 0.6),
-    -1px 0 0 rgba(0, 255, 255, 0.6),
-    0 0 20px rgba(150, 255, 200, 0.8);
+    1px 0 0 rgba(150, 50, 200, 0.8),
+    -1px 0 0 rgba(50, 200, 100, 0.8),
+    0 0 30px rgba(150, 100, 200, 1.0);
+  /* Pulsating purple/green glow */
+  animation: eerie-pulse 3s ease-in-out infinite;
 }
 
 #begin-button:hover,
