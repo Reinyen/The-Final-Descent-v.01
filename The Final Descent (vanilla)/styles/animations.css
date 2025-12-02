@@ -1,0 +1,68 @@
+/* Glitch In Animation (on reveal) */
+@keyframes glitch-in {
+  0% {
+    transform: translate(0);
+    opacity: 0;
+  }
+  10% {
+    transform: translate(-5px, 5px);
+    opacity: 0.5;
+  }
+  20% {
+    transform: translate(5px, -5px);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translate(-3px, 3px);
+    opacity: 0.9;
+  }
+  40%, 100% {
+    transform: translate(0);
+    opacity: 1;
+  }
+}
+
+/* Periodic Glitch Effect */
+@keyframes glitch {
+  0%, 100% {
+    transform: translate(0);
+  }
+  10% {
+    transform: translate(-3px, 3px);
+  }
+  20% {
+    transform: translate(3px, -3px);
+  }
+  30% {
+    transform: translate(-2px, 2px);
+  }
+  40% {
+    transform: translate(2px, -2px);
+  }
+  50% {
+    transform: translate(0);
+  }
+}
+
+/* Apply glitch-in animation */
+.glitch-in {
+  animation: glitch-in 600ms ease-out forwards;
+}
+
+/* Apply periodic glitch */
+.glitching {
+  animation: glitch 150ms ease-in-out;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .glitch-in,
+  .glitching {
+    animation: none !important;
+  }
+
+  #title-container,
+  #button-container {
+    transition: opacity 300ms ease !important;
+  }
+}

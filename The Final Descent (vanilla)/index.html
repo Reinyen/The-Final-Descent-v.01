@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Final Descent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/animations.css">
+</head>
+<body>
+  <!-- Three.js Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- UI Overlay -->
+  <div id="ui-overlay">
+    <!-- Title -->
+    <div id="title-container" class="hidden">
+      <h1 id="main-title" role="heading" aria-level="1" aria-live="polite">
+        THE FINAL DESCENT
+      </h1>
+    </div>
+
+    <!-- Button -->
+    <div id="button-container" class="hidden">
+      <button
+        id="begin-button"
+        aria-label="Begin the descent - Start the game"
+        disabled>
+        BEGIN THE DESCENT
+      </button>
+    </div>
+  </div>
+
+  <!-- Debug Panel (hidden by default) -->
+  <div id="debug-panel" class="hidden">
+    <div class="debug-hud">
+      <div id="debug-stats"></div>
+    </div>
+    <div class="debug-controls">
+      <div id="debug-controls-info"></div>
+    </div>
+  </div>
+
+  <!-- Load Three.js from CDN -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.181.2/examples/jsm/"
+      }
+    }
+  </script>
+
+  <!-- Main application entry -->
+  <script type="module" src="scripts/main.js"></script>
+</body>
+</html>
