@@ -4,7 +4,8 @@ export class Starfield {
   constructor(qualityConfig, maxPointSize) {
     this.qualityConfig = qualityConfig;
     this.maxPointSize = maxPointSize;
-    this.starCount = 3000;
+    this.starCount = 2500;
+    this.dustCount = 800; // Additional dust particles for depth
 
     this.starField = null;
     this.starGeometry = null;
@@ -16,24 +17,26 @@ export class Starfield {
   init() {
     this.starGeometry = new THREE.BufferGeometry();
 
-    const starPositions = new Float32Array(this.starCount * 3);
-    const starColors = new Float32Array(this.starCount * 3);
-    const starBaseColors = new Float32Array(this.starCount * 3);
-    const starBaseSizes = new Float32Array(this.starCount);
-    const starTwinkleSeeds = new Float32Array(this.starCount);
-    const starAbsorptionScales = new Float32Array(this.starCount);
-    const starOriginalPositions = new Float32Array(this.starCount * 3);
-    const starRippleOffsets = new Float32Array(this.starCount * 3);
+    const totalCount = this.starCount + this.dustCount;
+    const starPositions = new Float32Array(totalCount * 3);
+    const starColors = new Float32Array(totalCount * 3);
+    const starBaseColors = new Float32Array(totalCount * 3);
+    const starBaseSizes = new Float32Array(totalCount);
+    const starTwinkleSeeds = new Float32Array(totalCount);
+    const starTwinkleSpeed = new Float32Array(totalCount); // Individual flicker speeds
+    const starAbsorptionScales = new Float32Array(totalCount);
+    const starOriginalPositions = new Float32Array(totalCount * 3);
+    const starRippleOffsets = new Float32Array(totalCount * 3);
 
     // Create star texture
     const starTexture = this.createStarTexture();
 
-    // Initialize star properties
-    for (let i = 0; i < this.starCount; i++) {
+    // Initialize star and dust properties
+    for (let i = 0; i < totalCount; i++) {
       const i3 = i * 3;
+      const isDust = i >= this.starCount; // Last 800 are dust particles
 
       // Position: Evenly distributed across visible frustum
-      // Larger distribution to avoid center clustering with perspective
       starPositions[i3] = (Math.random() - 0.5) * 400; // X: -200 to 200
       starPositions[i3 + 1] = (Math.random() - 0.5) * 300; // Y: -150 to 150
       starPositions[i3 + 2] = -130 + Math.random() * 100; // Z: -130 to -30
@@ -43,20 +46,43 @@ export class Starfield {
       starOriginalPositions[i3 + 1] = starPositions[i3 + 1];
       starOriginalPositions[i3 + 2] = starPositions[i3 + 2];
 
-      // Star color distribution - ALL WHITE with slight brightness variations
-      const brightness = 0.9 + Math.random() * 0.1; // 0.9 to 1.0
-      starColors[i3] = brightness;
-      starColors[i3 + 1] = brightness;
-      starColors[i3 + 2] = brightness;
+      if (isDust) {
+        // Dust particles: very dim, small, subtle
+        const dustBrightness = 0.2 + Math.random() * 0.3; // 0.2 to 0.5 (dimmer)
+        starColors[i3] = dustBrightness;
+        starColors[i3 + 1] = dustBrightness;
+        starColors[i3 + 2] = dustBrightness;
 
-      // Base size: weighted distribution for crisp pinpoints
-      const sizeRand = Math.random();
-      if (sizeRand < 0.70) {
-        starBaseSizes[i] = 0.3 + Math.random() * 0.3; // 0.3 - 0.6
-      } else if (sizeRand < 0.95) {
-        starBaseSizes[i] = 0.6 + Math.random() * 0.3; // 0.6 - 0.9
+        // Dust sizes: very small
+        starBaseSizes[i] = 0.1 + Math.random() * 0.2; // 0.1 - 0.3
+
+        // Dust twinkle: very slow, subtle
+        starTwinkleSpeed[i] = 0.3 + Math.random() * 0.4; // 0.3 - 0.7 (slower)
       } else {
-        starBaseSizes[i] = 0.9 + Math.random() * 0.3; // 0.9 - 1.2
+        // Stars: bright, varied sizes, dynamic flickering
+        const brightness = 0.85 + Math.random() * 0.15; // 0.85 to 1.0
+        starColors[i3] = brightness;
+        starColors[i3 + 1] = brightness;
+        starColors[i3 + 2] = brightness;
+
+        // Enhanced size variation for more dramatic starfield
+        const sizeRand = Math.random();
+        if (sizeRand < 0.50) {
+          // 50%: Small pinpoint stars
+          starBaseSizes[i] = 0.2 + Math.random() * 0.4; // 0.2 - 0.6
+        } else if (sizeRand < 0.80) {
+          // 30%: Medium stars
+          starBaseSizes[i] = 0.6 + Math.random() * 0.5; // 0.6 - 1.1
+        } else if (sizeRand < 0.95) {
+          // 15%: Large bright stars
+          starBaseSizes[i] = 1.1 + Math.random() * 0.6; // 1.1 - 1.7
+        } else {
+          // 5%: Very large brilliant stars
+          starBaseSizes[i] = 1.7 + Math.random() * 0.8; // 1.7 - 2.5
+        }
+
+        // Varied twinkle speeds for more dynamic flickering
+        starTwinkleSpeed[i] = 0.8 + Math.random() * 1.2; // 0.8 - 2.0 (varied speeds)
       }
 
       // Twinkle seed
@@ -77,6 +103,7 @@ export class Starfield {
     this.starGeometry.setAttribute('baseColor', new THREE.BufferAttribute(starBaseColors, 3));
     this.starGeometry.setAttribute('baseSize', new THREE.BufferAttribute(starBaseSizes, 1));
     this.starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
+    this.starGeometry.setAttribute('twinkleSpeed', new THREE.BufferAttribute(starTwinkleSpeed, 1));
     this.starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
     this.starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOffsets, 3));
 
@@ -94,6 +121,7 @@ export class Starfield {
       vertexShader: `
         attribute float baseSize;
         attribute float twinkleSeed;
+        attribute float twinkleSpeed;
         attribute float absorptionScale;
         attribute vec3 color;
         attribute vec3 rippleOffset;
@@ -112,8 +140,10 @@ export class Starfield {
         void main() {
           vColor = color;
 
-          // Subtle twinkle: 0.8-1.0 range
-          float twinkle = sin(time * 1.5 + twinkleSeed * 0.5) * 0.1 + 0.9;
+          // Enhanced dynamic twinkle with individual speeds and intensities
+          float twinkle1 = sin(time * twinkleSpeed * 1.5 + twinkleSeed) * 0.25;
+          float twinkle2 = sin(time * twinkleSpeed * 2.3 + twinkleSeed * 1.7) * 0.15;
+          float twinkle = twinkle1 + twinkle2 + 0.75; // Range: 0.35 to 1.15
 
           float sizeMultiplier = twinkle * absorptionScale;
           float brightnessMultiplier = twinkle * absorptionScale * starIntensity;
@@ -165,7 +195,7 @@ export class Starfield {
     });
 
     this.starField = new THREE.Points(this.starGeometry, this.starMaterial);
-    console.log('[Starfield] Created with', this.starCount, 'stars');
+    console.log(`[Starfield] Created with ${this.starCount} stars and ${this.dustCount} dust particles (${totalCount} total)`);
   }
 
   createStarTexture() {

@@ -16,6 +16,7 @@ export class PostProcessing {
     this.composer = null;
     this.renderPass = null;
     this.bloomPass = null;
+    this.lensingPass = null; // Gravitational lensing pass
     this.fxaaPass = null;
     this.outputPass = null;
 
@@ -49,6 +50,74 @@ export class PostProcessing {
       0.7  // threshold (only brightest elements)
     );
     this.composer.addPass(this.bloomPass);
+
+    // Gravitational Lensing Pass - Distorts space around black hole
+    const lensingShader = {
+      uniforms: {
+        tDiffuse: { value: null },
+        blackHoleScreenPos: { value: new THREE.Vector2(0.5, 0.5) },
+        lensingStrength: { value: 0.0 }, // 0 when not visible
+        lensingRadius: { value: 0.15 } // Radius of effect in screen space
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 blackHoleScreenPos;
+        uniform float lensingStrength;
+        uniform float lensingRadius;
+        varying vec2 vUv;
+
+        void main() {
+          vec2 uv = vUv;
+
+          // Calculate distance from black hole center in screen space
+          vec2 toCenter = uv - blackHoleScreenPos;
+          float dist = length(toCenter);
+
+          // Apply gravitational lensing distortion
+          if (dist < lensingRadius && lensingStrength > 0.0) {
+            // Smooth falloff from center to edge
+            float distortionFactor = lensingStrength * smoothstep(lensingRadius, 0.0, dist);
+
+            // Warp UV coordinates - bend light around black hole
+            vec2 direction = normalize(toCenter);
+            float angle = atan(toCenter.y, toCenter.x);
+
+            // Create swirling distortion (gravitational frame dragging effect)
+            float swirl = distortionFactor * 0.3;
+            mat2 rotation = mat2(
+              cos(swirl), -sin(swirl),
+              sin(swirl), cos(swirl)
+            );
+            vec2 rotated = rotation * toCenter;
+
+            // Radial distortion (light bending)
+            float pull = distortionFactor * 0.08;
+            vec2 warped = uv + direction * pull + (rotated - toCenter) * 0.5;
+
+            // Chromatic aberration for realistic lensing
+            float aberration = distortionFactor * 0.003;
+            float r = texture2D(tDiffuse, warped + direction * aberration).r;
+            float g = texture2D(tDiffuse, warped).g;
+            float b = texture2D(tDiffuse, warped - direction * aberration).b;
+
+            gl_FragColor = vec4(r, g, b, 1.0);
+          } else {
+            // No distortion
+            gl_FragColor = texture2D(tDiffuse, uv);
+          }
+        }
+      `
+    };
+
+    this.lensingPass = new ShaderPass(lensingShader);
+    this.composer.addPass(this.lensingPass);
 
     // FXAA Anti-Aliasing Pass
     this.fxaaPass = new ShaderPass(FXAAShader);
@@ -87,6 +156,27 @@ export class PostProcessing {
     } else {
       // Restore baseline bloom
       this.bloomPass.strength = 0.35 * this.qualityConfig.bloomStrengthScale;
+    }
+  }
+
+  updateLensing(blackHoleWorldPos, blackHoleVisible) {
+    if (!this.lensingPass) return;
+
+    if (blackHoleVisible && blackHoleWorldPos) {
+      // Project black hole world position to screen space
+      const vector = blackHoleWorldPos.clone();
+      vector.project(this.camera);
+
+      // Convert from NDC (-1 to 1) to screen space (0 to 1)
+      const screenX = (vector.x + 1) / 2;
+      const screenY = (1 - vector.y) / 2; // Flip Y for screen coordinates
+
+      // Update shader uniforms
+      this.lensingPass.uniforms.blackHoleScreenPos.value.set(screenX, screenY);
+      this.lensingPass.uniforms.lensingStrength.value = 1.0;
+    } else {
+      // Black hole not visible - disable lensing
+      this.lensingPass.uniforms.lensingStrength.value = 0.0;
     }
   }
 
