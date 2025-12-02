@@ -1,185 +1,204 @@
 /**
- * Character Data
+ * Character Data - The Eleventh
  * Defines the 6 unique characters available in the Roster Selection screen.
+ * Per GDD Part 1, Section 3.1
  *
- * Required fields per GDD §4.1:
+ * Required fields:
  * - id: unique, stable identifier
  * - name: character name
- * - roleLabel: character role/class
+ * - roleLabel: character role/class (exact from GDD)
  * - portrait: asset reference (placeholder for now)
  * - constellation: deterministic seed for shader pattern
- * - stats: { HP, CON, SPD }
- * - abilities: array of 3 abilities with name + description
+ * - stats: { HP, CON, SPD } (exact from GDD)
+ * - abilities: array of 3 abilities with name, SP cost, and flavor description
  * - portraitAlt: accessibility text
- * - themeColor: per-character accent for constellation tint
+ * - themeColor: golden accent for all characters
  */
 
 export const CHARACTERS = [
   {
-    id: 'char_001_voidwalker',
-    name: 'Kael the Voidwalker',
-    roleLabel: 'Shadow Assassin',
+    id: 'char_dranick',
+    name: 'Dranick',
+    roleLabel: 'Tank / Support',
     portrait: null, // Placeholder - will be replaced with actual asset
-    portraitAlt: 'A hooded figure shrouded in swirling void energy',
-    constellation: 0x1A2B3C, // Deterministic seed for constellation pattern
-    themeColor: '#9932C8', // Purple
-    stats: {
-      HP: 85,
-      CON: 12,
-      SPD: 18
-    },
-    abilities: [
-      {
-        name: 'Void Step',
-        description: 'Teleport through shadows, evading attacks'
-      },
-      {
-        name: 'Dark Blade',
-        description: 'Strike from darkness with lethal precision'
-      },
-      {
-        name: 'Shadow Merge',
-        description: 'Become untargetable in deep shadows'
-      }
-    ]
-  },
-  {
-    id: 'char_002_starforged',
-    name: 'Lyra Starforged',
-    roleLabel: 'Celestial Knight',
-    portrait: null,
-    portraitAlt: 'A knight in gleaming armor etched with constellation patterns',
-    constellation: 0x4D5E6F,
-    themeColor: '#60A5FA', // Blue
+    portraitAlt: 'A stalwart guardian wielding a heavy mace, standing resolute',
+    constellation: 0xD4AF37, // Golden seed
+    themeColor: '#FFD700', // Golden
     stats: {
       HP: 120,
-      CON: 18,
-      SPD: 10
+      CON: 9,
+      SPD: 2
     },
     abilities: [
       {
-        name: 'Stellar Shield',
-        description: 'Summon a barrier of starlight to protect allies'
+        name: 'Bonebreaker Mace',
+        spCost: 3,
+        description: 'Crush foes with brutal force, shattering their guard'
       },
       {
-        name: 'Comet Strike',
-        description: 'Charge forward with devastating impact'
+        name: 'Final Vow',
+        spCost: 3,
+        description: 'Draw enemy attention while fortifying your resolve'
       },
       {
-        name: 'Constellation Heal',
-        description: 'Channel cosmic energy to restore vitality'
+        name: 'Undying Judgment',
+        spCost: 5,
+        description: 'Deliver devastating judgment, healing from the blow'
       }
     ]
   },
   {
-    id: 'char_003_entropist',
-    name: 'Zephyr the Entropist',
-    roleLabel: 'Chaos Mage',
+    id: 'char_eline',
+    name: 'Eline',
+    roleLabel: 'Scout / Status Control',
     portrait: null,
-    portraitAlt: 'A robed figure with fractured reality swirling around them',
-    constellation: 0x7F8A9B,
-    themeColor: '#32C864', // Green/Teal
+    portraitAlt: 'A swift scout with twin daggers, eyes keen and alert',
+    constellation: 0xC9A961,
+    themeColor: '#FFD700', // Golden
     stats: {
       HP: 70,
       CON: 8,
-      SPD: 14
+      SPD: 6
     },
     abilities: [
       {
-        name: 'Reality Fracture',
-        description: 'Shatter spacetime to damage and disorient foes'
+        name: 'Twin Thorns',
+        spCost: 3,
+        description: 'Strike quickly, leaving wounds that bleed and fester'
       },
       {
-        name: 'Entropy Burst',
-        description: 'Unleash chaotic energy in all directions'
+        name: 'Burrow Buddy',
+        spCost: 3,
+        description: 'Evade danger with preternatural speed and agility'
       },
       {
-        name: 'Probability Warp',
-        description: 'Manipulate chance to alter outcomes'
+        name: 'Marsh Ambush',
+        spCost: 5,
+        description: 'Exploit weakness, striking hardest against the wounded'
       }
     ]
   },
   {
-    id: 'char_004_grimkeeper',
-    name: 'Mordain Grimkeeper',
-    roleLabel: 'Necromancer',
+    id: 'char_varro',
+    name: 'Varro',
+    roleLabel: 'Balanced / Hybrid',
     portrait: null,
-    portraitAlt: 'A skeletal figure wrapped in tattered robes, holding an ancient tome',
-    constellation: 0xA1B2C3,
-    themeColor: '#10B981', // Teal
+    portraitAlt: 'An arcane warrior wielding crackling energy and blade alike',
+    constellation: 0xB8962E,
+    themeColor: '#FFD700', // Golden
     stats: {
       HP: 90,
-      CON: 14,
-      SPD: 8
+      CON: 8,
+      SPD: 4
     },
     abilities: [
       {
-        name: 'Raise Dead',
-        description: 'Summon skeletal warriors from fallen enemies'
+        name: 'Arc Lash',
+        spCost: 3,
+        description: 'Unleash arcing magic that splashes to nearby foes'
       },
       {
-        name: 'Life Drain',
-        description: 'Siphon vitality from the living to sustain yourself'
+        name: 'Spell Parry',
+        spCost: 3,
+        description: 'Ward yourself with arcane shields that reflect attacks'
       },
       {
-        name: 'Death Mark',
-        description: 'Curse a target to take amplified damage'
+        name: 'Gravemark Seal',
+        spCost: 5,
+        description: 'Brand enemies with death marks, amplifying all harm'
       }
     ]
   },
   {
-    id: 'char_005_stormcaller',
-    name: 'Thalia Stormcaller',
-    roleLabel: 'Lightning Sorcerer',
+    id: 'char_kestril',
+    name: 'Kestril',
+    roleLabel: 'Tactical Support',
     portrait: null,
-    portraitAlt: 'A woman with crackling lightning emanating from her hands',
-    constellation: 0xD4E5F6,
-    themeColor: '#06B6D4', // Cyan
+    portraitAlt: 'A temporal mage with eyes that see beyond the present moment',
+    constellation: 0xDAA520,
+    themeColor: '#FFD700', // Golden
     stats: {
-      HP: 75,
+      HP: 80,
       CON: 10,
-      SPD: 16
+      SPD: 3
     },
     abilities: [
       {
-        name: 'Chain Lightning',
-        description: 'Arc electricity between multiple targets'
+        name: 'Future Flare',
+        spCost: 3,
+        description: 'Mark enemies with visions of their impending doom'
       },
       {
-        name: 'Thunderclap',
-        description: 'Create a shockwave that stuns nearby foes'
+        name: 'Foresight Step',
+        spCost: 3,
+        description: 'Glimpse the future to move with impossible swiftness'
       },
       {
-        name: 'Storm Shield',
-        description: 'Surround yourself with protective lightning'
+        name: 'Rewind Pulse',
+        spCost: 5,
+        description: 'Reverse recent wounds and purge corruption from allies'
       }
     ]
   },
   {
-    id: 'char_006_bloodbound',
-    name: 'Riven the Bloodbound',
-    roleLabel: 'Berserker',
+    id: 'char_lira',
+    name: 'Lira',
+    roleLabel: 'Healer / Agile Striker',
     portrait: null,
-    portraitAlt: 'A scarred warrior wielding twin axes, eyes glowing crimson',
-    constellation: 0x123456,
-    themeColor: '#EF4444', // Red
+    portraitAlt: 'A graceful healer who strikes with surgical precision',
+    constellation: 0xE6C35C,
+    themeColor: '#FFD700', // Golden
+    stats: {
+      HP: 85,
+      CON: 9,
+      SPD: 5
+    },
+    abilities: [
+      {
+        name: 'Pressure Point Strike',
+        spCost: 3,
+        description: 'Target vital points, exposing foes to further harm'
+      },
+      {
+        name: 'Breath',
+        spCost: 3,
+        description: 'Restore vitality with focused, life-giving energy'
+      },
+      {
+        name: 'Red Thread',
+        spCost: 5,
+        description: 'Bind an ally\'s fate to yours, sharing their suffering'
+      }
+    ]
+  },
+  {
+    id: 'char_grim',
+    name: 'Grim',
+    roleLabel: 'Berserker / Damage',
+    portrait: null,
+    portraitAlt: 'A towering berserker who trades pain for overwhelming power',
+    constellation: 0xCFB53B,
+    themeColor: '#FFD700', // Golden
     stats: {
       HP: 110,
-      CON: 16,
-      SPD: 12
+      CON: 6,
+      SPD: 3
     },
     abilities: [
       {
-        name: 'Blood Rage',
-        description: 'Sacrifice HP to deal massive damage'
+        name: 'Soilcrack Fist',
+        spCost: 3,
+        description: 'Unleash brutal force, wounding yourself in the process'
       },
       {
-        name: 'Reckless Assault',
-        description: 'Attack with fury, ignoring defense'
+        name: 'Fury Guard',
+        spCost: 3,
+        description: 'Channel pain into protective rage and power'
       },
       {
-        name: 'Crimson Recovery',
-        description: 'Heal based on damage dealt to enemies'
+        name: 'Relic Howl',
+        spCost: 5,
+        description: 'Bellow with ancient fury, striking terror into all foes'
       }
     ]
   }
@@ -230,10 +249,10 @@ export function validateCharacterData() {
       return false;
     }
 
-    // Check each ability has name and description
+    // Check each ability has name, spCost, and description
     for (const ability of char.abilities) {
-      if (!ability.name || !ability.description) {
-        console.error(`[CharacterData] Invalid ability in character:`, char.id);
+      if (!ability.name || !ability.description || typeof ability.spCost !== 'number') {
+        console.error(`[CharacterData] Invalid ability in character:`, char.id, ability);
         return false;
       }
     }

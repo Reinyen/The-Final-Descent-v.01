@@ -5,6 +5,7 @@
  */
 
 import { getCharacterById } from './character-data.js';
+import { SelectionParticleEffect } from './roster-selection-effect.js';
 
 export class RosterUI {
   constructor(stateMachine, callbacks) {
@@ -20,6 +21,7 @@ export class RosterUI {
     this.singleRerollBtn = document.getElementById('single-reroll-btn');
     this.totalRerollBtn = document.getElementById('total-reroll-btn');
     this.descendBtn = document.getElementById('descend-btn');
+    this.selectionEffectContainer = document.getElementById('selection-effect-container');
 
     // Hover state
     this.hoveredCardId = null;
@@ -29,6 +31,9 @@ export class RosterUI {
 
     // Selection state
     this.selectedCardId = null;
+
+    // Selection particle effect
+    this.selectionEffect = null;
 
     // Initialize
     this.setupEventListeners();
@@ -163,7 +168,49 @@ export class RosterUI {
       </div>
     `;
 
+    // Add hover event listeners for stats popover
+    portrait.addEventListener('mouseenter', () => this.handleFallenHoverStart(char.id));
+    portrait.addEventListener('mouseleave', () => this.handleFallenHoverEnd(char.id));
+
     return portrait;
+  }
+
+  /**
+   * Handle Fallen portrait hover start
+   * Shows stats in popover
+   * @param {string} charId
+   */
+  handleFallenHoverStart(charId) {
+    // Ignore if UI is locked
+    if (this.stateMachine.isLocked()) {
+      return;
+    }
+
+    this.hoveredCardId = charId;
+
+    // Clear any pending close timer
+    clearTimeout(this.hoverCloseTimer);
+
+    // Schedule popover open with 120ms delay
+    this.hoverOpenTimer = setTimeout(() => {
+      this.openPopover(charId);
+    }, 120);
+  }
+
+  /**
+   * Handle Fallen portrait hover end
+   * @param {string} charId
+   */
+  handleFallenHoverEnd(charId) {
+    if (this.hoveredCardId !== charId) return;
+
+    this.hoveredCardId = null;
+
+    // Clear open timer if still pending
+    clearTimeout(this.hoverOpenTimer);
+
+    // Schedule popover close with 80ms delay
+    this.schedulePopoverClose();
   }
 
   /**
@@ -237,16 +284,22 @@ export class RosterUI {
       const abilityItem = document.createElement('div');
       abilityItem.className = 'ability-item';
       abilityItem.innerHTML = `
-        <div class="ability-name">${ability.name}</div>
+        <div class="ability-header">
+          <div class="ability-name">${ability.name}</div>
+          <div class="ability-sp-cost">${ability.spCost} SP</div>
+        </div>
         <div class="ability-description">${ability.description}</div>
       `;
       abilitiesList.appendChild(abilityItem);
     }
 
-    // Position popover
-    const cardElement = this.livingCardsRow.querySelector(`[data-char-id="${charId}"]`);
-    if (cardElement) {
-      this.positionPopover(cardElement);
+    // Position popover relative to card or portrait
+    let targetElement = this.livingCardsRow.querySelector(`[data-char-id="${charId}"]`);
+    if (!targetElement) {
+      targetElement = this.fallenPortraitsRow.querySelector(`[data-char-id="${charId}"]`);
+    }
+    if (targetElement) {
+      this.positionPopover(targetElement);
     }
 
     // Show popover
@@ -342,6 +395,13 @@ export class RosterUI {
       if (marker) marker.classList.add('hidden');
     }
 
+    // Stop previous selection effect
+    if (this.selectionEffect) {
+      this.selectionEffect.stop();
+      this.selectionEffect = null;
+      this.selectionEffectContainer.classList.add('hidden');
+    }
+
     this.selectedCardId = charId;
 
     if (charId) {
@@ -351,8 +411,31 @@ export class RosterUI {
         cardElement.classList.add('selected');
         const marker = cardElement.querySelector('.selection-marker');
         if (marker) marker.classList.remove('hidden');
+
+        // Position and start selection particle effect
+        this.showSelectionEffect(cardElement);
       }
     }
+  }
+
+  /**
+   * Show selection particle effect behind selected card
+   * @param {HTMLElement} cardElement
+   */
+  showSelectionEffect(cardElement) {
+    const cardRect = cardElement.getBoundingClientRect();
+
+    // Position effect container behind card
+    this.selectionEffectContainer.style.left = `${cardRect.left - 35}px`;
+    this.selectionEffectContainer.style.top = `${cardRect.top - 25}px`;
+    this.selectionEffectContainer.classList.remove('hidden');
+
+    // Create and start effect
+    this.selectionEffect = new SelectionParticleEffect(this.selectionEffectContainer);
+    this.selectionEffect.init();
+    this.selectionEffect.start();
+
+    console.log('[RosterUI] Selection effect started for card');
   }
 
   /**
@@ -512,6 +595,13 @@ export class RosterUI {
   destroy() {
     clearTimeout(this.hoverOpenTimer);
     clearTimeout(this.hoverCloseTimer);
+
+    // Cleanup selection effect
+    if (this.selectionEffect) {
+      this.selectionEffect.stop();
+      this.selectionEffect = null;
+    }
+
     console.log('[RosterUI] Destroyed');
   }
 }

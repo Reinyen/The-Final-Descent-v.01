@@ -261,7 +261,147 @@
 }
 
 /* ========================================
-   SHATTER EFFECT (Reroll animations)
+   DRAMATIC GLITCH REROLL EFFECT
+   Flicker/glitch animation for card swaps
+   ======================================== */
+
+@keyframes glitchFlicker {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+    filter: hue-rotate(0deg) brightness(1);
+  }
+  10% {
+    opacity: 0.8;
+    transform: translate(-2px, 1px) scale(1.02);
+    filter: hue-rotate(90deg) brightness(1.2);
+  }
+  15% {
+    opacity: 0.3;
+    transform: translate(3px, -2px) scale(0.98);
+    filter: hue-rotate(-90deg) brightness(0.8);
+  }
+  20% {
+    opacity: 0.9;
+    transform: translate(-1px, 2px) scale(1.01);
+    filter: hue-rotate(45deg) brightness(1.1);
+  }
+  25% {
+    opacity: 0.2;
+    transform: translate(2px, -1px) scale(0.99);
+    filter: hue-rotate(-45deg) brightness(0.7);
+  }
+  30% {
+    opacity: 0.7;
+    transform: translate(-3px, 1px) scale(1.02);
+    filter: hue-rotate(120deg) brightness(1.3);
+  }
+  40% {
+    opacity: 0.1;
+    transform: translate(1px, -3px) scale(0.97);
+    filter: hue-rotate(-120deg) brightness(0.6);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translate(-2px, 2px) scale(1.03);
+    filter: hue-rotate(60deg) brightness(1.2);
+  }
+  60% {
+    opacity: 0.2;
+    transform: translate(3px, -1px) scale(0.96);
+    filter: hue-rotate(-60deg) brightness(0.8);
+  }
+  70% {
+    opacity: 0.4;
+    transform: translate(-1px, 3px) scale(1.01);
+    filter: hue-rotate(30deg) brightness(1.1);
+  }
+  80% {
+    opacity: 0.1;
+    transform: translate(2px, -2px) scale(0.95);
+    filter: hue-rotate(-30deg) brightness(0.7);
+  }
+  90% {
+    opacity: 0.3;
+    transform: translate(-2px, 1px) scale(1.02);
+    filter: hue-rotate(15deg) brightness(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.9);
+    filter: hue-rotate(0deg) brightness(0.5);
+  }
+}
+
+@keyframes glitchMaterialize {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.9);
+    filter: hue-rotate(180deg) brightness(2);
+  }
+  10% {
+    opacity: 0.2;
+    transform: translate(3px, -2px) scale(1.05);
+    filter: hue-rotate(-90deg) brightness(1.5);
+  }
+  20% {
+    opacity: 0.5;
+    transform: translate(-2px, 3px) scale(0.95);
+    filter: hue-rotate(90deg) brightness(1.3);
+  }
+  30% {
+    opacity: 0.3;
+    transform: translate(1px, -1px) scale(1.02);
+    filter: hue-rotate(-45deg) brightness(1.2);
+  }
+  40% {
+    opacity: 0.7;
+    transform: translate(-3px, 2px) scale(0.98);
+    filter: hue-rotate(45deg) brightness(1.1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: translate(2px, -3px) scale(1.03);
+    filter: hue-rotate(-30deg) brightness(1.2);
+  }
+  60% {
+    opacity: 0.8;
+    transform: translate(-1px, 1px) scale(0.99);
+    filter: hue-rotate(30deg) brightness(1.1);
+  }
+  70% {
+    opacity: 0.6;
+    transform: translate(2px, -1px) scale(1.01);
+    filter: hue-rotate(-15deg) brightness(1.05);
+  }
+  80% {
+    opacity: 0.9;
+    transform: translate(-1px, 2px) scale(0.98);
+    filter: hue-rotate(15deg) brightness(1.02);
+  }
+  90% {
+    opacity: 0.95;
+    transform: translate(1px, -1px) scale(1.01);
+    filter: hue-rotate(-10deg) brightness(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+    filter: hue-rotate(0deg) brightness(1);
+  }
+}
+
+.living-card.glitching-out {
+  animation: glitchFlicker 0.8s ease-in forwards;
+  pointer-events: none;
+}
+
+.living-card.glitching-in {
+  animation: glitchMaterialize 1s ease-out forwards;
+}
+
+/* ========================================
+   SHATTER EFFECT (Reroll animations - LEGACY)
    Per GDD §10.1 and §10.2
    ======================================== */
 
@@ -286,7 +426,7 @@
 }
 
 /* ========================================
-   COALESCE EFFECT (Reroll animations)
+   COALESCE EFFECT (Reroll animations - LEGACY)
    Per GDD §10.1 and §10.2
    ======================================== */
 
