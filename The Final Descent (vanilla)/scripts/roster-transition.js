@@ -176,12 +176,9 @@ export class RosterTransition {
     const material = new THREE.ShaderMaterial({
       uniforms: {},
       vertexShader: `
-        precision highp float;
-
         attribute float size;
         attribute float lifetime;
         attribute float maxLifetime;
-
         varying float vAlpha;
 
         void main() {
@@ -193,19 +190,15 @@ export class RosterTransition {
         }
       `,
       fragmentShader: `
-        precision highp float;
-
         varying float vAlpha;
 
         void main() {
-          vec2 center = gl_PointCoord - vec2(0.5);
-          float dist = length(center);
+          float dist = length(gl_PointCoord - vec2(0.5));
           if (dist > 0.5) discard;
 
           float alpha = (1.0 - smoothstep(0.3, 0.5, dist)) * vAlpha;
 
-          // Golden color
-          vec3 color = vec3(1.0, 0.843, 0.0); // Gold
+          vec3 color = vec3(1.0, 0.843, 0.0);
           gl_FragColor = vec4(color, alpha);
         }
       `,
