@@ -111,7 +111,7 @@ export class UIController {
       this.mainTitle.classList.remove('glitch-in');
       this.mainTitle.classList.add('glitch-out');
 
-      // After 300ms (glitch-out duration), teleport and glitch back in
+      // After 280ms (glitch-out duration), teleport and glitch back in
       const timeout1 = setTimeout(() => {
         // Teleport to new random position
         this.teleportTitle();
@@ -125,7 +125,7 @@ export class UIController {
         this.titleGlitchInProgress = false;
 
         this.glitchTimeouts.delete(timeout1);
-      }, 300);
+      }, 280);
 
       this.glitchTimeouts.add(timeout1);
     }
@@ -166,7 +166,7 @@ export class UIController {
     const interval = 3.0 + Math.random() * 4.0;
 
     if (elapsedTime - this.lastButtonGlitch >= interval) {
-      this.triggerGlitch(this.beginButton, 120 + Math.random() * 60);
+      this.triggerGlitch(this.beginButton, 280); // Match new dramatic glitch duration
       this.lastButtonGlitch = elapsedTime;
     }
   }
