@@ -108,54 +108,56 @@ export class RosterScene {
   }
 
   /**
-   * Create star-shaped texture for particles
+   * Create star-shaped texture with cross/spike pattern
    */
   createStarTexture() {
+    const s = 128;
     const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
+    canvas.width = s;
+    canvas.height = s;
     const ctx = canvas.getContext('2d');
+    const cx = s / 2;
+    const cy = s / 2;
 
-    const centerX = 32;
-    const centerY = 32;
-    const outerRadius = 30;
-    const innerRadius = 12;
-    const numPoints = 5;
+    ctx.clearRect(0, 0, s, s);
 
-    // Draw star shape
-    ctx.clearRect(0, 0, 64, 64);
+    // Core glow (radial gradient)
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, s * 0.5);
+    g.addColorStop(0.0, 'rgba(255,255,255,1.0)');
+    g.addColorStop(0.10, 'rgba(255,255,255,0.98)');
+    g.addColorStop(0.30, 'rgba(255,255,255,0.35)');
+    g.addColorStop(1.0, 'rgba(255,255,255,0.0)');
+    ctx.fillStyle = g;
     ctx.beginPath();
+    ctx.arc(cx, cy, s * 0.5, 0, Math.PI * 2);
+    ctx.fill();
 
-    for (let i = 0; i < numPoints * 2; i++) {
-      const angle = (i * Math.PI) / numPoints - Math.PI / 2;
-      const radius = i % 2 === 0 ? outerRadius : innerRadius;
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
+    // Spikes (cross pattern)
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineCap = 'round';
 
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
+    function spike(len, w) {
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(-len, 0);
+      ctx.lineTo(len, 0);
+      ctx.stroke();
     }
 
-    ctx.closePath();
+    // Main spikes (horizontal and vertical)
+    spike(s * 0.23, 2.3);
+    ctx.rotate(Math.PI / 2);
+    spike(s * 0.23, 2.3);
 
-    // Create radial gradient for glow
-    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, outerRadius);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
-    gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    // Diagonal spikes (smaller)
+    ctx.rotate(Math.PI / 4);
+    spike(s * 0.18, 1.8);
+    ctx.rotate(Math.PI / 2);
+    spike(s * 0.18, 1.8);
 
-    ctx.fillStyle = gradient;
-    ctx.fill();
-
-    // Add bright center
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-    ctx.fill();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
