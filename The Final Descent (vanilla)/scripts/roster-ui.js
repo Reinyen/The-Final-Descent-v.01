@@ -13,6 +13,7 @@ export class RosterUI {
     this.callbacks = callbacks || {};
 
     // DOM references
+    this.overlayRoot = document.getElementById('roster-ui-overlay');
     this.titleArea = document.getElementById('roster-title-area');
     this.livingCardsRow = document.getElementById('living-cards-row');
     this.fallenPortraitsRow = document.getElementById('fallen-portraits-row');
@@ -22,6 +23,9 @@ export class RosterUI {
     this.totalRerollBtn = document.getElementById('total-reroll-btn');
     this.descendBtn = document.getElementById('descend-btn');
     this.selectionEffectContainer = document.getElementById('selection-effect-container');
+
+    // Ensure the overlay is hidden until the entry cinematic completes
+    this.resetOverlay();
 
     // Hover state
     this.hoveredCardId = null;
@@ -532,6 +536,26 @@ export class RosterUI {
   showTitle() {
     this.titleArea.classList.remove('hidden');
     this.titleArea.classList.add('fade-in');
+  }
+
+  /**
+   * Fade in the UI overlay after the background reveal
+   */
+  revealOverlay() {
+    if (this.overlayRoot) {
+      this.overlayRoot.classList.add('ui-visible');
+      this.overlayRoot.setAttribute('aria-hidden', 'false');
+    }
+  }
+
+  /**
+   * Reset overlay visibility/ARIA state before the cinematic runs
+   */
+  resetOverlay() {
+    if (this.overlayRoot) {
+      this.overlayRoot.classList.remove('ui-visible');
+      this.overlayRoot.setAttribute('aria-hidden', 'true');
+    }
   }
 
   /**
