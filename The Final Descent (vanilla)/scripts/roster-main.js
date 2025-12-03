@@ -9,6 +9,7 @@ import { RosterStateMachine, RosterState } from './roster-state-machine.js';
 import { RosterUI } from './roster-ui.js';
 import { RosterScene } from './roster-scene.js';
 import { RosterTransition } from './roster-transition.js';
+import { RosterIntroOrbs } from './roster-intro-orbs.js';
 
 class RosterSelectionApp {
   constructor() {
@@ -25,6 +26,7 @@ class RosterSelectionApp {
     this.ui = null;
     this.scene = null;
     this.transition = null;
+    this.introOrbs = null;
 
     // State
     this.livingIds = [];
@@ -97,6 +99,10 @@ class RosterSelectionApp {
     const blackoutElement = document.getElementById('roster-blackout');
     this.transition = new RosterTransition(blackoutElement);
 
+    // Intro orb flourish
+    const orbContainer = document.getElementById('orb-intro-layer');
+    this.introOrbs = new RosterIntroOrbs(orbContainer);
+
     // Start animation loop
     this.startAnimationLoop();
 
@@ -151,6 +157,12 @@ class RosterSelectionApp {
    */
   startEntryCinematic() {
     console.log('[RosterApp] Starting entry cinematic');
+
+    // Kick off orb prelude during the background hold
+    if (this.introOrbs) {
+      const delayMs = this.transition ? this.transition.fadeDuration * 1000 : 0;
+      this.introOrbs.playSequence(this.livingIds, this.fallenIds, { delayMs });
+    }
 
     this.transition.start(() => {
       console.log('[RosterApp] Entry cinematic complete');
