@@ -94,12 +94,8 @@ class RosterSelectionApp {
     });
 
     // Initialize transition (entry cinematic)
-    this.transition = new RosterTransition(
-      this.scene.getScene(),
-      this.scene.getCamera(),
-      this.livingIds,
-      this.fallenIds
-    );
+    const blackoutElement = document.getElementById('roster-blackout');
+    this.transition = new RosterTransition(blackoutElement);
 
     // Start animation loop
     this.startAnimationLoop();
@@ -161,6 +157,9 @@ class RosterSelectionApp {
 
       // Transition to Ready state
       this.stateMachine.transition(RosterState.READY);
+
+      // Reveal UI overlay
+      this.ui.revealOverlay();
 
       // Show UI elements with fade-in
       this.ui.showTitle();

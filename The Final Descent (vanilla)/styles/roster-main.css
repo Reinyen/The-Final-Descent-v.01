@@ -23,6 +23,20 @@ body {
   position: relative;
 }
 
+#roster-blackout {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 30;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 2s ease;
+}
+
+#roster-blackout.fade-out {
+  opacity: 0;
+}
+
 .hidden {
   opacity: 0 !important;
   pointer-events: none !important;
@@ -47,6 +61,17 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+#roster-vignette {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(to top, rgba(150, 50, 200, 0.10) 0%, rgba(0, 0, 0, 0.0) 62%);
+  box-shadow:
+    inset 0 0 180px rgba(0, 0, 0, 0.75),
+    inset 0 0 520px rgba(0, 0, 0, 0.92);
 }
 
 /* ========================================
@@ -85,9 +110,16 @@ body {
   width: 100%;
   height: 100%;
   z-index: 10;
-  pointer-events: auto; /* UI handles all input */
+  pointer-events: none; /* Enabled after entry cinematic */
   display: flex;
   flex-direction: column;
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+
+#roster-ui-overlay.ui-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ========================================

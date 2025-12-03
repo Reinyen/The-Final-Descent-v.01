@@ -14,15 +14,21 @@
   <link rel="stylesheet" href="styles/roster-animations.css">
 </head>
 <body>
+  <!-- Blackout overlay for entry fade -->
+  <div id="roster-blackout"></div>
+
   <!-- Three.js Canvas Container (Layer A per GDD §3.1) -->
   <!-- Per GDD §3.2: pointer-events: none to prevent input interception -->
   <div id="roster-canvas-container"></div>
+
+  <!-- Static vignette overlay for cavern framing -->
+  <div id="roster-vignette" class="vignette"></div>
 
   <!-- Selection Particle Effect Container -->
   <div id="selection-effect-container" class="hidden"></div>
 
   <!-- UI Overlay (Layer B per GDD §3.1) -->
-  <div id="roster-ui-overlay">
+  <div id="roster-ui-overlay" aria-hidden="true">
 
     <!-- Title Area (Top 20% per GDD §6.1) -->
     <div id="roster-title-area" class="hidden">
@@ -160,6 +166,6 @@
   </script>
 
   <!-- Main application entry -->
-  <script type="module" src="scripts/roster-main.js?v=20241202-2"></script>
+  <script type="module" src="scripts/roster-main.js?v=20241202-3"></script>
 </body>
 </html>
