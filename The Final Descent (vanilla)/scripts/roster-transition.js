@@ -2,7 +2,7 @@
  * Roster Transition (Entry Cinematic)
  * Handles the required sequencing:
  * 1. Fade from black over 2 seconds while showing only the background.
- * 2. Hold on the background alone for 3.5 seconds.
+ * 2. Hold on the background alone for 7 seconds so the orb prelude can complete.
  * 3. Fade UI in over 1 second.
  */
 
@@ -16,7 +16,7 @@ export class RosterTransition {
 
     // Timings (seconds)
     this.fadeDuration = 2.0;
-    this.backgroundHold = 3.5;
+    this.backgroundHold = 7.0;
     this.uiFadeDuration = 1.0;
     this.totalDuration = this.fadeDuration + this.backgroundHold + this.uiFadeDuration;
   }

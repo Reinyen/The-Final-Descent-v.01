@@ -32,6 +32,7 @@ export class RosterIntroOrbs {
         'golden-flash',
         'fallen-corrupt',
         'fallen-scatter',
+        'fallen-explode',
         'living-burst',
         'charge',
         'explode',
@@ -81,7 +82,7 @@ export class RosterIntroOrbs {
       orb.appendChild(smoke);
       orb.appendChild(name);
 
-      this.effectShells.push({ shell: effectShell, canvas: effectCanvas });
+      this.effectShells.push({ shell: effectShell, canvas: effectCanvas, isLiving });
       return orb;
     };
 
@@ -137,13 +138,16 @@ export class RosterIntroOrbs {
     return { livingRow, fallenRow };
   }
 
-  activateOrbEffects(durationMs = 1000) {
+  activateOrbEffects(durationMs = 1000, predicate = () => true) {
     if (!this.effectShells.length) return;
 
     this.stopOrbEffects();
+    const targets = this.effectShells.filter(predicate);
+    if (!targets.length) return;
+
     this.container.classList.add('effects-active');
 
-    this.effectShells.forEach(({ shell, canvas }) => {
+    targets.forEach(({ shell, canvas }) => {
       shell.classList.remove('hidden');
       const effect = new SelectionParticleEffect(canvas);
       // Slightly lighter than the full reroll effect but visually identical
@@ -186,14 +190,15 @@ export class RosterIntroOrbs {
     this.teardown();
     this.isPlaying = true;
 
-    const effectStart = 400;
+    const effectStart = 250;
     const effectDuration = 1500;
-    const nameRevealStart = effectStart + effectDuration; // 1.9s
+    const nameRevealStart = effectStart + effectDuration; // 1.75s
     const nameRevealDuration = 1000;
     const nameReadHold = 2500;
-    const fallenCorruptStart = nameRevealStart + nameRevealDuration + nameReadHold; // ~5.4s
-    const fallenScatterStart = fallenCorruptStart + 1000; // ~6.4s
-    const finalFlashStart = 8200; // keeps total between 8.5-10s including teardown
+    const fallenCorruptStart = nameRevealStart + nameRevealDuration + nameReadHold; // ~5.25s
+    const fallenReadHold = 2500; // Allow 2.5s to read corrupted names and smoke
+    const fallenScatterStart = fallenCorruptStart + fallenReadHold; // ~7.75s
+    const finalFlashStart = 8450; // keep within 8.5-10s window before UI fade
 
     return new Promise((resolve) => {
       this.resolvePromise = resolve;
@@ -218,12 +223,14 @@ export class RosterIntroOrbs {
         }, nameRevealStart);
 
         this.schedule(() => {
-          this.container.classList.add('fallen-corrupt');
+          this.container.classList.add('fallen-corrupt', 'fallen-explode');
+          this.activateOrbEffects(1500, shell => !shell.isLiving);
         }, fallenCorruptStart);
 
         this.schedule(() => {
+          this.container.classList.remove('fallen-explode');
           this.container.classList.add('fallen-scatter', 'living-burst');
-          this.activateOrbEffects(900);
+          this.activateOrbEffects(1000, shell => shell.isLiving);
         }, fallenScatterStart);
 
         this.schedule(() => this.triggerExplosion(), finalFlashStart);

@@ -158,10 +158,9 @@ class RosterSelectionApp {
   startEntryCinematic() {
     console.log('[RosterApp] Starting entry cinematic');
 
-    // Kick off orb prelude during the background hold
+    // Kick off orb prelude immediately; transition timing already leaves room for the full 8.5-10s sequence
     if (this.introOrbs) {
-      const delayMs = this.transition ? this.transition.fadeDuration * 1000 : 0;
-      this.introOrbs.playSequence(this.livingIds, this.fallenIds, { delayMs });
+      this.introOrbs.playSequence(this.livingIds, this.fallenIds);
     }
 
     this.transition.start(() => {
