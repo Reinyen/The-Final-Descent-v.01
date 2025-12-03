@@ -411,6 +411,8 @@ export class RosterScene {
         attribute vec3 aColor;
         attribute float aSize;
         attribute float aTwinkle;
+        attribute float aBrightnessScale;
+        attribute float aSizeScale;
 
         uniform float uTime;
         uniform float uBaseSize;
@@ -419,14 +421,16 @@ export class RosterScene {
         uniform float uTwinkleStrength;
 
         varying vec3 vColor;
+        varying float vLuma;
 
         void main(){
           vColor = aColor;
+          vLuma = aBrightnessScale;
 
           float osc = 0.78 + 0.22 * sin(uTime * (2.0 + aTwinkle * 6.0) + aTwinkle * 10.0);
           float tw = mix(1.0, osc, clamp(uTwinkleStrength, 0.0, 1.0));
 
-          float ps = uBaseSize * aSize * uPixelRatio * tw;
+          float ps = uBaseSize * aSize * aSizeScale * uPixelRatio * tw;
           gl_PointSize = clamp(ps, 0.0, uMaxSize);
 
           gl_Position = vec4(position.xy, 0.0, 1.0);
@@ -435,12 +439,13 @@ export class RosterScene {
       fragmentShader: `
         uniform sampler2D uMap;
         varying vec3 vColor;
+        varying float vLuma;
 
         void main(){
           vec4 tex = texture2D(uMap, gl_PointCoord);
           float a = tex.a;
           if (a < 0.02) discard;
-          vec3 col = vColor * tex.rgb;
+          vec3 col = vColor * tex.rgb * vLuma;
           gl_FragColor = vec4(col, a);
         }
       `
@@ -463,6 +468,8 @@ export class RosterScene {
     const col = new Float32Array(count * 3);
     const size = new Float32Array(count);
     const twinkle = new Float32Array(count);
+    const brightnessScale = new Float32Array(count);
+    const sizeScale = new Float32Array(count);
     const velY = new Float32Array(count);
     const velX = new Float32Array(count);
 
@@ -475,6 +482,7 @@ export class RosterScene {
       pos[ix + 2] = 0.0;
 
       const [cr, cg, cb] = this.pickStarColor();
+      const luma = 0.85 + this.rng() * 0.5; // Vary brightness per-star (0.85 - 1.35)
       col[ix + 0] = cr * brightness;
       col[ix + 1] = cg * brightness;
       col[ix + 2] = cb * brightness;
@@ -482,6 +490,8 @@ export class RosterScene {
       const r = this.rng();
       size[i] = 0.35 + Math.pow(r, 2.0) * 1.65;
       twinkle[i] = this.rng();
+      brightnessScale[i] = luma;
+      sizeScale[i] = 1.0 + this.rng() * 2.0; // 1x to 3x of the current spread
 
       velY[i] = Math.max(0.01, speed + (this.rng() * 2 - 1) * speedVar);
       velX[i] = (this.rng() * 2 - 1) * drift;
@@ -495,8 +505,10 @@ export class RosterScene {
     geom.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
     geom.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
     geom.setAttribute('aTwinkle', new THREE.BufferAttribute(twinkle, 1));
+    geom.setAttribute('aBrightnessScale', new THREE.BufferAttribute(brightnessScale, 1));
+    geom.setAttribute('aSizeScale', new THREE.BufferAttribute(sizeScale, 1));
 
-    const mat = this.makeStarMaterial({ map, baseSize, maxSize, twinkleStrength });
+    const mat = this.makeStarMaterial({ map, baseSize, maxSize: maxSize * 3.0, twinkleStrength });
     const points = new THREE.Points(geom, mat);
     points.frustumCulled = false;
     points.renderOrder = 1;
@@ -513,8 +525,8 @@ export class RosterScene {
         count: 260,
         baseSize: 1.7,
         maxSize: 4.0,
-        speed: 0.10,
-        speedVar: 0.05,
+        speed: 0.15,
+        speedVar: 0.075,
         drift: 0.002,
         brightness: 0.55,
         map: starTexSharp,
@@ -524,8 +536,8 @@ export class RosterScene {
         count: 320,
         baseSize: 2.2,
         maxSize: 6.0,
-        speed: 0.18,
-        speedVar: 0.08,
+        speed: 0.27,
+        speedVar: 0.12,
         drift: 0.004,
         brightness: 0.70,
         map: starTexSharp,
@@ -535,8 +547,8 @@ export class RosterScene {
         count: 220,
         baseSize: 3.0,
         maxSize: 9.0,
-        speed: 0.34,
-        speedVar: 0.14,
+        speed: 0.51,
+        speedVar: 0.21,
         drift: 0.006,
         brightness: 0.88,
         map: starTexSharp,
@@ -546,8 +558,8 @@ export class RosterScene {
         count: 120,
         baseSize: 4.4,
         maxSize: 14.0,
-        speed: 0.62,
-        speedVar: 0.22,
+        speed: 0.93,
+        speedVar: 0.33,
         drift: 0.010,
         brightness: 1.00,
         map: starTexStreak,
