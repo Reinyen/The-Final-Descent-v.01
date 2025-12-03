@@ -13,6 +13,7 @@ export class RosterIntroOrbs {
     this.activeTimeouts = [];
     this.isPlaying = false;
     this.resolvePromise = null;
+    this.currentTimings = null;
   }
 
   clearTimers() {
@@ -43,6 +44,7 @@ export class RosterIntroOrbs {
       this.flashOverlay.remove();
       this.flashOverlay = null;
     }
+    this.currentTimings = null;
     this.isPlaying = false;
   }
 
@@ -176,29 +178,44 @@ export class RosterIntroOrbs {
       this.flashOverlay.classList.remove('hidden');
       this.flashOverlay.classList.add('flash-active');
     }
+    const flashDuration = this.currentTimings?.flashDuration ?? 650;
     this.schedule(() => {
       this.teardown();
       if (this.resolvePromise) {
         this.resolvePromise();
         this.resolvePromise = null;
       }
-    }, 650);
+    }, flashDuration);
   }
 
   playSequence(livingIds, fallenIds, options = {}) {
-    const { delayMs = 0 } = options;
+    const { delayMs = 0, timings: timingOverrides = {} } = options;
     this.teardown();
     this.isPlaying = true;
 
-    const effectStart = 250;
-    const effectDuration = 1500;
-    const nameRevealStart = effectStart + effectDuration; // 1.75s
-    const nameRevealDuration = 1000;
-    const nameReadHold = 2500;
-    const fallenCorruptStart = nameRevealStart + nameRevealDuration + nameReadHold; // ~5.25s
-    const fallenReadHold = 2500; // Allow 2.5s to read corrupted names and smoke
-    const fallenScatterStart = fallenCorruptStart + fallenReadHold; // ~7.75s
-    const finalFlashStart = 8450; // keep within 8.5-10s window before UI fade
+    const timings = {
+      effectStart: 250,
+      effectDuration: 1500,
+      nameRevealDuration: 1000,
+      nameReadHold: 2500,
+      fallenReadHold: 2500,
+      scatterLead: 600,
+      flashDuration: 650,
+      ...timingOverrides
+    };
+
+    const nameRevealStart = timings.effectStart + timings.effectDuration; // 1.75s
+    const fallenCorruptStart = nameRevealStart + timings.nameRevealDuration + timings.nameReadHold; // ~5.25s
+    const fallenScatterStart = fallenCorruptStart + timings.fallenReadHold; // ~7.75s
+
+    let finalFlashStart = fallenScatterStart + timings.scatterLead;
+    const totalDuration = finalFlashStart + timings.flashDuration;
+    if (totalDuration > 10000) {
+      const overshoot = totalDuration - 10000;
+      finalFlashStart = Math.max(finalFlashStart - overshoot, nameRevealStart + timings.nameRevealDuration);
+    }
+
+    this.currentTimings = { ...timings, finalFlashStart };
 
     return new Promise((resolve) => {
       this.resolvePromise = resolve;
@@ -211,12 +228,12 @@ export class RosterIntroOrbs {
 
         this.schedule(() => {
           this.container.classList.add('charge', 'golden-flash');
-          this.activateOrbEffects(effectDuration);
-        }, effectStart);
+          this.activateOrbEffects(timings.effectDuration);
+        }, timings.effectStart);
 
         this.schedule(() => {
           this.container.classList.remove('golden-flash');
-        }, effectStart + effectDuration + 50);
+        }, timings.effectStart + timings.effectDuration + 50);
 
         this.schedule(() => {
           this.container.classList.add('names-visible');

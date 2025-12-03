@@ -239,7 +239,7 @@ body {
 
 .orb-flash-overlay.flash-active {
   opacity: 1;
-  animation: orbScreenFlash 0.55s ease-out forwards;
+  animation: orbScreenFlash 0.65s ease-out forwards;
 }
 
 #orb-intro-layer.golden-flash .orb-effect-shell {
