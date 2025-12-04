@@ -482,9 +482,10 @@ export class RosterScene {
       pos[ix + 2] = 0.0;
 
       const [cr, cg, cb] = this.pickStarColor();
-      const sizeScaleRand = Math.min(3.0, 1.0 + Math.pow(this.rng(), 0.8) * 2.0); // 1x to 3x (weighted to larger)
+      const sizeScaleRand = Math.max(1.0, Math.min(3.0, 1.0 + Math.pow(this.rng(), 0.7) * 2.0)); // 1x to 3x (weighted to larger)
 
-      const luma = 1.0 + Math.pow(this.rng(), 1.3) * 0.9 + (sizeScaleRand - 1.0) * 0.25; // Brighter for larger stars
+      const lumaBase = 0.9 + Math.pow(this.rng(), 1.25) * 0.75;
+      const luma = lumaBase + (sizeScaleRand - 1.0) * 0.32; // Brighter for larger stars with capped ceiling
       col[ix + 0] = cr * brightness;
       col[ix + 1] = cg * brightness;
       col[ix + 2] = cb * brightness;
@@ -522,7 +523,7 @@ export class RosterScene {
     const starTexSharp = this.makeStarTexture({ streak: false });
     const starTexStreak = this.makeStarTexture({ streak: true });
 
-    const speedMultiplier = 1.5; // 50% faster fall across all layers
+    const speedMultiplier = 2.0; // 0.5x additional boost requested across all layers
 
     this.starLayers = [
       this.createStarLayer({

@@ -160,8 +160,7 @@ class RosterSelectionApp {
 
     // Kick off orb prelude during the background hold
     if (this.introOrbs) {
-      const delayMs = this.transition ? this.transition.fadeDuration * 1000 : 0;
-      this.introOrbs.playSequence(this.livingIds, this.fallenIds, { delayMs });
+      this.introOrbs.playSequence(this.livingIds, this.fallenIds, { delayMs: 0 });
     }
 
     this.transition.start(() => {
