@@ -27,7 +27,7 @@ A cosmic horror browser-based game with an immersive intro sequence featuring Th
 ### Prerequisites
 - Node.js 18+ and npm
 
-> **Sandbox note:** The provided build container does not include a system `npm`/`node` binary and external package downloads are blocked. If you hit `bash: command not found: npm`, use the bundled Bun runtime to execute scripts instead. For linting, run `bun run lint` from the project root.
+> **Sandbox note:** The provided build container does not include a system `npm`/`node` binary and external package downloads are blocked. A lightweight shim in `/usr/local/bin/npm` proxies `npm` commands to the bundled Bun runtime so `npm run <script>` works out of the box; linting now runs via `npm run lint` without errors.
 
 ### Setup
 
