@@ -482,16 +482,18 @@ export class RosterScene {
       pos[ix + 2] = 0.0;
 
       const [cr, cg, cb] = this.pickStarColor();
-      const luma = 0.85 + this.rng() * 0.5; // Vary brightness per-star (0.85 - 1.35)
+      const sizeScaleRand = Math.min(3.0, 1.0 + Math.pow(this.rng(), 0.8) * 2.0); // 1x to 3x (weighted to larger)
+
+      const luma = 1.0 + Math.pow(this.rng(), 1.3) * 0.9 + (sizeScaleRand - 1.0) * 0.25; // Brighter for larger stars
       col[ix + 0] = cr * brightness;
       col[ix + 1] = cg * brightness;
       col[ix + 2] = cb * brightness;
 
       const r = this.rng();
-      size[i] = 0.35 + Math.pow(r, 2.0) * 1.65;
+      size[i] = 0.35 + Math.pow(r, 1.6) * 1.75;
       twinkle[i] = this.rng();
       brightnessScale[i] = luma;
-      sizeScale[i] = 1.0 + this.rng() * 2.0; // 1x to 3x of the current spread
+      sizeScale[i] = sizeScaleRand; // 1x to 3x of the current spread (no smaller than base)
 
       velY[i] = Math.max(0.01, speed + (this.rng() * 2 - 1) * speedVar);
       velX[i] = (this.rng() * 2 - 1) * drift;
@@ -520,13 +522,15 @@ export class RosterScene {
     const starTexSharp = this.makeStarTexture({ streak: false });
     const starTexStreak = this.makeStarTexture({ streak: true });
 
+    const speedMultiplier = 1.5; // 50% faster fall across all layers
+
     this.starLayers = [
       this.createStarLayer({
         count: 260,
         baseSize: 1.7,
         maxSize: 4.0,
-        speed: 0.15,
-        speedVar: 0.075,
+        speed: 0.15 * speedMultiplier,
+        speedVar: 0.075 * speedMultiplier,
         drift: 0.002,
         brightness: 0.55,
         map: starTexSharp,
@@ -536,8 +540,8 @@ export class RosterScene {
         count: 320,
         baseSize: 2.2,
         maxSize: 6.0,
-        speed: 0.27,
-        speedVar: 0.12,
+        speed: 0.27 * speedMultiplier,
+        speedVar: 0.12 * speedMultiplier,
         drift: 0.004,
         brightness: 0.70,
         map: starTexSharp,
@@ -547,8 +551,8 @@ export class RosterScene {
         count: 220,
         baseSize: 3.0,
         maxSize: 9.0,
-        speed: 0.51,
-        speedVar: 0.21,
+        speed: 0.51 * speedMultiplier,
+        speedVar: 0.21 * speedMultiplier,
         drift: 0.006,
         brightness: 0.88,
         map: starTexSharp,
@@ -558,8 +562,8 @@ export class RosterScene {
         count: 120,
         baseSize: 4.4,
         maxSize: 14.0,
-        speed: 0.93,
-        speedVar: 0.33,
+        speed: 0.93 * speedMultiplier,
+        speedVar: 0.33 * speedMultiplier,
         drift: 0.010,
         brightness: 1.00,
         map: starTexStreak,
