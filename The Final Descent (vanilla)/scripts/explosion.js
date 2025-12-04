@@ -100,40 +100,46 @@ export class Explosion {
       const phi = Math.acos(2 * Math.random() - 1);
       const speed = 25 + Math.random() * 45; // 25-70 units/sec (faster!)
 
-      const vx = Math.sin(phi) * Math.cos(theta) * speed;
-      const vy = Math.sin(phi) * Math.sin(theta) * speed;
-      const vz = Math.cos(phi) * speed;
+      let vx = Math.sin(phi) * Math.cos(theta) * speed;
+      let vy = Math.sin(phi) * Math.sin(theta) * speed;
+      let vz = Math.cos(phi) * speed;
 
       // Add upward bias for hemisphere explosion
       velocities[i3] = vx;
       velocities[i3 + 1] = Math.abs(vy) * 0.8 + vy * 0.2; // Bias upward
       velocities[i3 + 2] = vz;
 
-      // More varied colors - hot to cool
+      // More varied colors - cool cosmic flames and dusty chunks
       const colorType = Math.random();
-      if (colorType < 0.3) {
-        // White-hot core
-        colors[i3] = 1.0;
-        colors[i3 + 1] = 1.0;
-        colors[i3 + 2] = 0.95;
-      } else if (colorType < 0.6) {
-        // Orange-red flames
-        colors[i3] = 1.0;
-        colors[i3 + 1] = 0.4 + Math.random() * 0.3;
-        colors[i3 + 2] = 0.1;
-      } else if (colorType < 0.8) {
-        // Purple energy
-        colors[i3] = 0.6;
-        colors[i3 + 1] = 0.2;
-        colors[i3 + 2] = 0.8;
+      const dusty = Math.random() < 0.25;
+      if (dusty) {
+        // Ash and debris with faint violet sparks
+        const tone = 0.2 + Math.random() * 0.2;
+        colors[i3] = tone + 0.05;
+        colors[i3 + 1] = tone;
+        colors[i3 + 2] = tone + 0.08;
+        const velocityScale = 0.35;
+        velocities[i3] *= velocityScale;
+        velocities[i3 + 1] *= velocityScale;
+        velocities[i3 + 2] *= velocityScale;
+      } else if (colorType < 0.33) {
+        // Electric blue-white core
+        colors[i3] = 0.85 + Math.random() * 0.15;
+        colors[i3 + 1] = 0.9 + Math.random() * 0.1;
+        colors[i3 + 2] = 1.0;
+      } else if (colorType < 0.66) {
+        // Teal flames
+        colors[i3] = 0.35 + Math.random() * 0.25;
+        colors[i3 + 1] = 0.8 + Math.random() * 0.15;
+        colors[i3 + 2] = 0.9 + Math.random() * 0.08;
       } else {
-        // Green energy
-        colors[i3] = 0.3;
-        colors[i3 + 1] = 0.9;
-        colors[i3 + 2] = 0.4;
+        // Deep violet heat
+        colors[i3] = 0.7 + Math.random() * 0.15;
+        colors[i3 + 1] = 0.4 + Math.random() * 0.2;
+        colors[i3 + 2] = 0.9 + Math.random() * 0.1;
       }
 
-      sizes[i] = 2 + Math.random() * 6;
+      sizes[i] = dusty ? 3 + Math.random() * 5 : 2 + Math.random() * 6;
       alphas[i] = 1.0;
 
       this.particles.push({
@@ -262,8 +268,10 @@ export class Explosion {
           float dist = length(gl_PointCoord - vec2(0.5));
           if (dist > 0.5) discard;
 
-          // Rocky debris color with glow
-          vec3 color = vec3(0.4, 0.35, 0.3) + vec3(1.0, 0.5, 0.2) * (1.0 - dist);
+          // Rocky debris color with cool glow
+          vec3 baseDust = vec3(0.3, 0.32, 0.36);
+          vec3 coolEmber = vec3(0.4, 0.7, 0.8);
+          vec3 color = baseDust + coolEmber * (1.0 - dist) * 0.7;
           float alpha = (1.0 - dist * 2.0) * vAlpha * 0.8;
           gl_FragColor = vec4(color, alpha);
         }
@@ -298,16 +306,20 @@ export class Explosion {
       positions[i3 + 1] = this.explosionCenter.y + Math.sin(phi) * Math.sin(theta) * radius;
       positions[i3 + 2] = this.explosionCenter.z + Math.cos(phi) * radius;
 
-      // Hot colors
+      // Cool fire colors
       const temp = Math.random();
-      if (temp < 0.5) {
-        colors[i3] = 1.0;
-        colors[i3 + 1] = 0.8 + Math.random() * 0.2;
-        colors[i3 + 2] = 0.3;
+      if (temp < 0.4) {
+        colors[i3] = 0.8 + Math.random() * 0.2;
+        colors[i3 + 1] = 0.9 + Math.random() * 0.1;
+        colors[i3 + 2] = 1.0;
+      } else if (temp < 0.75) {
+        colors[i3] = 0.45 + Math.random() * 0.25;
+        colors[i3 + 1] = 0.75 + Math.random() * 0.2;
+        colors[i3 + 2] = 0.95 + Math.random() * 0.05;
       } else {
-        colors[i3] = 1.0;
-        colors[i3 + 1] = 0.4 + Math.random() * 0.3;
-        colors[i3 + 2] = 0.1;
+        colors[i3] = 0.7 + Math.random() * 0.2;
+        colors[i3 + 1] = 0.45 + Math.random() * 0.3;
+        colors[i3 + 2] = 0.9 + Math.random() * 0.1;
       }
 
       sizes[i] = 5 + Math.random() * 10;
@@ -389,9 +401,9 @@ export class Explosion {
         uniform float opacity;
 
         void main() {
-          // Purple/green shockwave ring
-          vec3 color1 = vec3(0.6, 0.2, 0.8); // Purple
-          vec3 color2 = vec3(0.3, 0.9, 0.4); // Green
+          // Purple/teal shockwave ring
+          vec3 color1 = vec3(0.6, 0.25, 0.85); // Purple
+          vec3 color2 = vec3(0.2, 0.8, 0.9); // Teal
           vec3 color = mix(color1, color2, 0.5);
 
           gl_FragColor = vec4(color, opacity);
