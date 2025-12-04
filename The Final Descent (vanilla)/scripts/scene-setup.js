@@ -129,7 +129,8 @@ export class IntroScene {
     // Initialize star physics
     this.starPhysics = new StarPhysics(
       this.starfield,
-      this.blackHole.getPosition()
+      this.blackHole,
+      this.scene
     );
 
     // Initialize explosion system

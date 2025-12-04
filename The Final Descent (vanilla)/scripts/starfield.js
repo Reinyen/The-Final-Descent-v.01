@@ -29,6 +29,7 @@ export class Starfield {
     const starColors = new Float32Array(totalCount * 3);
     const starBaseColors = new Float32Array(totalCount * 3);
     const starBaseSizes = new Float32Array(totalCount);
+    const starBaseIntensities = new Float32Array(totalCount);
     const starTwinkleSeeds = new Float32Array(totalCount);
     const starTwinkleSpeed = new Float32Array(totalCount); // Individual flicker speeds
     const starAbsorptionScales = new Float32Array(totalCount);
@@ -52,6 +53,7 @@ export class Starfield {
         colors: starColors,
         baseColors: starBaseColors,
         baseSizes: starBaseSizes,
+        baseIntensities: starBaseIntensities,
         twinkleSeeds: starTwinkleSeeds,
         twinkleSpeeds: starTwinkleSpeed,
         absorption: starAbsorptionScales,
@@ -66,6 +68,7 @@ export class Starfield {
     this.starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
     this.starGeometry.setAttribute('baseColor', new THREE.BufferAttribute(starBaseColors, 3));
     this.starGeometry.setAttribute('baseSize', new THREE.BufferAttribute(starBaseSizes, 1));
+    this.starGeometry.setAttribute('baseIntensity', new THREE.BufferAttribute(starBaseIntensities, 1));
     this.starGeometry.setAttribute('twinkleSeed', new THREE.BufferAttribute(starTwinkleSeeds, 1));
     this.starGeometry.setAttribute('twinkleSpeed', new THREE.BufferAttribute(starTwinkleSpeed, 1));
     this.starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
@@ -83,7 +86,7 @@ export class Starfield {
         pixelRatio: { value: Math.min(window.devicePixelRatio, this.qualityConfig.pixelRatioMax) },
         viewportHeight: { value: window.innerHeight },
         maxPointSize: { value: this.maxPointSize },
-        flowStrength: { value: 1.0 }
+        flowStrength: { value: 0.25 }
       },
       vertexShader: `
         attribute float baseSize;
@@ -94,6 +97,7 @@ export class Starfield {
         attribute vec3 rippleOffset;
         attribute float motionSeed;
         attribute float isDust;
+        attribute float baseIntensity;
 
         uniform float time;
         uniform float baseOpacity;
@@ -108,22 +112,24 @@ export class Starfield {
         varying float vDepth;
 
         void main() {
-          vColor = color;
+          float sparkleIntensity = clamp(baseIntensity, 0.35, 1.6);
+          vColor = color * mix(0.85, 1.4, sparkleIntensity * 0.6);
 
           // Enhanced dynamic twinkle with individual speeds and intensities
-          float twinkle1 = sin(time * twinkleSpeed * 1.5 + twinkleSeed) * 0.25;
-          float twinkle2 = sin(time * twinkleSpeed * 2.3 + twinkleSeed * 1.7) * 0.15;
-          float twinkle = twinkle1 + twinkle2 + 0.75; // Range: 0.35 to 1.15
+          float twinkle1 = sin(time * twinkleSpeed * 1.5 * flowStrength + twinkleSeed) * 0.25;
+          float twinkle2 = sin(time * twinkleSpeed * 2.3 * flowStrength + twinkleSeed * 1.7) * 0.15;
+          float twinkle3 = sin(time * (0.35 + twinkleSpeed * 0.15) + twinkleSeed * 2.7) * 0.12;
+          float twinkle = twinkle1 + twinkle2 + twinkle3 + 0.75; // Range: 0.33 to 1.27
 
-          float sizeMultiplier = twinkle * absorptionScale;
-          float brightnessMultiplier = twinkle * absorptionScale * starIntensity;
+          float sizeMultiplier = twinkle * absorptionScale * mix(0.8, 1.25, sparkleIntensity * 0.5);
+          float brightnessMultiplier = twinkle * absorptionScale * starIntensity * mix(0.9, 1.45, sparkleIntensity * 0.7);
 
           // Apply ripple offset without mutating position buffer
-          float swirl = sin(time * 0.18 + motionSeed * 4.0) * 0.6;
+          float swirl = sin(time * 0.18 * flowStrength + motionSeed * 4.0) * 0.6;
           vec3 flow = vec3(
-            sin(time * 0.12 + motionSeed * 6.2831) * 2.5,
-            cos(time * 0.1 + motionSeed * 3.7) * 2.0,
-            sin(time * 0.15 + motionSeed * 2.1) * 1.8
+            sin(time * 0.12 * flowStrength + motionSeed * 6.2831) * 2.5,
+            cos(time * 0.1 * flowStrength + motionSeed * 3.7) * 2.0,
+            sin(time * 0.15 * flowStrength + motionSeed * 2.1) * 1.8
           ) * flowStrength * mix(1.0, 0.35, isDust);
 
           vec3 warpedPos = position + rippleOffset + flow + vec3(swirl * 0.6, swirl * 0.2, 0.0);
@@ -204,7 +210,7 @@ export class Starfield {
   }
 
   populateParticle(index, buffers) {
-    const { isDust, positions, basePositions, colors, baseColors, baseSizes, twinkleSeeds, twinkleSpeeds, absorption, rippleOffsets, motionSeeds, types } = buffers;
+    const { isDust, positions, basePositions, colors, baseColors, baseSizes, baseIntensities, twinkleSeeds, twinkleSpeeds, absorption, rippleOffsets, motionSeeds, types } = buffers;
     const i3 = index * 3;
 
     // Position: weighted radial distribution to avoid sparse areas
@@ -226,6 +232,7 @@ export class Starfield {
       color = new THREE.Color().setHSL(0.58 + Math.random() * 0.05, 0.2 + Math.random() * 0.3, 0.15 + Math.random() * 0.25);
       baseSizes[index] = 0.1 + Math.random() * 0.25;
       twinkleSpeeds[index] = 0.25 + Math.random() * 0.35;
+      baseIntensities[index] = 0.35 + Math.random() * 0.35;
     } else {
       if (paletteRoll < 0.55) {
         color = new THREE.Color().setHSL(0.6 + Math.random() * 0.04, 0.35 + Math.random() * 0.25, 0.6 + Math.random() * 0.35); // blue-white
@@ -238,12 +245,16 @@ export class Starfield {
       const sizeRand = Math.random();
       if (sizeRand < 0.5) {
         baseSizes[index] = 0.2 + Math.random() * 0.5;
+        baseIntensities[index] = 0.65 + Math.random() * 0.4;
       } else if (sizeRand < 0.82) {
         baseSizes[index] = 0.7 + Math.random() * 0.7;
+        baseIntensities[index] = 0.9 + Math.random() * 0.5;
       } else if (sizeRand < 0.95) {
         baseSizes[index] = 1.4 + Math.random() * 0.8;
+        baseIntensities[index] = 1.1 + Math.random() * 0.35;
       } else {
         baseSizes[index] = 2.2 + Math.random() * 1.0;
+        baseIntensities[index] = 1.2 + Math.random() * 0.45;
       }
 
       twinkleSpeeds[index] = 0.75 + Math.random() * 1.4;
@@ -259,6 +270,12 @@ export class Starfield {
 
     twinkleSeeds[index] = Math.random() * 100.0;
     absorption[index] = 1.0;
+
+    // Subtle depth bias for brighter stars
+    if (!isDust && baseIntensities[index] > 1.1) {
+      positions[i3 + 2] = positions[i3 + 2] + 6;
+      basePositions[i3 + 2] = positions[i3 + 2];
+    }
 
     rippleOffsets[i3] = 0;
     rippleOffsets[i3 + 1] = 0;
@@ -278,6 +295,7 @@ export class Starfield {
       colors: this.starGeometry.attributes.color.array,
       baseColors: this.starGeometry.attributes.baseColor.array,
       baseSizes: this.starGeometry.attributes.baseSize.array,
+      baseIntensities: this.starGeometry.attributes.baseIntensity.array,
       twinkleSeeds: this.starGeometry.attributes.twinkleSeed.array,
       twinkleSpeeds: this.starGeometry.attributes.twinkleSpeed.array,
       absorption: this.starGeometry.attributes.absorptionScale.array,
@@ -294,6 +312,7 @@ export class Starfield {
     this.starGeometry.attributes.twinkleSeed.needsUpdate = true;
     this.starGeometry.attributes.twinkleSpeed.needsUpdate = true;
     this.starGeometry.attributes.absorptionScale.needsUpdate = true;
+    this.starGeometry.attributes.baseIntensity.needsUpdate = true;
     this.starGeometry.attributes.rippleOffset.needsUpdate = true;
     this.starGeometry.attributes.motionSeed.needsUpdate = true;
     this.starGeometry.attributes.isDust.needsUpdate = true;
@@ -316,8 +335,8 @@ export class Starfield {
 
     // Automatic slow rotation (inspired by canvas 3D rotation)
     // Rotate on both axes for interesting motion
-    this.starField.rotation.x += 0.0002;
-    this.starField.rotation.y += 0.0003;
+    this.starField.rotation.x += 0.00005;
+    this.starField.rotation.y += 0.000075;
   }
 
   getMesh() {
