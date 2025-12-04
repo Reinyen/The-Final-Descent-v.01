@@ -4,12 +4,19 @@ export class Starfield {
   constructor(qualityConfig, maxPointSize) {
     this.qualityConfig = qualityConfig;
     this.maxPointSize = maxPointSize;
-    this.starCount = 2500;
-    this.dustCount = 800; // Additional dust particles for depth
+    this.starCount = 3400;
+    this.dustCount = 1400; // Additional dust particles for depth
 
     this.starField = null;
     this.starGeometry = null;
     this.starMaterial = null;
+
+    this.bounds = {
+      x: 230,
+      y: 170,
+      zNear: -30,
+      zFar: -170
+    };
 
     this.init();
   }
@@ -27,6 +34,8 @@ export class Starfield {
     const starAbsorptionScales = new Float32Array(totalCount);
     const starOriginalPositions = new Float32Array(totalCount * 3);
     const starRippleOffsets = new Float32Array(totalCount * 3);
+    const starMotionSeeds = new Float32Array(totalCount);
+    const starTypes = new Float32Array(totalCount);
 
     // Create star texture
     const starTexture = this.createStarTexture();
@@ -34,67 +43,22 @@ export class Starfield {
     // Initialize star and dust properties
     for (let i = 0; i < totalCount; i++) {
       const i3 = i * 3;
-      const isDust = i >= this.starCount; // Last 800 are dust particles
+      const isDust = i >= this.starCount; // Last entries are dust particles
 
-      // Position: Evenly distributed across visible frustum
-      starPositions[i3] = (Math.random() - 0.5) * 400; // X: -200 to 200
-      starPositions[i3 + 1] = (Math.random() - 0.5) * 300; // Y: -150 to 150
-      starPositions[i3 + 2] = -130 + Math.random() * 100; // Z: -130 to -30
-
-      // Store original positions
-      starOriginalPositions[i3] = starPositions[i3];
-      starOriginalPositions[i3 + 1] = starPositions[i3 + 1];
-      starOriginalPositions[i3 + 2] = starPositions[i3 + 2];
-
-      if (isDust) {
-        // Dust particles: very dim, small, subtle
-        const dustBrightness = 0.2 + Math.random() * 0.3; // 0.2 to 0.5 (dimmer)
-        starColors[i3] = dustBrightness;
-        starColors[i3 + 1] = dustBrightness;
-        starColors[i3 + 2] = dustBrightness;
-
-        // Dust sizes: very small
-        starBaseSizes[i] = 0.1 + Math.random() * 0.2; // 0.1 - 0.3
-
-        // Dust twinkle: very slow, subtle
-        starTwinkleSpeed[i] = 0.3 + Math.random() * 0.4; // 0.3 - 0.7 (slower)
-      } else {
-        // Stars: bright, varied sizes, dynamic flickering
-        const brightness = 0.85 + Math.random() * 0.15; // 0.85 to 1.0
-        starColors[i3] = brightness;
-        starColors[i3 + 1] = brightness;
-        starColors[i3 + 2] = brightness;
-
-        // Enhanced size variation for more dramatic starfield
-        const sizeRand = Math.random();
-        if (sizeRand < 0.50) {
-          // 50%: Small pinpoint stars
-          starBaseSizes[i] = 0.2 + Math.random() * 0.4; // 0.2 - 0.6
-        } else if (sizeRand < 0.80) {
-          // 30%: Medium stars
-          starBaseSizes[i] = 0.6 + Math.random() * 0.5; // 0.6 - 1.1
-        } else if (sizeRand < 0.95) {
-          // 15%: Large bright stars
-          starBaseSizes[i] = 1.1 + Math.random() * 0.6; // 1.1 - 1.7
-        } else {
-          // 5%: Very large brilliant stars
-          starBaseSizes[i] = 1.7 + Math.random() * 0.8; // 1.7 - 2.5
-        }
-
-        // Varied twinkle speeds for more dynamic flickering
-        starTwinkleSpeed[i] = 0.8 + Math.random() * 1.2; // 0.8 - 2.0 (varied speeds)
-      }
-
-      // Twinkle seed
-      starTwinkleSeeds[i] = Math.random() * 100.0;
-
-      // Absorption scale
-      starAbsorptionScales[i] = 1.0;
-
-      // Store base color
-      starBaseColors[i3] = starColors[i3];
-      starBaseColors[i3 + 1] = starColors[i3 + 1];
-      starBaseColors[i3 + 2] = starColors[i3 + 2];
+      this.populateParticle(i, {
+        isDust,
+        positions: starPositions,
+        basePositions: starOriginalPositions,
+        colors: starColors,
+        baseColors: starBaseColors,
+        baseSizes: starBaseSizes,
+        twinkleSeeds: starTwinkleSeeds,
+        twinkleSpeeds: starTwinkleSpeed,
+        absorption: starAbsorptionScales,
+        rippleOffsets: starRippleOffsets,
+        motionSeeds: starMotionSeeds,
+        types: starTypes
+      });
     }
 
     this.starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
@@ -106,6 +70,8 @@ export class Starfield {
     this.starGeometry.setAttribute('twinkleSpeed', new THREE.BufferAttribute(starTwinkleSpeed, 1));
     this.starGeometry.setAttribute('absorptionScale', new THREE.BufferAttribute(starAbsorptionScales, 1));
     this.starGeometry.setAttribute('rippleOffset', new THREE.BufferAttribute(starRippleOffsets, 3));
+    this.starGeometry.setAttribute('motionSeed', new THREE.BufferAttribute(starMotionSeeds, 1));
+    this.starGeometry.setAttribute('isDust', new THREE.BufferAttribute(starTypes, 1));
 
     // Create shader material
     this.starMaterial = new THREE.ShaderMaterial({
@@ -113,10 +79,11 @@ export class Starfield {
         time: { value: 0.0 },
         starTexture: { value: starTexture },
         baseOpacity: { value: 1.0 },
-        starIntensity: { value: 0.85 },
+        starIntensity: { value: 1.05 },
         pixelRatio: { value: Math.min(window.devicePixelRatio, this.qualityConfig.pixelRatioMax) },
         viewportHeight: { value: window.innerHeight },
-        maxPointSize: { value: this.maxPointSize }
+        maxPointSize: { value: this.maxPointSize },
+        flowStrength: { value: 1.0 }
       },
       vertexShader: `
         attribute float baseSize;
@@ -125,6 +92,8 @@ export class Starfield {
         attribute float absorptionScale;
         attribute vec3 color;
         attribute vec3 rippleOffset;
+        attribute float motionSeed;
+        attribute float isDust;
 
         uniform float time;
         uniform float baseOpacity;
@@ -132,6 +101,7 @@ export class Starfield {
         uniform float pixelRatio;
         uniform float viewportHeight;
         uniform float maxPointSize;
+        uniform float flowStrength;
 
         varying vec3 vColor;
         varying float vAlpha;
@@ -149,7 +119,14 @@ export class Starfield {
           float brightnessMultiplier = twinkle * absorptionScale * starIntensity;
 
           // Apply ripple offset without mutating position buffer
-          vec3 warpedPos = position + rippleOffset;
+          float swirl = sin(time * 0.18 + motionSeed * 4.0) * 0.6;
+          vec3 flow = vec3(
+            sin(time * 0.12 + motionSeed * 6.2831) * 2.5,
+            cos(time * 0.1 + motionSeed * 3.7) * 2.0,
+            sin(time * 0.15 + motionSeed * 2.1) * 1.8
+          ) * flowStrength * mix(1.0, 0.35, isDust);
+
+          vec3 warpedPos = position + rippleOffset + flow + vec3(swirl * 0.6, swirl * 0.2, 0.0);
 
           vec4 mvPosition = modelViewMatrix * vec4(warpedPos, 1.0);
           float viewDistance = -mvPosition.z;
@@ -224,6 +201,106 @@ export class Starfield {
     texture.magFilter = THREE.LinearFilter;
 
     return texture;
+  }
+
+  populateParticle(index, buffers) {
+    const { isDust, positions, basePositions, colors, baseColors, baseSizes, twinkleSeeds, twinkleSpeeds, absorption, rippleOffsets, motionSeeds, types } = buffers;
+    const i3 = index * 3;
+
+    // Position: weighted radial distribution to avoid sparse areas
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.sqrt(Math.random()) * (this.bounds.x * 0.95);
+    positions[i3] = Math.cos(angle) * radius;
+    positions[i3 + 1] = (Math.sin(angle) * radius * 0.75) + (Math.random() - 0.5) * 25;
+    positions[i3 + 2] = this.bounds.zFar + Math.random() * (this.bounds.zNear - this.bounds.zFar);
+
+    basePositions[i3] = positions[i3];
+    basePositions[i3 + 1] = positions[i3 + 1];
+    basePositions[i3 + 2] = positions[i3 + 2];
+
+    const paletteRoll = Math.random();
+    let color;
+
+    if (isDust) {
+      // Dust: cool tones with wide alpha falloff
+      color = new THREE.Color().setHSL(0.58 + Math.random() * 0.05, 0.2 + Math.random() * 0.3, 0.15 + Math.random() * 0.25);
+      baseSizes[index] = 0.1 + Math.random() * 0.25;
+      twinkleSpeeds[index] = 0.25 + Math.random() * 0.35;
+    } else {
+      if (paletteRoll < 0.55) {
+        color = new THREE.Color().setHSL(0.6 + Math.random() * 0.04, 0.35 + Math.random() * 0.25, 0.6 + Math.random() * 0.35); // blue-white
+      } else if (paletteRoll < 0.8) {
+        color = new THREE.Color().setHSL(0.1 + Math.random() * 0.03, 0.6 + Math.random() * 0.25, 0.65 + Math.random() * 0.25); // warm amber
+      } else {
+        color = new THREE.Color().setHSL(0.8 + Math.random() * 0.03, 0.4 + Math.random() * 0.2, 0.55 + Math.random() * 0.3); // magenta tint
+      }
+
+      const sizeRand = Math.random();
+      if (sizeRand < 0.5) {
+        baseSizes[index] = 0.2 + Math.random() * 0.5;
+      } else if (sizeRand < 0.82) {
+        baseSizes[index] = 0.7 + Math.random() * 0.7;
+      } else if (sizeRand < 0.95) {
+        baseSizes[index] = 1.4 + Math.random() * 0.8;
+      } else {
+        baseSizes[index] = 2.2 + Math.random() * 1.0;
+      }
+
+      twinkleSpeeds[index] = 0.75 + Math.random() * 1.4;
+    }
+
+    colors[i3] = color.r;
+    colors[i3 + 1] = color.g;
+    colors[i3 + 2] = color.b;
+
+    baseColors[i3] = color.r;
+    baseColors[i3 + 1] = color.g;
+    baseColors[i3 + 2] = color.b;
+
+    twinkleSeeds[index] = Math.random() * 100.0;
+    absorption[index] = 1.0;
+
+    rippleOffsets[i3] = 0;
+    rippleOffsets[i3 + 1] = 0;
+    rippleOffsets[i3 + 2] = 0;
+
+    motionSeeds[index] = Math.random() * Math.PI * 2;
+    types[index] = isDust ? 1.0 : 0.0;
+  }
+
+  regenerateParticle(index) {
+    if (!this.starGeometry) return;
+
+    this.populateParticle(index, {
+      isDust: index >= this.starCount,
+      positions: this.starGeometry.attributes.position.array,
+      basePositions: this.starGeometry.attributes.basePosition.array,
+      colors: this.starGeometry.attributes.color.array,
+      baseColors: this.starGeometry.attributes.baseColor.array,
+      baseSizes: this.starGeometry.attributes.baseSize.array,
+      twinkleSeeds: this.starGeometry.attributes.twinkleSeed.array,
+      twinkleSpeeds: this.starGeometry.attributes.twinkleSpeed.array,
+      absorption: this.starGeometry.attributes.absorptionScale.array,
+      rippleOffsets: this.starGeometry.attributes.rippleOffset.array,
+      motionSeeds: this.starGeometry.attributes.motionSeed.array,
+      types: this.starGeometry.attributes.isDust.array
+    });
+
+    this.starGeometry.attributes.position.needsUpdate = true;
+    this.starGeometry.attributes.basePosition.needsUpdate = true;
+    this.starGeometry.attributes.color.needsUpdate = true;
+    this.starGeometry.attributes.baseColor.needsUpdate = true;
+    this.starGeometry.attributes.baseSize.needsUpdate = true;
+    this.starGeometry.attributes.twinkleSeed.needsUpdate = true;
+    this.starGeometry.attributes.twinkleSpeed.needsUpdate = true;
+    this.starGeometry.attributes.absorptionScale.needsUpdate = true;
+    this.starGeometry.attributes.rippleOffset.needsUpdate = true;
+    this.starGeometry.attributes.motionSeed.needsUpdate = true;
+    this.starGeometry.attributes.isDust.needsUpdate = true;
+  }
+
+  getBounds() {
+    return this.bounds;
   }
 
   update(phase, elapsedTime) {

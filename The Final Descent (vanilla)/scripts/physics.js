@@ -1,13 +1,19 @@
 import * as THREE from 'three';
 
 export class StarPhysics {
-  constructor(starGeometry, blackHolePosition) {
-    this.starGeometry = starGeometry;
+  constructor(starfield, blackHolePosition) {
+    this.starfield = starfield;
+    this.starGeometry = starfield.getGeometry();
     this.blackHolePosition = blackHolePosition;
-    this.starCount = starGeometry.attributes.position.count;
+    this.starCount = this.starGeometry.attributes.position.count;
+
+    this.bounds = starfield.getBounds();
 
     this.pulledStars = [];
     this.activeRipples = [];
+    this.pullFlags = new Array(this.starCount).fill(false);
+
+    this.ambientVelocities = new Float32Array(this.starCount * 3);
 
     this.lastPullTime = -10;
     this.selectionRadius = 60;
@@ -48,13 +54,14 @@ export class StarPhysics {
 
       // Add to pulled stars
       for (const index of selected) {
-        const i3 = index * 3;
         this.pulledStars.push({
           index,
           pullStartTime: elapsedTime,
           velocity: new THREE.Vector3(),
-          hasImpacted: false
+          hasImpacted: false,
+          respawnTime: null
         });
+        this.pullFlags[index] = true;
       }
 
       console.log(`[Physics] Selected ${selected.length} stars for pulling (from ${candidateIndices.length} candidates)`);
@@ -97,8 +104,10 @@ export class StarPhysics {
             index,
             pullStartTime: elapsedTime,
             velocity: new THREE.Vector3(),
-            hasImpacted: false
+            hasImpacted: false,
+            respawnTime: null
           });
+          this.pullFlags[index] = true;
         }
       }
 
@@ -115,7 +124,13 @@ export class StarPhysics {
     let needsUpdate = false;
 
     for (const star of this.pulledStars) {
-      if (star.hasImpacted) continue;
+      if (star.hasImpacted) {
+        if (star.respawnTime !== null && elapsedTime >= star.respawnTime) {
+          this.respawnParticle(star.index);
+          star.markedForRemoval = true;
+        }
+        continue;
+      }
 
       const i3 = star.index * 3;
 
@@ -151,6 +166,7 @@ export class StarPhysics {
       if (distance < 2.0) {
         star.hasImpacted = true;
         absorptionScales[star.index] = 0;
+        star.respawnTime = elapsedTime + 0.5 + Math.random() * 0.75;
 
         // Create ripple
         this.createRipple(this.scratchVec3A.clone(), elapsedTime);
@@ -163,6 +179,22 @@ export class StarPhysics {
       this.starGeometry.attributes.position.needsUpdate = true;
       this.starGeometry.attributes.absorptionScale.needsUpdate = true;
     }
+
+    // Remove respawned particles from pull list
+    this.pulledStars = this.pulledStars.filter(star => {
+      if (star.markedForRemoval) {
+        this.pullFlags[star.index] = false;
+        return false;
+      }
+      return true;
+    });
+  }
+
+  respawnParticle(index) {
+    this.starfield.regenerateParticle(index);
+    this.ambientVelocities[index * 3] = 0;
+    this.ambientVelocities[index * 3 + 1] = 0;
+    this.ambientVelocities[index * 3 + 2] = 0;
   }
 
   createRipple(position, currentTime) {
@@ -307,6 +339,58 @@ export class StarPhysics {
     if (colorChanged) this.starGeometry.attributes.color.needsUpdate = true;
   }
 
+  applyAmbientFlow(elapsedTime, deltaTime) {
+    const positions = this.starGeometry.attributes.position.array;
+    const isDust = this.starGeometry.attributes.isDust.array;
+    let changed = false;
+
+    for (let i = 0; i < this.starCount; i++) {
+      if (this.pullFlags[i]) continue;
+
+      const i3 = i * 3;
+
+      this.scratchVec3A.set(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+      this.scratchVec3B.copy(this.blackHolePosition).sub(this.scratchVec3A);
+      const distance = this.scratchVec3B.length();
+
+      const gravity = (isDust[i] ? 18.0 : 12.0) / Math.max(distance, 35.0);
+      const swirl = 0.8 + Math.sin(elapsedTime * 0.35 + i * 0.15) * 0.4;
+
+      if (distance > 0.001) {
+        this.scratchVec3B.normalize().multiplyScalar(gravity * deltaTime);
+
+        // Add perpendicular swirl for slow orbiting motion
+        this.scratchVec3A.set(-this.scratchVec3B.y, this.scratchVec3B.x, 0).normalize().multiplyScalar(swirl * 0.4 * deltaTime);
+        this.scratchVec3B.add(this.scratchVec3A);
+
+        this.ambientVelocities[i3] = (this.ambientVelocities[i3] + this.scratchVec3B.x) * 0.985;
+        this.ambientVelocities[i3 + 1] = (this.ambientVelocities[i3 + 1] + this.scratchVec3B.y) * 0.985;
+        this.ambientVelocities[i3 + 2] = (this.ambientVelocities[i3 + 2] + this.scratchVec3B.z) * 0.985;
+      }
+
+      positions[i3] += this.ambientVelocities[i3] + Math.sin(elapsedTime * 0.2 + i * 0.1) * 0.12;
+      positions[i3 + 1] += this.ambientVelocities[i3 + 1] + Math.cos(elapsedTime * 0.27 + i * 0.07) * 0.1;
+      positions[i3 + 2] += this.ambientVelocities[i3 + 2];
+
+      const outOfBounds =
+        Math.abs(positions[i3]) > this.bounds.x ||
+        Math.abs(positions[i3 + 1]) > this.bounds.y ||
+        positions[i3 + 2] < this.bounds.zFar ||
+        positions[i3 + 2] > this.bounds.zNear;
+
+      if (outOfBounds) {
+        this.respawnParticle(i);
+        continue;
+      }
+
+      changed = true;
+    }
+
+    if (changed) {
+      this.starGeometry.attributes.position.needsUpdate = true;
+    }
+  }
+
   update(phase, elapsedTime, deltaTime) {
     // Select stars for pulling
     this.selectStarsForPulling(phase, elapsedTime);
@@ -316,6 +400,9 @@ export class StarPhysics {
 
     // Update ripple effects
     this.updateRippleEffects(elapsedTime);
+
+    // Apply slow ambient gravity swirl to keep space lively
+    this.applyAmbientFlow(elapsedTime, deltaTime);
   }
 
   getPulledStarCount() {

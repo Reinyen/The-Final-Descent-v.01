@@ -115,7 +115,7 @@ export class IntroScene {
     this.scene.add(this.comet.getDebrisParticles()); // Add debris particles
 
     // Initialize black hole (default layer 0 - not affected by lensing)
-    this.blackHole = new BlackHole();
+    this.blackHole = new BlackHole(this.renderer, this.scene);
     this.scene.add(this.blackHole.getGroup());
 
     // Initialize particle system
@@ -128,7 +128,7 @@ export class IntroScene {
 
     // Initialize star physics
     this.starPhysics = new StarPhysics(
-      this.starfield.getGeometry(),
+      this.starfield,
       this.blackHole.getPosition()
     );
 
