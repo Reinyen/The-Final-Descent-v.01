@@ -448,6 +448,7 @@ export class Explosion {
         this.stateTime = 0;
         this.ejectaParticles.visible = false;
         this.fireballParticles.visible = false;
+        this.prepareImplosion();
         console.log('[Explosion] Transitioning to implosion phase');
       }
     } else if (this.state === 'imploding') {
@@ -513,6 +514,30 @@ export class Explosion {
 
     this.explosionParticles.geometry.attributes.position.needsUpdate = true;
     this.explosionParticles.geometry.attributes.alpha.needsUpdate = true;
+  }
+
+  prepareImplosion() {
+    const positions = this.explosionParticles.geometry.attributes.position.array;
+
+    for (let i = 0; i < this.particleCount; i++) {
+      const i3 = i * 3;
+      const currentPos = new THREE.Vector3(
+        positions[i3],
+        positions[i3 + 1],
+        positions[i3 + 2]
+      );
+
+      const toCenter = new THREE.Vector3().subVectors(this.blackHoleCenter, currentPos);
+      toCenter.normalize();
+
+      const baseSpeed = 35 + Math.random() * 45;
+      const spiralInfluence = 10 + Math.random() * 18;
+      const spiral = new THREE.Vector3(-toCenter.y, toCenter.x, (Math.random() - 0.5) * 0.6).normalize();
+
+      const newVelocity = toCenter.multiplyScalar(baseSpeed).add(spiral.multiplyScalar(spiralInfluence));
+      this.particles[i].velocity.copy(newVelocity);
+      this.particles[i].spiralPhase = Math.random() * Math.PI * 2;
+    }
   }
 
   updateFireball(deltaTime, time) {
@@ -612,15 +637,16 @@ export class Explosion {
 
       // Acceleration toward center (gravity simulation)
       // Stronger as particles get closer
-      const gravityStrength = 50 + (1.0 - distanceToCenter / 100) * 100;
-      const acceleration = toCenter.multiplyScalar(gravityStrength * deltaTime);
+      const gravityStrength = 70 + (1.0 - distanceToCenter / 120) * 180;
+      const acceleration = toCenter.normalize().multiplyScalar(gravityStrength * deltaTime);
 
-      // Apply acceleration to velocity
+      // Apply acceleration and gentle drag to velocity
       this.particles[i].velocity.add(acceleration);
+      this.particles[i].velocity.multiplyScalar(0.99);
 
       // Add spiral motion
-      const spiralSpeed = 2.0;
-      const spiralRadius = distanceToCenter * 0.3;
+      const spiralSpeed = 3.0;
+      const spiralRadius = Math.max(4.0, distanceToCenter * 0.25);
       this.particles[i].spiralPhase += spiralSpeed * deltaTime;
 
       const spiralX = Math.cos(this.particles[i].spiralPhase) * spiralRadius * deltaTime;

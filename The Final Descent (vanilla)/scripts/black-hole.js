@@ -1,13 +1,17 @@
 import * as THREE from 'three';
 
 export class BlackHole {
-  constructor() {
+  constructor(renderer, scene) {
     this.blackHoleGroup = null;
     this.innerCoreMaterial = null;
     this.accretionDiskMaterial = null;
     this.outerGlowMaterial = null;
     this.eventHorizonMaterial = null;
     this.eventHorizonMesh = null;
+    this.reflectionTarget = null;
+    this.reflectionCamera = null;
+    this.renderer = renderer;
+    this.scene = scene;
 
     // Position at Z=-70 (inside star volume for depth coherence)
     this.position = new THREE.Vector3(0, -8, -70);
@@ -21,59 +25,30 @@ export class BlackHole {
     this.blackHoleGroup.scale.set(0, 0, 0);
     this.blackHoleGroup.visible = false;
 
-    // Layer 1: Event Horizon with Gravitational Lensing - LARGEST solid sphere
+    // Layer 1: Event Horizon with reflective glassy surface
     const eventHorizonGeometry = new THREE.SphereGeometry(10.5, 64, 64);
-    this.eventHorizonMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0.0 }
-      },
-      vertexShader: `
-        varying vec3 vNormal;
-        varying vec3 vPosition;
-        varying vec3 vWorldPosition;
 
-        void main() {
-          vNormal = normalize(normalMatrix * normal);
-          vPosition = position;
+    this.reflectionTarget = new THREE.WebGLCubeRenderTarget(256, {
+      type: THREE.HalfFloatType,
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter
+    });
+    this.reflectionCamera = new THREE.CubeCamera(1, 400, this.reflectionTarget);
+    this.blackHoleGroup.add(this.reflectionCamera);
 
-          vec4 worldPos = modelMatrix * vec4(position, 1.0);
-          vWorldPosition = worldPos.xyz;
-
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float time;
-        varying vec3 vNormal;
-        varying vec3 vPosition;
-        varying vec3 vWorldPosition;
-
-        void main() {
-          // Fresnel effect for edge glow
-          vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
-          float fresnel = pow(1.0 - abs(dot(vNormal, viewDirection)), 3.0);
-
-          // Pulsing orange-red edge glow
-          vec3 glowColor = vec3(1.0, 0.4, 0.1); // Orange-red
-          float pulse = sin(time * 1.5) * 0.3 + 0.7;
-          vec3 edgeGlow = glowColor * fresnel * pulse * 2.0;
-
-          // Very dark center (almost black)
-          vec3 centerColor = vec3(0.02, 0.02, 0.02);
-
-          // Mix center with edge glow
-          vec3 finalColor = mix(centerColor, edgeGlow, fresnel * 0.8);
-
-          // Add some opacity variation based on fresnel
-          float alpha = 0.95 + fresnel * 0.05;
-
-          gl_FragColor = vec4(finalColor, alpha);
-        }
-      `,
-      side: THREE.FrontSide,
+    this.eventHorizonMaterial = new THREE.MeshPhysicalMaterial({
+      transmission: 0.9,
       transparent: true,
-      depthWrite: true,
-      depthTest: true
+      opacity: 0.95,
+      roughness: 0.05,
+      metalness: 0.45,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.04,
+      thickness: 2.5,
+      envMap: this.reflectionTarget.texture,
+      envMapIntensity: 1.6,
+      ior: 1.25,
+      color: new THREE.Color(0x96a7ff)
     });
     this.eventHorizonMesh = new THREE.Mesh(eventHorizonGeometry, this.eventHorizonMaterial);
     this.eventHorizonMesh.renderOrder = -1;
@@ -292,7 +267,6 @@ export class BlackHole {
 
   update(phase, elapsedTime, camera) {
     // Update time uniforms
-    this.eventHorizonMaterial.uniforms.time.value = elapsedTime;
     this.innerCoreMaterial.uniforms.time.value = elapsedTime;
     this.accretionDiskMaterial.uniforms.time.value = elapsedTime;
     this.outerGlowMaterial.uniforms.time.value = elapsedTime;
@@ -316,9 +290,20 @@ export class BlackHole {
 
       // Slow rotation
       this.blackHoleGroup.rotation.z = elapsedTime * 0.1;
+      this.eventHorizonMesh.rotation.y = elapsedTime * 0.35;
+
+      this.updateReflections();
     } else {
       this.blackHoleGroup.visible = false;
     }
+  }
+
+  updateReflections() {
+    if (!this.renderer || !this.scene || !this.eventHorizonMesh.visible) return;
+
+    this.eventHorizonMesh.visible = false;
+    this.reflectionCamera.update(this.renderer, this.scene);
+    this.eventHorizonMesh.visible = true;
   }
 
   getGroup() {
@@ -341,6 +326,9 @@ export class BlackHole {
     }
     if (this.outerGlowMaterial) {
       this.outerGlowMaterial.dispose();
+    }
+    if (this.reflectionTarget) {
+      this.reflectionTarget.dispose();
     }
   }
 }
