@@ -206,11 +206,11 @@
 @keyframes orbFlyIn {
   0% {
     opacity: 0;
-    transform: translateY(-60vh) scale(0.25);
+    transform: translateY(-75vh) scale(0.08);
   }
   55% {
     opacity: 1;
-    transform: translateY(10px) scale(1.08);
+    transform: translateY(12px) scale(1.12);
   }
   100% {
     opacity: 1;
@@ -221,11 +221,21 @@
 @keyframes orbNameReveal {
   0% {
     opacity: 0;
-    filter: blur(6px);
+    filter: blur(10px) hue-rotate(-8deg) drop-shadow(0 0 12px rgba(255, 140, 0, 0.35));
+    transform: translateY(-6px) scale(0.92);
+    letter-spacing: 0.14em;
+  }
+  60% {
+    opacity: 1;
+    filter: blur(1.5px) drop-shadow(0 0 14px rgba(255, 160, 40, 0.55));
+    transform: translateY(-2px) scale(1.02);
+    letter-spacing: 0.1em;
   }
   100% {
     opacity: 1;
-    filter: blur(0px);
+    filter: blur(0px) drop-shadow(0 0 10px rgba(255, 200, 60, 0.35));
+    transform: translateY(0) scale(1);
+    letter-spacing: 0.08em;
   }
 }
 

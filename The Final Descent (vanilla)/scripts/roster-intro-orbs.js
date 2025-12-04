@@ -91,15 +91,30 @@ export class RosterIntroOrbs {
   }
 
   createOrbRows(livingCount, fallenCount) {
-    const viewportW = window.innerWidth || 1920;
     const viewportH = window.innerHeight || 1080;
+
+    const livingContainer = document.getElementById('living-container');
+    const fallenContainer = document.getElementById('fallen-container');
+    const bottomZone = document.getElementById('bottom-zone');
 
     const cardWidth = 280;
     const cardGap = 32;
     const orbWidth = 120;
     const orbPadding = Math.max(0, (cardWidth - orbWidth) / 2);
-    const orbRowTopLiving = viewportH * 0.45; // Middle of living container (20% title + half of 50% middle band)
-    const orbRowTopFallen = viewportH * 0.85; // Center of bottom zone (30% band)
+
+    const livingRect = livingContainer?.getBoundingClientRect();
+    const fallenRect = fallenContainer?.getBoundingClientRect();
+    const bottomRect = bottomZone?.getBoundingClientRect();
+
+    const orbRowTopLiving = livingRect
+      ? livingRect.top + livingRect.height * 0.5
+      : viewportH * 0.45; // Middle of living container (20% title + half of 50% middle band)
+
+    const orbRowTopFallen = fallenRect
+      ? fallenRect.top + fallenRect.height * 0.5
+      : bottomRect
+        ? bottomRect.top + bottomRect.height * 0.55
+        : viewportH * 0.85; // Center of bottom zone (30% band)
 
     const livingRowWidth = livingCount * cardWidth + Math.max(0, livingCount - 1) * cardGap;
     const fallenRowWidth = fallenCount * cardWidth + Math.max(0, fallenCount - 1) * cardGap;
