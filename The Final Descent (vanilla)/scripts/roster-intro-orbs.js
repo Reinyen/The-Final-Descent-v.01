@@ -8,8 +8,11 @@ export class RosterIntroOrbs {
   constructor(container) {
     this.container = container;
     this.flashOverlay = null;
+    this.goldenFlashOverlay = null;
     this.effectShells = [];
     this.effectInstances = [];
+    this.livingNodes = [];
+    this.fallenNodes = [];
     this.activeTimeouts = [];
     this.isPlaying = false;
     this.resolvePromise = null;
@@ -26,12 +29,26 @@ export class RosterIntroOrbs {
     if (this.container) {
       this.container.innerHTML = '';
       this.container.classList.add('hidden');
-      this.container.classList.remove('orbs-visible', 'names-visible', 'charge', 'explode', 'effects-active');
+      this.container.classList.remove(
+        'orbs-visible',
+        'names-visible',
+        'charge',
+        'explode',
+        'effects-active',
+        'fallen-corrupt-phase',
+        'fallen-flight'
+      );
     }
     if (this.flashOverlay) {
       this.flashOverlay.remove();
       this.flashOverlay = null;
     }
+    if (this.goldenFlashOverlay) {
+      this.goldenFlashOverlay.remove();
+      this.goldenFlashOverlay = null;
+    }
+    this.livingNodes = [];
+    this.fallenNodes = [];
     this.isPlaying = false;
   }
 
@@ -39,6 +56,8 @@ export class RosterIntroOrbs {
     const { livingRow, fallenRow } = this.createOrbRows(livingIds.length, fallenIds.length);
 
     this.effectShells = [];
+    this.livingNodes = [];
+    this.fallenNodes = [];
 
     const buildOrb = (charId, isLiving, index) => {
       const char = getCharacterById(charId);
@@ -55,6 +74,9 @@ export class RosterIntroOrbs {
       effectCanvas.className = 'orb-effect-canvas';
       effectShell.appendChild(effectCanvas);
 
+      const smoke = document.createElement('div');
+      smoke.className = 'orb-smoke';
+
       const core = document.createElement('div');
       core.className = 'orb-core';
       const halo = document.createElement('div');
@@ -66,9 +88,12 @@ export class RosterIntroOrbs {
       orb.appendChild(effectShell);
       orb.appendChild(halo);
       orb.appendChild(core);
+      orb.appendChild(smoke);
       orb.appendChild(name);
 
-      this.effectShells.push({ shell: effectShell, canvas: effectCanvas });
+      const bundle = { shell: effectShell, canvas: effectCanvas, isFallen: !isLiving };
+      this.effectShells.push(bundle);
+      (isLiving ? this.livingNodes : this.fallenNodes).push(orb);
       return orb;
     };
 
@@ -82,6 +107,10 @@ export class RosterIntroOrbs {
     this.flashOverlay = document.createElement('div');
     this.flashOverlay.className = 'orb-flash-overlay hidden';
     this.container.appendChild(this.flashOverlay);
+
+    this.goldenFlashOverlay = document.createElement('div');
+    this.goldenFlashOverlay.className = 'golden-flash-overlay hidden';
+    this.container.appendChild(this.goldenFlashOverlay);
   }
 
   schedule(fn, delay) {
@@ -139,14 +168,17 @@ export class RosterIntroOrbs {
     return { livingRow, fallenRow };
   }
 
-  activateOrbEffects(durationMs = 1000) {
+  activateOrbEffects(durationMs = 1000, target = 'all', tintClass = '') {
     if (!this.effectShells.length) return;
 
     this.stopOrbEffects();
     this.container.classList.add('effects-active');
 
-    this.effectShells.forEach(({ shell, canvas }) => {
+    this.effectShells.forEach(({ shell, canvas, isFallen }) => {
+      if (target === 'fallen' && !isFallen) return;
+      if (target === 'living' && isFallen) return;
       shell.classList.remove('hidden');
+      if (tintClass) shell.classList.add(tintClass);
       const effect = new SelectionParticleEffect(canvas);
       // Slightly lighter than the full reroll effect but visually identical
       effect.sphereParticleCount = 520;
@@ -162,11 +194,14 @@ export class RosterIntroOrbs {
   stopOrbEffects() {
     this.effectInstances.forEach(instance => instance.stop());
     this.effectInstances = [];
-    this.effectShells.forEach(({ shell }) => shell.classList.add('hidden'));
+    this.effectShells.forEach(({ shell }) => {
+      shell.classList.add('hidden');
+      shell.classList.remove('fallen-effect');
+    });
     this.container?.classList.remove('effects-active');
   }
 
-  triggerExplosion() {
+  triggerExplosion(finalDelay = 650) {
     if (!this.container || this.isPlaying === false) return;
     this.stopOrbEffects();
     this.container.classList.add('explode');
@@ -180,7 +215,35 @@ export class RosterIntroOrbs {
         this.resolvePromise();
         this.resolvePromise = null;
       }
-    }, 650);
+    }, finalDelay);
+  }
+
+  applyFallenCorruption() {
+    this.container.classList.add('fallen-corrupt-phase');
+    this.fallenNodes.forEach(node => {
+      node.classList.add('fallen-corrupt');
+    });
+    // Purple-tinted particle burst for fallen souls
+    this.activateOrbEffects(950, 'fallen', 'fallen-effect');
+  }
+
+  launchFallenFlight() {
+    this.container.classList.add('fallen-flight');
+    this.fallenNodes.forEach((node, idx) => {
+      node.style.setProperty('--fallen-flight-delay', `${idx * 80}ms`);
+      node.classList.add('fallen-flight-active');
+    });
+  }
+
+  playGoldenFlash(durationMs = 1500) {
+    if (!this.goldenFlashOverlay) return;
+    this.goldenFlashOverlay.classList.remove('hidden');
+    this.goldenFlashOverlay.style.animationDuration = `${durationMs}ms`;
+    this.goldenFlashOverlay.classList.add('active');
+    this.schedule(() => {
+      this.goldenFlashOverlay?.classList.remove('active');
+      this.goldenFlashOverlay?.classList.add('hidden');
+    }, durationMs + 50);
   }
 
   playSequence(livingIds, fallenIds, options = {}) {
@@ -197,19 +260,43 @@ export class RosterIntroOrbs {
           this.container.classList.add('orbs-visible');
         });
 
+        const rerollFlash = 1500;
+        const nameRevealDuration = 1000;
+        const nameReadDuration = 2500;
+        const fallenHoldDuration = 2500;
+        const fallenFlightLead = 180;
+        const livingBurstDuration = 900;
+
+        // Stage 1: Golden reroll flash to mirror the reroll VFX
+        this.playGoldenFlash(rerollFlash);
+        this.activateOrbEffects(rerollFlash, 'all');
+
+        // Stage 2: Fiery names reveal atop each orb
         this.schedule(() => {
           this.container.classList.add('names-visible');
-        }, 700);
+        }, rerollFlash);
 
-        const effectStart = 1050;
-        const effectDuration = 1000;
+        // Stage 3: Fallen corruption and smoke
+        const fallenCorruptStart = rerollFlash + nameRevealDuration + nameReadDuration;
+        this.schedule(() => {
+          this.applyFallenCorruption();
+        }, fallenCorruptStart);
+
+        // Stage 4: Fallen souls drift to the lower-left while living orbs charge and burst
+        const fallenFlightStart = fallenCorruptStart + fallenHoldDuration;
+        this.schedule(() => {
+          this.launchFallenFlight();
+        }, fallenFlightStart);
 
         this.schedule(() => {
           this.container.classList.add('charge');
-          this.activateOrbEffects(effectDuration);
-        }, effectStart);
+          this.activateOrbEffects(livingBurstDuration, 'living');
+          this.container.classList.add('explode');
+        }, fallenFlightStart + fallenFlightLead);
 
-        this.schedule(() => this.triggerExplosion(), effectStart + effectDuration + 80);
+        // Stage 5: White flash to transition into the UI
+        const finalFlashStart = fallenFlightStart + livingBurstDuration;
+        this.schedule(() => this.triggerExplosion(900), finalFlashStart);
       }, delayMs);
     });
   }
