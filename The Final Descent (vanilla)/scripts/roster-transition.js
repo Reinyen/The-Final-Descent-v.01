@@ -21,6 +21,19 @@ export class RosterTransition {
     this.totalDuration = this.fadeDuration + this.backgroundHold + this.uiFadeDuration;
   }
 
+  setTimings({ fadeDuration, backgroundHold, uiFadeDuration } = {}) {
+    if (typeof fadeDuration === 'number') {
+      this.fadeDuration = fadeDuration;
+    }
+    if (typeof backgroundHold === 'number') {
+      this.backgroundHold = backgroundHold;
+    }
+    if (typeof uiFadeDuration === 'number') {
+      this.uiFadeDuration = uiFadeDuration;
+    }
+    this.totalDuration = this.fadeDuration + this.backgroundHold + this.uiFadeDuration;
+  }
+
   start(onUIReveal) {
     this.isPlaying = true;
     this.elapsedTime = 0;

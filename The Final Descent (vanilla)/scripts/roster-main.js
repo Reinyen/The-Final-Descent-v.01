@@ -103,6 +103,11 @@ class RosterSelectionApp {
     const orbContainer = document.getElementById('orb-intro-layer');
     this.introOrbs = new RosterIntroOrbs(orbContainer);
 
+    // Stretch the background hold to fully cover the planned orb duration (minus the initial fade)
+    const plannedOrbDuration = this.introOrbs.getPlannedDuration();
+    const plannedHold = Math.max(7, plannedOrbDuration / 1000 - this.transition.fadeDuration);
+    this.transition.setTimings({ backgroundHold: plannedHold });
+
     // Start animation loop
     this.startAnimationLoop();
 

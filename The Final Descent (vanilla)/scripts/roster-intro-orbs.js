@@ -16,6 +16,39 @@ export class RosterIntroOrbs {
     this.currentTimings = null;
   }
 
+  computeTimings(timingOverrides = {}) {
+    const timings = {
+      effectStart: 250,
+      effectDuration: 1500,
+      nameRevealDuration: 1000,
+      nameReadHold: 2500,
+      fallenReadHold: 2500,
+      scatterLead: 600,
+      flashDuration: 650,
+      ...timingOverrides
+    };
+
+    const nameRevealStart = timings.effectStart + timings.effectDuration; // 1.75s
+    const fallenCorruptStart = nameRevealStart + timings.nameRevealDuration + timings.nameReadHold; // ~5.25s
+    const fallenScatterStart = fallenCorruptStart + timings.fallenReadHold; // ~7.75s
+
+    let finalFlashStart = fallenScatterStart + timings.scatterLead;
+    const totalDuration = finalFlashStart + timings.flashDuration;
+    if (totalDuration > 10000) {
+      const overshoot = totalDuration - 10000;
+      finalFlashStart = Math.max(finalFlashStart - overshoot, nameRevealStart + timings.nameRevealDuration);
+    }
+
+    return {
+      timings,
+      nameRevealStart,
+      fallenCorruptStart,
+      fallenScatterStart,
+      finalFlashStart,
+      totalDuration: finalFlashStart + timings.flashDuration
+    };
+  }
+
   clearTimers() {
     this.activeTimeouts.forEach(id => clearTimeout(id));
     this.activeTimeouts = [];
@@ -188,36 +221,27 @@ export class RosterIntroOrbs {
     }, flashDuration);
   }
 
+  getPlannedDuration(timingOverrides = {}) {
+    const { totalDuration } = this.computeTimings(timingOverrides);
+    return totalDuration;
+  }
+
   playSequence(livingIds, fallenIds, options = {}) {
     const { delayMs = 0, timings: timingOverrides = {} } = options;
     this.teardown();
     this.isPlaying = true;
 
-    const timings = {
-      effectStart: 250,
-      effectDuration: 1500,
-      nameRevealDuration: 1000,
-      nameReadHold: 2500,
-      fallenReadHold: 2500,
-      scatterLead: 600,
-      flashDuration: 650,
-      ...timingOverrides
-    };
-
-    const nameRevealStart = timings.effectStart + timings.effectDuration; // 1.75s
-    const fallenCorruptStart = nameRevealStart + timings.nameRevealDuration + timings.nameReadHold; // ~5.25s
-    const fallenScatterStart = fallenCorruptStart + timings.fallenReadHold; // ~7.75s
-
-    let finalFlashStart = fallenScatterStart + timings.scatterLead;
-    const totalDuration = finalFlashStart + timings.flashDuration;
-    if (totalDuration > 10000) {
-      const overshoot = totalDuration - 10000;
-      finalFlashStart = Math.max(finalFlashStart - overshoot, nameRevealStart + timings.nameRevealDuration);
-    }
-
+    const { timings, nameRevealStart, fallenCorruptStart, fallenScatterStart, finalFlashStart } = this.computeTimings(timingOverrides);
     this.currentTimings = { ...timings, finalFlashStart };
 
     return new Promise((resolve) => {
+      if (!this.container) {
+        this.isPlaying = false;
+        this.currentTimings = null;
+        resolve();
+        return;
+      }
+
       this.resolvePromise = resolve;
       this.schedule(() => {
         this.buildOrbs(livingIds, fallenIds);

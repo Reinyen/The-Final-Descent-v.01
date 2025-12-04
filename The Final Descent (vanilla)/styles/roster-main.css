@@ -235,6 +235,7 @@ body {
   opacity: 0;
   transition: opacity 0.35s ease;
   z-index: 2;
+  pointer-events: none;
 }
 
 .orb-flash-overlay.flash-active {
