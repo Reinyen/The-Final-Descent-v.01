@@ -8,9 +8,10 @@
   --plaque-h: 120px;
   --popover-w: 360px;
   --popover-radius: 16px;
-  --font-name: 'Crimson Pro', serif;
+  --font-title: 'Rajdhani', sans-serif;
+  --font-name: 'Cinzel', serif;
   --font-ui: 'Inter', sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
+  --font-mono: 'JetBrains Mono', monospace;
   --bg: #06070a;
   --panel: #0f1118;
   --panel-bright: #1a1d26;
@@ -49,6 +50,7 @@ body {
   height: 100%;
   display: block;
   z-index: 0;
+  pointer-events: none; /* Canvas must not capture UI input */
 }
 
 #uiOverlay {
@@ -59,8 +61,10 @@ body {
   flex-direction: column;
   gap: var(--zone-gap);
   z-index: 1;
-  pointer-events: none;
+  pointer-events: auto; /* UI overlay captures input */
 }
+
+/* Three-zone layout: Top 20%, Middle 50%, Bottom 30% */
 
 #titleZone {
   display: flex;
@@ -68,20 +72,27 @@ body {
   align-items: center;
   opacity: 0;
   transition: opacity 0.5s ease;
+  flex: 0 0 20%; /* Top zone: 20% */
 }
 
 #screenTitle {
-  font-family: var(--font-name);
+  font-family: var(--font-title);
   letter-spacing: 0.24em;
   font-size: 18px;
+  font-weight: 600;
   color: var(--text-dim);
+  text-transform: uppercase;
 }
 
 #livingZone {
   display: flex;
   justify-content: center;
+  align-items: center;
   position: relative;
   transform-origin: center;
+  flex: 0 0 50%; /* Middle zone: 50% */
+  overflow-x: hidden;
+  overflow-y: hidden;
 }
 
 #livingRow {
@@ -89,13 +100,15 @@ body {
   gap: var(--zone-gap);
   transition: transform 0.3s ease;
   padding-bottom: 4px;
+  pointer-events: auto;
 }
 
 #bottomZone {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: var(--zone-gap);
   align-items: center;
+  flex: 0 0 30%; /* Bottom zone: 30% */
 }
 
 #fallenRow {
@@ -128,39 +141,96 @@ body {
 }
 
 .reroll-pip {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: 1px solid var(--rim);
   background: rgba(141, 214, 255, 0.2);
   position: relative;
-  overflow: hidden;
-  transition: opacity 0.4s ease;
+  overflow: visible;
+  transition: all 0.4s ease;
 }
 
-.reroll-pip.is-empty {
-  opacity: 0.25;
-  background: rgba(141, 214, 255, 0.05);
-  border-color: rgba(141, 214, 255, 0.2);
+/* Filled/glowing state (unspent) */
+.reroll-pip.is-filled {
+  background: radial-gradient(circle, rgba(255, 215, 100, 0.6), rgba(255, 215, 100, 0.2));
+  border-color: rgba(255, 215, 100, 0.8);
+  box-shadow: 0 0 8px rgba(255, 215, 100, 0.4), inset 0 0 6px rgba(255, 255, 255, 0.3);
+  animation: starGlow 2s ease-in-out infinite;
 }
 
-.reroll-frag {
+.pip-glow {
   position: absolute;
-  width: 3px;
-  height: 3px;
-  background: rgba(141, 214, 255, 0.85);
-  pointer-events: none;
-  animation: pip-fall 0.6s ease-out forwards;
+  inset: -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 215, 100, 0.3), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
-@keyframes pip-fall {
+.reroll-pip.is-filled .pip-glow {
+  opacity: 1;
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* Empty state (spent) */
+.reroll-pip.is-empty {
+  opacity: 0.3;
+  background: rgba(60, 60, 80, 0.15);
+  border-color: rgba(141, 214, 255, 0.2);
+  box-shadow: none;
+}
+
+.reroll-pip.is-empty .pip-glow {
+  opacity: 0;
+}
+
+/* Star glow animation */
+@keyframes starGlow {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(255, 215, 100, 0.3), inset 0 0 4px rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(255, 215, 100, 0.5), inset 0 0 8px rgba(255, 255, 255, 0.4);
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+/* Crumble-to-ash animation fragments */
+.star-ash-fragment {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: rgba(255, 215, 100, 0.8);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ashFall 0.8s ease-out forwards;
+  animation-delay: var(--delay, 0s);
+  box-shadow: 0 0 2px rgba(255, 215, 100, 0.6);
+}
+
+@keyframes ashFall {
   0% {
     opacity: 1;
     transform: translate(0, 0) scale(1);
   }
+  50% {
+    opacity: 0.6;
+    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5)) scale(0.8);
+  }
   100% {
     opacity: 0;
-    transform: translate(var(--dx), var(--dy)) scale(0.3);
+    transform: translate(var(--dx), var(--dy)) scale(0.2);
   }
 }
 
@@ -219,6 +289,8 @@ button#totalRerollBtn {
   border-radius: var(--card-radius);
   background: linear-gradient(180deg, #161924 0%, #0c0f17 100%);
   box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  animation: borderGlowPulse 3s ease-in-out infinite;
+  transition: filter 0.3s ease, box-shadow 0.3s ease;
 }
 
 .livingCard .cardSurface::before {
@@ -280,7 +352,8 @@ button#totalRerollBtn {
 .cardMark::after {
   content: '';
   position: absolute;
-  background: rgba(141, 214, 255, 0.7);
+  background: rgba(255, 215, 100, 0.85); /* Gold mark for selected */
+  box-shadow: 0 0 4px rgba(255, 215, 100, 0.5);
 }
 
 .cardMark::before {
@@ -297,14 +370,23 @@ button#totalRerollBtn {
   transform: translateY(-50%) skewX(-12deg);
 }
 
-.livingCard:hover .cardSurface {
-  box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-  filter: brightness(1.05);
+.livingCard:hover .cardSurface,
+.livingCard.isHovered .cardSurface {
+  box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0 16px rgba(141, 214, 255, 0.25);
+  filter: brightness(1.12);
+  animation: borderGlowPulse 2s ease-in-out infinite; /* Faster pulse on hover */
+}
+
+.livingCard:hover .cardSurface::before,
+.livingCard.isHovered .cardSurface::before {
+  opacity: 0.55; /* Increased particle motion visibility */
+  animation: particleShift 4s ease-in-out infinite;
 }
 
 .livingCard.isSelected .cardSurface {
-  box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 18px rgba(141, 214, 255, 0.35);
-  animation: rimPulse 1.8s ease-in-out infinite;
+  box-shadow: 0 0 0 1px rgba(255, 215, 100, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 18px rgba(255, 215, 100, 0.35);
+  animation: rimPulse 1.8s ease-in-out infinite; /* Gold halo pulse for selected */
+  filter: brightness(1.15);
 }
 
 .livingCard.isSelected .cardMark {
@@ -312,15 +394,39 @@ button#totalRerollBtn {
   transform: scale(1);
 }
 
-@keyframes rimPulse {
+/* Default border glow pulse */
+@keyframes borderGlowPulse {
   0% {
-    box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 12px rgba(141, 214, 255, 0.18);
+    box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 8px rgba(141, 214, 255, 0.1);
   }
   50% {
-    box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 22px rgba(141, 214, 255, 0.42);
+    box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 12px rgba(141, 214, 255, 0.2);
   }
   100% {
-    box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 12px rgba(141, 214, 255, 0.18);
+    box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 8px rgba(141, 214, 255, 0.1);
+  }
+}
+
+/* Selected card gold halo pulse */
+@keyframes rimPulse {
+  0% {
+    box-shadow: 0 0 0 1px rgba(255, 215, 100, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 16px rgba(255, 215, 100, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(255, 215, 100, 0.9), inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 24px rgba(255, 215, 100, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 1px rgba(255, 215, 100, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 16px rgba(255, 215, 100, 0.35);
+  }
+}
+
+/* Particle motion animation */
+@keyframes particleShift {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
   }
 }
 
@@ -366,25 +472,44 @@ button#totalRerollBtn {
   background: radial-gradient(circle, rgba(255, 116, 66, 0.08), transparent 60%);
 }
 
+/* Cracked glass overlay for Fallen */
+.crackedGlass {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image:
+    linear-gradient(135deg, transparent 45%, rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0.06) 48%, transparent 49%),
+    linear-gradient(45deg, transparent 45%, rgba(255, 255, 255, 0.05) 46%, rgba(255, 255, 255, 0.05) 48%, transparent 49%),
+    linear-gradient(95deg, transparent 42%, rgba(255, 255, 255, 0.07) 43%, rgba(255, 255, 255, 0.07) 45%, transparent 46%),
+    repeating-linear-gradient(120deg, rgba(255, 255, 255, 0.03) 0px, rgba(255, 255, 255, 0.03) 2px, transparent 2px, transparent 8px);
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .plaqueName,
 .plaqueState {
   position: absolute;
   left: 16px;
   right: 16px;
-  font-family: var(--font-ui);
-  color: rgba(255, 255, 255, 0.22);
-  letter-spacing: 0.2em;
+  font-family: var(--font-name);
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  z-index: 2;
 }
 
 .plaqueName {
   top: 24px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .plaqueState {
   bottom: 22px;
-  font-size: 12px;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.25);
 }
 
 #popoverLayer {
@@ -396,7 +521,8 @@ button#totalRerollBtn {
 
 #hoverPopover {
   position: absolute;
-  width: var(--popover-w);
+  max-width: 320px;
+  width: max-content;
   background: linear-gradient(180deg, #111420 0%, #0a0d16 100%);
   border-radius: var(--popover-radius);
   box-shadow: 0 0 0 1px rgba(141, 214, 255, 0.35), 0 12px 28px rgba(0, 0, 0, 0.45);
@@ -405,11 +531,39 @@ button#totalRerollBtn {
   transform: scale(0.98);
   transition: opacity 0.12s ease, transform 0.12s ease;
   pointer-events: none;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 #hoverPopover.is-visible {
   opacity: 1;
   transform: scale(1);
+}
+
+/* Frozen state (when UI is locked) */
+#hoverPopover.is-frozen {
+  opacity: 0.6 !important;
+  pointer-events: none !important;
+}
+
+/* Scrollbar styling for popover */
+#hoverPopover::-webkit-scrollbar {
+  width: 6px;
+}
+
+#hoverPopover::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+#hoverPopover::-webkit-scrollbar-thumb {
+  background: rgba(141, 214, 255, 0.3);
+  border-radius: 3px;
+}
+
+#hoverPopover::-webkit-scrollbar-thumb:hover {
+  background: rgba(141, 214, 255, 0.5);
 }
 
 .popover-header {
@@ -495,24 +649,152 @@ button#totalRerollBtn {
   border: 1px solid rgba(141, 214, 255, 0.25);
 }
 
+/* Memory flicker animation - smooth brighten then dim */
 .memory-flicker {
-  animation: flicker 1s ease;
+  animation: memoryFlicker 1s ease-out;
 }
 
-@keyframes flicker {
+@keyframes memoryFlicker {
   0% {
-    filter: brightness(1.4);
+    filter: brightness(0.55);
   }
-  50% {
-    filter: brightness(1.1);
+  20% {
+    filter: brightness(1.3);
+  }
+  40% {
+    filter: brightness(1.15);
+  }
+  60% {
+    filter: brightness(1.25);
   }
   100% {
     filter: brightness(0.55);
   }
 }
 
+/* Chromatic glitch shimmer - subtle, no harsh flashes */
+.chromatic-glitch {
+  animation: chromaticGlitch 0.2s ease-in-out;
+}
+
+@keyframes chromaticGlitch {
+  0% {
+    transform: translateX(0);
+    filter: brightness(0.55);
+  }
+  25% {
+    transform: translateX(1px);
+    filter: brightness(0.6) hue-rotate(2deg);
+  }
+  50% {
+    transform: translateX(-1px);
+    filter: brightness(0.65) hue-rotate(-2deg);
+  }
+  75% {
+    transform: translateX(0.5px);
+    filter: brightness(0.6) hue-rotate(1deg);
+  }
+  100% {
+    transform: translateX(0);
+    filter: brightness(0.55);
+  }
+}
+
 .hidden {
   display: none !important;
+}
+
+/* Horizontal scroll gradient fades for Living cards at <900px */
+#livingZone::before,
+#livingZone::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 60px;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#livingZone::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--bg) 0%, transparent 100%);
+}
+
+#livingZone::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--bg) 0%, transparent 100%);
+}
+
+#livingZone.has-scroll-left::before {
+  opacity: 1;
+}
+
+#livingZone.has-scroll-right::after {
+  opacity: 1;
+}
+
+/* Responsive breakpoints */
+
+/* <1024px: Move confirm button under rerolls */
+@media (max-width: 1023px) {
+  #bottomZone {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  #fallenRow {
+    grid-row: 1;
+  }
+
+  #rerollPanel {
+    grid-row: 2;
+    justify-content: center;
+  }
+
+  #actionPanel {
+    grid-row: 2;
+    justify-content: center;
+  }
+}
+
+/* <900px: Enable horizontal scroll for Living cards */
+@media (max-width: 899px) {
+  :root {
+    --living-card-w: 240px;
+    --living-card-h: 340px;
+  }
+
+  #livingZone {
+    overflow-x: auto;
+    overflow-y: hidden;
+    justify-content: flex-start;
+    padding: 0 var(--ui-pad);
+  }
+
+  #livingRow {
+    min-width: min-content;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  #livingZone::-webkit-scrollbar {
+    display: none;
+  }
+
+  #livingZone {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* <700px height: Reduce Fallen plaque size */
+@media (max-height: 699px) {
+  :root {
+    --plaque-w: 162px;
+    --plaque-h: 108px;
+  }
 }
 
 @media (max-height: 740px) {
