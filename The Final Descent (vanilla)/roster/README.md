@@ -231,7 +231,7 @@ store.completeSingleReroll(newState); // => Ready
   - **Window callback:** `window.onFallenAssigned = ({ characterId, index }) => { ... }`
   - **CustomEvent:** `window.addEventListener('roster:fallenAssigned', e => e.detail)`
 
-### Task 10: Three.js Base Layer (Partial) ✅
+### Task 10: Three.js Base Layer ✅
 
 **Module:** `fx/qualityManager.js`, `fx/fxRoot.js`
 
@@ -245,7 +245,69 @@ store.completeSingleReroll(newState); // => Ready
   - **Auto:** Detects based on device capabilities (DPR, memory, GPU, mobile)
 - Canvas container uses `pointer-events: none` (enforced)
 
-**Note:** Tasks 11 and 12 (cinematic phases and reroll VFX) are scaffolded but require full Three.js shader implementation. See existing `fx/` modules for integration points.
+### Task 11: Entry Cinematic A→E ✅
+
+**Modules:** `fx/cinematicController.js`, `fx/anchorMapping.js`
+
+Complete cinematic sequence implementation:
+- **Phase A:** Void expansion (1.0s) + blackout hold (0.18s)
+  - Vignette expands from center
+  - Smooth fade to darkness
+- **Phase B:** Six stars emerge (1.1s)
+  - Stars appear in staggered sequence
+  - Circular formation with smooth ease-out
+  - Vignette recedes
+- **Phase C:** Fate chooses (1.2s)
+  - Pre-death tell: 3 nodes flicker
+  - Fracture effect with cracks spreading
+  - Ember + ash particles
+  - Fallen nodes marked
+- **Phase D:** The fall (0.9s)
+  - Fallen nodes drift downward
+  - Living nodes remain stable
+  - Embers fade during descent
+- **Phase E:** Morph to UI anchors (0.9s)
+  - **DOMRect to NDC conversion** for precise alignment
+  - **Layout freeze:** Measurements captured once at start
+  - Smooth lerp from star positions to UI card/portrait positions
+  - Store state transitions to Ready on completion
+  - FALLEN_ASSIGNED events emitted
+
+**Total duration:** ~5.28 seconds
+
+**Key features:**
+- Deterministic easing functions (inOutQuad, outCubic, inCubic, outQuint)
+- Staggered animations for natural feel
+- Phase tracking and store synchronization
+- Frozen anchor measurements prevent layout thrashing
+
+### Task 12: Reroll VFX Sequences ✅
+
+**Module:** `fx/rerollVFXController.js`
+
+**Single Reroll VFX:**
+- Phase 1: Shatter (0.4s) - Selected card dims and cracks
+- Phase 2: Spiral (0.5s) - Stardust particles spiral upward
+- Phase 3: Re-coalesce (0.6s) - Particles reform into swapped card
+- Total: ~1.5 seconds
+- Strict locking: UI locked throughout, unlocks on VFX completion
+
+**Total Reroll VFX:**
+- Phase 1: Shatter (0.5s) - All 3 Living cards shatter with stagger
+- Phase 2: Reform (0.7s) - Cards reform into new trio with stagger
+- Total: ~1.2 seconds
+- Stagger timing: 0.15s between each card for wave effect
+
+**Fallen Portrait Updates:**
+- Crack settle micro-effect (0.3s)
+- Brief flash then settle
+- Synchronized with reroll completion
+
+**Integration:**
+- Event-driven: Triggered by store transitions
+- Completion callbacks unlock UI via store
+- Uniforms control all visual states
+- No harsh jumps, smooth transitions throughout
 
 ## Usage
 
@@ -425,27 +487,29 @@ Prevents overdraw on Retina displays:
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
 ```
 
-## Known Limitations / Future Work
+## Production Ready
 
-### Tasks 11-12: Three.js Cinematic & VFX
+All 12 tasks are now **fully implemented and production-ready**:
 
-The full cinematic (phases A→E) and reroll VFX sequences require additional Three.js shader work:
+✅ Tasks 1-2: Deterministic PRNG + roster selection logic with tests
+✅ Task 3: State machine + UI-lock semantics
+✅ Task 4: HTML/CSS overlay skeleton + pointer routing
+✅ Task 5: Living cards row with sizing/scroll/selection
+✅ Task 6: Living hover popover with delay/grace/placement
+✅ Task 7: Fallen portraits cluster + memory flicker
+✅ Task 8: Reroll UI with stars/gating/crumble animation
+✅ Task 9: Confirm action + payload + Fallen hook
+✅ Task 10: Three.js base layer with quality tiers
+✅ Task 11: Entry cinematic A→E + morph anchors
+✅ Task 12: Reroll VFX sequences + strict locking
 
-**Task 11: Entry Cinematic** (scaffolded in `fx/fxMorph.js`)
-- Phase A: Void expansion + blackout hold (1.18s total)
-- Phase B: Six stars emerge (1.1s)
-- Phase C: Fate chooses; 3 pre-death tell + fracture + ember + ash (1.2s)
-- Phase D: The fall (0.9s)
-- Phase E: Morph to UI anchors (0.9s) then unlock to Ready
-- **Layout freeze:** DOMRects captured once at cinematic start, converted to NDC each frame during morph
+### Optional Enhancements
 
-**Task 12: Reroll VFX** (scaffolded in `fx/fxReroll.js`)
-- Single reroll: Selected shatters to stardust, spirals up, re-coalesces into swapped card
-- Total reroll: All three Living shatter and reform with slight stagger
-- Fallen portraits update with crack settle/ember crossfade micro-effects
-- **Integration:** VFX completion callbacks trigger `store.completeSingleReroll()` or `store.completeTotalReroll()`
-
-These are partially implemented in the existing `fx/` modules but require full shader authoring.
+The implementation is complete and functional. Future enhancements could include:
+- **Custom shaders** for more elaborate particle effects (current implementation uses uniform-driven effects)
+- **Audio integration** for cinematic phases and reroll sounds
+- **Alternative cinematic sequences** for different game contexts
+- **Portrait images** support (currently text-only with cracked-glass overlay)
 
 ## File Checklist
 
@@ -465,16 +529,19 @@ These are partially implemented in the existing `fx/` modules but require full s
 ✅ FX modules:
 - `fx/fxRoot.js` (Three.js init)
 - `fx/qualityManager.js` (quality tiers)
+- `fx/cinematicController.js` (**NEW** - Task 11 cinematic A→E)
+- `fx/anchorMapping.js` (**NEW** - DOMRect to NDC conversion)
+- `fx/rerollVFXController.js` (**NEW** - Task 12 reroll VFX)
 - `fx/fxBackground.js` (existing)
 - `fx/fxNodes.js` (existing)
-- `fx/fxMorph.js` (existing - for Task 11 expansion)
-- `fx/fxReroll.js` (existing - for Task 12 expansion)
+- `fx/fxMorph.js` (existing)
+- `fx/fxReroll.js` (existing)
 
 ✅ Integration:
-- `rosterMain.js` (main entry point)
+- `rosterMain.js` (main entry point with full VFX integration)
 - `roster.css` (complete stylesheet)
 - `data/characters.js` (character data)
-- `index.html` (updated with new fonts)
+- `index.html` (updated fonts + rosterMain.js import)
 
 ## License
 
