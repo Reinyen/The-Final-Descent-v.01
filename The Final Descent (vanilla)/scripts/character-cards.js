@@ -1,4 +1,4 @@
-import { characters } from '../data/characters.js';
+import { characters } from '../roster/data/characters.js';
 import { GlassSurface } from './fx/GlassSurface.js';
 import { CardHoverController } from './ui/CardHoverController.js';
 
