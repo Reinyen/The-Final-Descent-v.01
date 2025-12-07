@@ -197,11 +197,10 @@ export function setupRerollButtons(buttons, stars, store, selectionLogic) {
       // Update logic state
       selectionLogic.rngState = newState.rngState;
 
-      // Animation will call completeSingleReroll when done
-      // For now, simulate completion after a delay
+      // VFX will call completeSingleReroll when animation finishes (1.5s total)
       setTimeout(() => {
         store.completeSingleReroll(newState);
-      }, 1500); // Placeholder - Three.js layer will call this
+      }, 1500);
     });
   }
 
@@ -234,11 +233,10 @@ export function setupRerollButtons(buttons, stars, store, selectionLogic) {
       // Update logic state
       selectionLogic.rngState = newState.rngState;
 
-      // Animation will call completeTotalReroll when done
-      // For now, simulate completion after a delay
+      // VFX will call completeTotalReroll when animation finishes (1.6s total)
       setTimeout(() => {
         store.completeTotalReroll(newState);
-      }, 2000); // Placeholder - Three.js layer will call this
+      }, 1650);
     });
   }
 

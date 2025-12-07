@@ -62,7 +62,7 @@ export async function initializeRosterSelection(config = {}) {
 
   // Create VFX controllers
   const cinematicController = createCinematicController(fx.uniforms, fx.renderer, store);
-  const rerollVFXController = createRerollVFXController(fx.uniforms, fx.renderer, store);
+  const rerollVFXController = createRerollVFXController();
 
   // Create Living cards
   const livingCardElements = [];
@@ -142,16 +142,34 @@ export async function initializeRosterSelection(config = {}) {
     const currentState = store.getState();
     const cardIndex = currentState.livingIds.indexOf(characterId);
     if (cardIndex >= 0) {
-      rerollVFXController.startSingle(cardRect, cardIndex, () => {
-        // VFX complete - store will handle unlock in completeSingleReroll
-      });
+      const cardElement = livingCardElements[cardIndex];
+
+      // Note: newState is already stored in rerollUI pending state
+      rerollVFXController.startSingle(
+        cardElement,
+        cardIndex,
+        () => {
+          // Mid-animation callback - re-render card with new character
+          renderAll();
+        },
+        () => {
+          // Animation complete - this is handled by rerollUI.js completion
+        }
+      );
     }
   });
 
   store.on(EventTypes.REROLL_TOTAL_START, () => {
-    rerollVFXController.startTotal(livingCardElements, () => {
-      // VFX complete - store will handle unlock in completeTotalReroll
-    });
+    rerollVFXController.startTotal(
+      livingCardElements,
+      () => {
+        // Mid-animation callback - re-render all cards with new characters
+        renderAll();
+      },
+      () => {
+        // Animation complete - this is handled by rerollUI.js completion
+      }
+    );
   });
 
   // Start entry cinematic after short delay

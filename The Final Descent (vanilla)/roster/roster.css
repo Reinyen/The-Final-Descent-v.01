@@ -802,3 +802,124 @@ button#totalRerollBtn {
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================
+   REROLL VFX ANIMATIONS
+   ============================================ */
+
+/* Reroll: Card shatter effect */
+@keyframes reroll-shatter {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.95);
+    filter: brightness(1.3) blur(2px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.8);
+    filter: brightness(0.5) blur(8px);
+  }
+}
+
+/* Reroll: Card reform effect */
+@keyframes reroll-reform {
+  0% {
+    opacity: 0;
+    transform: scale(1.2) translateY(-20px);
+    filter: brightness(1.5) blur(8px);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05) translateY(-5px);
+    filter: brightness(1.2) blur(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: brightness(1) blur(0);
+  }
+}
+
+/* Reroll animation states */
+.livingCard.reroll-shattering {
+  animation: reroll-shatter 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards;
+  pointer-events: none;
+}
+
+.livingCard.reroll-reforming {
+  animation: reroll-reform 0.6s cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
+  pointer-events: none;
+}
+
+/* Particle overlay for stardust effect */
+.reroll-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.reroll-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: radial-gradient(circle, #fff 0%, #8dd6ff 50%, transparent 100%);
+  border-radius: 50%;
+  opacity: 0;
+  animation: particle-spiral 0.5s ease-out forwards;
+}
+
+@keyframes particle-spiral {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.3);
+  }
+}
+
+/* Fallen portrait crack settle effect */
+@keyframes fallen-crack-settle {
+  0%, 100% {
+    opacity: 0.6;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.9;
+    filter: brightness(1.4);
+  }
+}
+
+.fallenPlaque .crackedGlass.crack-settle {
+  animation: fallen-crack-settle 0.3s ease-in-out;
+}
+
+/* Fallen portrait ember crossfade */
+@keyframes fallen-ember-glow {
+  0% {
+    opacity: 1;
+    filter: brightness(1);
+    box-shadow: none;
+  }
+  50% {
+    opacity: 0.4;
+    filter: brightness(1.3);
+    box-shadow: 0 0 20px rgba(255, 120, 60, 0.6);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+    box-shadow: none;
+  }
+}
+
+.fallenPlaque.ember-crossfade {
+  animation: fallen-ember-glow 0.4s ease-in-out;
+}

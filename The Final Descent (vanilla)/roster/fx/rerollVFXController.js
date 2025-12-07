@@ -1,306 +1,218 @@
 /**
  * Reroll VFX Controller
  *
- * Manages visual effects for roster rerolls:
- * - Single Reroll: Selected Living shatters → stardust spiral → re-coalesces into swapped card
- * - Total Reroll: All three Living shatter → reform with stagger
+ * Manages visual effects for roster rerolls using CSS animations on DOM elements:
+ * - Single Reroll: Selected Living card shatters → particles → reforms as new card
+ * - Total Reroll: All three Living cards shatter → reform with stagger
  * - Fallen portraits update with crack settle / ember crossfade
  */
 
-import { domRectToNDC } from './anchorMapping.js';
-
 /**
- * VFX timing constants (in seconds)
+ * VFX timing constants (in milliseconds)
  */
 const TIMING = {
-  SINGLE_SHATTER: 0.4,
-  SINGLE_SPIRAL: 0.5,
-  SINGLE_REFORM: 0.6,
-  TOTAL_SHATTER: 0.5,
-  TOTAL_STAGGER: 0.15,
-  TOTAL_REFORM: 0.7,
-  FALLEN_SETTLE: 0.3
+  SINGLE_SHATTER: 400,
+  SINGLE_PARTICLES: 500,
+  SINGLE_REFORM: 600,
+  TOTAL_SHATTER: 500,
+  TOTAL_STAGGER: 150,
+  TOTAL_REFORM: 700,
+  FALLEN_SETTLE: 300,
+  FALLEN_CROSSFADE: 400
 };
 
 /**
  * Create reroll VFX controller
  */
-export function createRerollVFXController(uniforms, renderer, store) {
+export function createRerollVFXController() {
   let isPlaying = false;
-  let startTime = 0;
-  let vfxType = null; // 'single' or 'total'
-  let animationFrameId = null;
-  let onCompleteCallback = null;
-
-  // VFX state
-  let selectedIndex = -1;
-  let selectedRect = null;
-  let cardRects = [];
-  let fallenRects = [];
+  let fallenPortraits = [];
 
   /**
-   * Ease functions
+   * Create particle effects for stardust spiral
    */
-  const ease = {
-    inOutQuad: t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2),
-    outCubic: t => 1 - Math.pow(1 - t, 3),
-    inCubic: t => t * t * t,
-    outQuint: t => 1 - Math.pow(1 - t, 5),
-    inOutCubic: t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
-  };
+  function createParticles(cardElement) {
+    const container = document.createElement('div');
+    container.className = 'reroll-particles';
+    cardElement.appendChild(container);
+
+    const particleCount = 30;
+    const rect = cardElement.getBoundingClientRect();
+
+    for (let i = 0; i < particleCount; i++) {
+      const particle = document.createElement('div');
+      particle.className = 'reroll-particle';
+
+      // Random spiral trajectory
+      const angle = (Math.random() * Math.PI * 2);
+      const distance = 100 + Math.random() * 150;
+      const dx = Math.cos(angle) * distance;
+      const dy = Math.sin(angle) * distance - (100 + Math.random() * 100); // Bias upward
+
+      particle.style.setProperty('--dx', `${dx}px`);
+      particle.style.setProperty('--dy', `${dy}px`);
+      particle.style.left = `${Math.random() * 100}%`;
+      particle.style.top = `${Math.random() * 100}%`;
+      particle.style.animationDelay = `${Math.random() * 0.1}s`;
+
+      container.appendChild(particle);
+    }
+
+    // Remove particles after animation
+    setTimeout(() => {
+      container.remove();
+    }, TIMING.SINGLE_PARTICLES + 100);
+  }
 
   /**
-   * Start single reroll VFX
+   * Start single reroll animation
    */
-  function startSingle(cardRect, cardIndex, onComplete) {
+  async function startSingle(cardElement, cardIndex, renderCallback, onComplete) {
     if (isPlaying) return;
 
-    console.log('[Reroll VFX] Starting single reroll');
+    console.log('[Reroll VFX] Starting single reroll animation on card', cardIndex);
 
     isPlaying = true;
-    vfxType = 'single';
-    startTime = performance.now();
-    selectedIndex = cardIndex;
-    selectedRect = cardRect;
-    onCompleteCallback = onComplete;
 
-    // Set reroll uniforms
-    uniforms.uRerollActive.value = 1;
+    // Phase 1: Shatter (400ms)
+    cardElement.classList.add('reroll-shattering');
 
-    // Convert rect to NDC
-    const ndc = domRectToNDC(cardRect, window.innerWidth, window.innerHeight);
-    uniforms.uRerollOriginRect.value.set(
-      ndc.x,
-      ndc.y,
-      cardRect.width / window.innerWidth,
-      cardRect.height / window.innerHeight
-    );
+    await new Promise(resolve => setTimeout(resolve, TIMING.SINGLE_SHATTER));
 
-    tick();
-  }
+    // Phase 2: Create particles and make them spiral (500ms)
+    createParticles(cardElement);
 
-  /**
-   * Start total reroll VFX
-   */
-  function startTotal(cardElements, onComplete) {
-    if (isPlaying) return;
+    await new Promise(resolve => setTimeout(resolve, TIMING.SINGLE_PARTICLES));
 
-    console.log('[Reroll VFX] Starting total reroll');
-
-    isPlaying = true;
-    vfxType = 'total';
-    startTime = performance.now();
-    onCompleteCallback = onComplete;
-
-    // Capture all card rects
-    cardRects = cardElements.map(el => el.getBoundingClientRect());
-
-    // Set reroll uniforms
-    uniforms.uRerollActive.value = 2; // 2 = total reroll
-
-    tick();
-  }
-
-  /**
-   * Animation loop
-   */
-  function tick() {
-    if (!isPlaying) return;
-
-    const elapsed = (performance.now() - startTime) / 1000; // Convert to seconds
-
-    if (vfxType === 'single') {
-      executeSingleReroll(elapsed);
-    } else if (vfxType === 'total') {
-      executeTotalReroll(elapsed);
+    // At this point, update the card content to show the new character
+    cardElement.classList.remove('reroll-shattering');
+    if (renderCallback) {
+      renderCallback();
     }
 
-    animationFrameId = requestAnimationFrame(tick);
-  }
+    // Phase 3: Reform (600ms)
+    cardElement.classList.add('reroll-reforming');
 
-  /**
-   * Execute single reroll VFX
-   */
-  function executeSingleReroll(elapsed) {
-    const totalDuration = TIMING.SINGLE_SHATTER + TIMING.SINGLE_SPIRAL + TIMING.SINGLE_REFORM;
+    await new Promise(resolve => setTimeout(resolve, TIMING.SINGLE_REFORM));
 
-    if (elapsed >= totalDuration) {
-      complete();
-      return;
-    }
+    // Cleanup
+    cardElement.classList.remove('reroll-reforming');
 
-    // Phase 1: Shatter (0.0 - 0.4s)
-    if (elapsed < TIMING.SINGLE_SHATTER) {
-      const t = elapsed / TIMING.SINGLE_SHATTER;
-      const eased = ease.inCubic(t);
+    // Trigger Fallen crack settle
+    triggerFallenCrackSettle();
 
-      // Selected card dims and cracks
-      const nodeIndex = selectedIndex + 3; // Living nodes are 3-5
-      uniforms.uNodeAlive.value[nodeIndex] = 1.0 - eased;
-      uniforms.uCrackStrength.value[nodeIndex] = eased;
-
-      // Reroll progress
-      uniforms.uRerollProgress.value = eased * 0.3;
-    }
-
-    // Phase 2: Spiral up as stardust (0.4 - 0.9s)
-    else if (elapsed < TIMING.SINGLE_SHATTER + TIMING.SINGLE_SPIRAL) {
-      const t = (elapsed - TIMING.SINGLE_SHATTER) / TIMING.SINGLE_SPIRAL;
-      const eased = ease.outCubic(t);
-
-      const nodeIndex = selectedIndex + 3;
-
-      // Fully shattered
-      uniforms.uNodeAlive.value[nodeIndex] = 0;
-      uniforms.uCrackStrength.value[nodeIndex] = 1.0;
-
-      // Particle spiral effect (move particles upward)
-      uniforms.uEmberStrength.value[nodeIndex] = eased;
-
-      // Reroll progress
-      uniforms.uRerollProgress.value = 0.3 + eased * 0.4;
-    }
-
-    // Phase 3: Re-coalesce into swapped card (0.9 - 1.5s)
-    else {
-      const t = (elapsed - TIMING.SINGLE_SHATTER - TIMING.SINGLE_SPIRAL) / TIMING.SINGLE_REFORM;
-      const eased = ease.outQuint(t);
-
-      const nodeIndex = selectedIndex + 3;
-
-      // Particles coalesce back
-      uniforms.uEmberStrength.value[nodeIndex] = 1.0 - eased;
-      uniforms.uCrackStrength.value[nodeIndex] = 1.0 - eased;
-      uniforms.uNodeAlive.value[nodeIndex] = eased;
-
-      // Reroll progress
-      uniforms.uRerollProgress.value = 0.7 + eased * 0.3;
-    }
-  }
-
-  /**
-   * Execute total reroll VFX
-   */
-  function executeTotalReroll(elapsed) {
-    const totalDuration = TIMING.TOTAL_SHATTER + TIMING.TOTAL_REFORM;
-
-    if (elapsed >= totalDuration) {
-      complete();
-      return;
-    }
-
-    // Phase 1: All shatter with stagger (0.0 - 0.5s)
-    if (elapsed < TIMING.TOTAL_SHATTER) {
-      const baseT = elapsed / TIMING.TOTAL_SHATTER;
-
-      for (let i = 0; i < 3; i++) {
-        const stagger = i * TIMING.TOTAL_STAGGER;
-        const t = Math.max(0, Math.min(1, (baseT - stagger / TIMING.TOTAL_SHATTER)));
-        const eased = ease.inCubic(t);
-
-        const nodeIndex = i + 3; // Living nodes are 3-5
-        uniforms.uNodeAlive.value[nodeIndex] = 1.0 - eased;
-        uniforms.uCrackStrength.value[nodeIndex] = eased;
-        uniforms.uEmberStrength.value[nodeIndex] = eased * 0.5;
-      }
-
-      uniforms.uRerollProgress.value = baseT * 0.5;
-    }
-
-    // Phase 2: Reform into new trio with stagger (0.5 - 1.2s)
-    else {
-      const baseT = (elapsed - TIMING.TOTAL_SHATTER) / TIMING.TOTAL_REFORM;
-
-      for (let i = 0; i < 3; i++) {
-        const stagger = i * TIMING.TOTAL_STAGGER;
-        const t = Math.max(0, Math.min(1, (baseT - stagger / TIMING.TOTAL_REFORM)));
-        const eased = ease.outQuint(t);
-
-        const nodeIndex = i + 3; // Living nodes are 3-5
-        uniforms.uEmberStrength.value[nodeIndex] = (1.0 - eased) * 0.5;
-        uniforms.uCrackStrength.value[nodeIndex] = 1.0 - eased;
-        uniforms.uNodeAlive.value[nodeIndex] = eased;
-      }
-
-      uniforms.uRerollProgress.value = 0.5 + baseT * 0.5;
-    }
-  }
-
-  /**
-   * Update Fallen portraits with crack settle effect
-   */
-  function updateFallenPortraits() {
-    // Brief "crack settle" micro-effect for Fallen portraits
-    for (let i = 0; i < 3; i++) {
-      // Add subtle crack flash then settle
-      setTimeout(() => {
-        // This would trigger a CSS class on the Fallen portrait elements
-        // For now, we just update uniforms
-        uniforms.uCrackStrength.value[i] = 0.2;
-
-        setTimeout(() => {
-          uniforms.uCrackStrength.value[i] = 0;
-        }, TIMING.FALLEN_SETTLE * 1000);
-      }, i * 100);
-    }
-  }
-
-  /**
-   * Complete VFX and unlock UI
-   */
-  function complete() {
-    console.log('[Reroll VFX] Complete');
-
+    console.log('[Reroll VFX] Single reroll complete');
     isPlaying = false;
 
-    // Reset reroll uniforms
-    uniforms.uRerollActive.value = 0;
-    uniforms.uRerollProgress.value = 0;
-
-    // Ensure all Living nodes are fully alive
-    for (let i = 3; i < 6; i++) {
-      uniforms.uNodeAlive.value[i] = 1.0;
-      uniforms.uCrackStrength.value[i] = 0;
-      uniforms.uEmberStrength.value[i] = 0;
+    if (onComplete) {
+      onComplete();
     }
-
-    // Update Fallen portraits
-    updateFallenPortraits();
-
-    // Call completion callback (store unlock)
-    if (onCompleteCallback) {
-      onCompleteCallback();
-      onCompleteCallback = null;
-    }
-
-    if (animationFrameId) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
-
-    vfxType = null;
-    selectedIndex = -1;
-    selectedRect = null;
-    cardRects = [];
   }
 
   /**
-   * Stop VFX (cleanup)
+   * Start total reroll animation
+   */
+  async function startTotal(cardElements, renderCallback, onComplete) {
+    if (isPlaying) return;
+
+    console.log('[Reroll VFX] Starting total reroll animation');
+
+    isPlaying = true;
+
+    // Phase 1: Shatter all cards with stagger (500ms total)
+    for (let i = 0; i < cardElements.length; i++) {
+      setTimeout(() => {
+        cardElements[i].classList.add('reroll-shattering');
+        createParticles(cardElements[i]);
+      }, i * TIMING.TOTAL_STAGGER);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, TIMING.TOTAL_SHATTER + (cardElements.length * TIMING.TOTAL_STAGGER)));
+
+    // Update all card contents to show new characters
+    cardElements.forEach(card => card.classList.remove('reroll-shattering'));
+    if (renderCallback) {
+      renderCallback();
+    }
+
+    // Phase 2: Reform all cards with stagger (700ms total)
+    for (let i = 0; i < cardElements.length; i++) {
+      setTimeout(() => {
+        cardElements[i].classList.add('reroll-reforming');
+      }, i * TIMING.TOTAL_STAGGER);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, TIMING.TOTAL_REFORM + (cardElements.length * TIMING.TOTAL_STAGGER)));
+
+    // Cleanup
+    cardElements.forEach(card => card.classList.remove('reroll-reforming'));
+
+    // Trigger Fallen ember crossfade
+    triggerFallenEmberCrossfade();
+
+    console.log('[Reroll VFX] Total reroll complete');
+    isPlaying = false;
+
+    if (onComplete) {
+      onComplete();
+    }
+  }
+
+  /**
+   * Trigger Fallen portraits crack settle effect (single reroll)
+   */
+  function triggerFallenCrackSettle() {
+    if (!fallenPortraits || fallenPortraits.length === 0) return;
+
+    fallenPortraits.forEach((portrait, i) => {
+      setTimeout(() => {
+        const crackedGlass = portrait.wrapper.querySelector('.crackedGlass');
+        if (crackedGlass) {
+          crackedGlass.classList.add('crack-settle');
+
+          setTimeout(() => {
+            crackedGlass.classList.remove('crack-settle');
+          }, TIMING.FALLEN_SETTLE);
+        }
+      }, i * 100);
+    });
+  }
+
+  /**
+   * Trigger Fallen portraits ember crossfade effect (total reroll)
+   */
+  function triggerFallenEmberCrossfade() {
+    if (!fallenPortraits || fallenPortraits.length === 0) return;
+
+    fallenPortraits.forEach((portrait, i) => {
+      setTimeout(() => {
+        portrait.wrapper.classList.add('ember-crossfade');
+
+        setTimeout(() => {
+          portrait.wrapper.classList.remove('ember-crossfade');
+        }, TIMING.FALLEN_CROSSFADE);
+      }, i * 80);
+    });
+  }
+
+  /**
+   * Set Fallen portrait elements for effects
+   */
+  function setFallenPortraits(portraits) {
+    fallenPortraits = portraits;
+  }
+
+  /**
+   * Stop all animations
    */
   function stop() {
     isPlaying = false;
-    uniforms.uRerollActive.value = 0;
-    uniforms.uRerollProgress.value = 0;
-
-    if (animationFrameId) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
   }
 
   return {
     startSingle,
     startTotal,
+    setFallenPortraits,
     stop,
     isPlaying: () => isPlaying
   };
