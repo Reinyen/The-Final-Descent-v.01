@@ -9,7 +9,7 @@
 
 import { characters } from './data/characters.js';
 import { initSelection } from './core/rosterSelection.js';
-import { createRosterStore, States } from './core/rosterStore.js';
+import { createRosterStore, States, EventTypes } from './core/rosterStore.js';
 import { createDevPanel } from './ui/devPanel.js';
 import { setupLivingScroll, setupCardSelection, setupCardHover, createLivingCardElement, renderLivingCard, applyResponsiveScaling } from './ui/livingCards.js';
 import { createPopoverController } from './ui/popover.js';
@@ -17,6 +17,8 @@ import { createFallenPortrait, renderFallenPortrait, setupMemoryFlicker, applyOv
 import { createRerollStars, updateStarVisuals, setupRerollButtons } from './ui/rerollUI.js';
 import { setupConfirmButton, setupFallenAssignmentHooks, initializeIntegrationAPI } from './ui/confirmAction.js';
 import { initFx } from './fx/fxRoot.js';
+import { createCinematicController } from './fx/cinematicController.js';
+import { createRerollVFXController } from './fx/rerollVFXController.js';
 
 /**
  * Main initialization
@@ -57,6 +59,10 @@ export async function initializeRosterSelection(config = {}) {
 
   // Initialize Three.js layer
   const fx = initFx(dom.canvas);
+
+  // Create VFX controllers
+  const cinematicController = createCinematicController(fx.uniforms, fx.renderer, store);
+  const rerollVFXController = createRerollVFXController(fx.uniforms, fx.renderer, store);
 
   // Create Living cards
   const livingCardElements = [];
@@ -124,14 +130,33 @@ export async function initializeRosterSelection(config = {}) {
     createDevPanel(store);
   }
 
+  // Wire up cinematic events
+  store.on(EventTypes.CINEMATIC_START, ({ livingIds, fallenIds }) => {
+    const livingElements = livingCardElements.map(card => card);
+    const fallenElements = fallenPortraits.map(p => p.wrapper);
+    cinematicController.start(livingIds, fallenIds, livingElements, fallenElements);
+  });
+
+  // Wire up reroll VFX events
+  store.on(EventTypes.REROLL_SINGLE_START, ({ characterId, cardRect }) => {
+    const currentState = store.getState();
+    const cardIndex = currentState.livingIds.indexOf(characterId);
+    if (cardIndex >= 0) {
+      rerollVFXController.startSingle(cardRect, cardIndex, () => {
+        // VFX complete - store will handle unlock in completeSingleReroll
+      });
+    }
+  });
+
+  store.on(EventTypes.REROLL_TOTAL_START, () => {
+    rerollVFXController.startTotal(livingCardElements, () => {
+      // VFX complete - store will handle unlock in completeTotalReroll
+    });
+  });
+
   // Start entry cinematic after short delay
   setTimeout(() => {
     store.startCinematic();
-    // Simulate cinematic completion (Tasks 11-12 would handle this via Three.js)
-    setTimeout(() => {
-      store.completeCinematic();
-      renderAll();
-    }, 5000); // Placeholder duration
   }, 500);
 
   /**
@@ -178,6 +203,8 @@ export async function initializeRosterSelection(config = {}) {
     store,
     dom,
     fx,
+    cinematicController,
+    rerollVFXController,
     renderAll
   };
 }
