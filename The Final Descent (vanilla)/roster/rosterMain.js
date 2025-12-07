@@ -60,7 +60,7 @@ export async function initializeRosterSelection(config = {}) {
   // Initialize Three.js layer
   const fx = initFx(dom.canvas);
 
-  // Create VFX controllers
+  // Create VFX controllers (reroll controller will be initialized with fallen portraits later)
   const cinematicController = createCinematicController(fx.uniforms, fx.renderer, store);
   const rerollVFXController = createRerollVFXController(fx.uniforms, fx.renderer, store);
 
@@ -83,6 +83,9 @@ export async function initializeRosterSelection(config = {}) {
   // Apply overlap positioning to Fallen portraits
   applyOverlapPositioning(fallenPortraits.map(p => p.wrapper));
 
+  // Set Fallen portraits in reroll VFX controller for effects
+  rerollVFXController.setFallenPortraits(fallenPortraits);
+
   // Create reroll stars
   const rerollStars = createRerollStars(dom.rerollPips);
 
@@ -96,7 +99,7 @@ export async function initializeRosterSelection(config = {}) {
   setupCardHover(livingCardElements, store);
 
   // Setup reroll buttons
-  setupRerollButtons(
+  const rerollUIAPI = setupRerollButtons(
     {
       singleRerollBtn: dom.singleRerollBtn,
       totalRerollBtn: dom.totalRerollBtn,
@@ -143,14 +146,24 @@ export async function initializeRosterSelection(config = {}) {
     const cardIndex = currentState.livingIds.indexOf(characterId);
     if (cardIndex >= 0) {
       rerollVFXController.startSingle(cardRect, cardIndex, () => {
-        // VFX complete - store will handle unlock in completeSingleReroll
+        // VFX complete - get pending state and complete reroll
+        const newState = rerollUIAPI.getPendingRerollState();
+        if (newState) {
+          store.completeSingleReroll(newState);
+          rerollUIAPI.clearPendingRerollState();
+        }
       });
     }
   });
 
   store.on(EventTypes.REROLL_TOTAL_START, () => {
     rerollVFXController.startTotal(livingCardElements, () => {
-      // VFX complete - store will handle unlock in completeTotalReroll
+      // VFX complete - get pending state and complete reroll
+      const newState = rerollUIAPI.getPendingRerollState();
+      if (newState) {
+        store.completeTotalReroll(newState);
+        rerollUIAPI.clearPendingRerollState();
+      }
     });
   });
 

@@ -19,13 +19,14 @@ const TIMING = {
   TOTAL_SHATTER: 0.5,
   TOTAL_STAGGER: 0.15,
   TOTAL_REFORM: 0.7,
-  FALLEN_SETTLE: 0.3
+  FALLEN_SETTLE: 0.3,
+  FALLEN_CROSSFADE: 0.4
 };
 
 /**
  * Create reroll VFX controller
  */
-export function createRerollVFXController(uniforms, renderer, store) {
+export function createRerollVFXController(uniforms, renderer, store, fallenPortraits = []) {
   let isPlaying = false;
   let startTime = 0;
   let vfxType = null; // 'single' or 'total'
@@ -36,7 +37,7 @@ export function createRerollVFXController(uniforms, renderer, store) {
   let selectedIndex = -1;
   let selectedRect = null;
   let cardRects = [];
-  let fallenRects = [];
+  let fallenElements = fallenPortraits;
 
   /**
    * Ease functions
@@ -227,21 +228,78 @@ export function createRerollVFXController(uniforms, renderer, store) {
   }
 
   /**
-   * Update Fallen portraits with crack settle effect
+   * Update Fallen portraits with crack settle effect (single reroll)
    */
-  function updateFallenPortraits() {
+  function triggerFallenCrackSettle() {
     // Brief "crack settle" micro-effect for Fallen portraits
     for (let i = 0; i < 3; i++) {
-      // Add subtle crack flash then settle
       setTimeout(() => {
-        // This would trigger a CSS class on the Fallen portrait elements
-        // For now, we just update uniforms
-        uniforms.uCrackStrength.value[i] = 0.2;
+        // Update shader uniforms for crack flash
+        uniforms.uCrackStrength.value[i] = 0.3;
 
+        // Add CSS effect to DOM elements
+        if (fallenElements[i] && fallenElements[i].wrapper) {
+          const crackedGlass = fallenElements[i].wrapper.querySelector('.crackedGlass');
+          if (crackedGlass) {
+            crackedGlass.style.opacity = '0.8';
+            crackedGlass.style.filter = 'brightness(1.3)';
+          }
+        }
+
+        // Settle animation
         setTimeout(() => {
           uniforms.uCrackStrength.value[i] = 0;
+
+          if (fallenElements[i] && fallenElements[i].wrapper) {
+            const crackedGlass = fallenElements[i].wrapper.querySelector('.crackedGlass');
+            if (crackedGlass) {
+              crackedGlass.style.opacity = '';
+              crackedGlass.style.filter = '';
+            }
+          }
         }, TIMING.FALLEN_SETTLE * 1000);
       }, i * 100);
+    }
+  }
+
+  /**
+   * Update Fallen portraits with ember crossfade (total reroll)
+   */
+  function triggerFallenEmberCrossfade() {
+    // Ember crossfade effect for total reroll
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => {
+        // Ember glow in shader
+        uniforms.uEmberStrength.value[i] = 0.6;
+
+        // Add CSS effect to DOM elements
+        if (fallenElements[i] && fallenElements[i].wrapper) {
+          const plaque = fallenElements[i].wrapper;
+          plaque.style.transition = `opacity ${TIMING.FALLEN_CROSSFADE}s ease-out`;
+          plaque.style.opacity = '0.3';
+
+          // Add ember glow effect
+          const surface = plaque.querySelector('.plaqueSurface');
+          if (surface) {
+            surface.style.boxShadow = '0 0 20px rgba(255, 120, 60, 0.6)';
+          }
+        }
+
+        // Crossfade complete
+        setTimeout(() => {
+          uniforms.uEmberStrength.value[i] = 0;
+
+          if (fallenElements[i] && fallenElements[i].wrapper) {
+            const plaque = fallenElements[i].wrapper;
+            plaque.style.opacity = '';
+
+            const surface = plaque.querySelector('.plaqueSurface');
+            if (surface) {
+              surface.style.boxShadow = '';
+            }
+          }
+        }, TIMING.FALLEN_CROSSFADE * 1000);
+      }, i * 80);
     }
   }
 
@@ -264,8 +322,12 @@ export function createRerollVFXController(uniforms, renderer, store) {
       uniforms.uEmberStrength.value[i] = 0;
     }
 
-    // Update Fallen portraits
-    updateFallenPortraits();
+    // Update Fallen portraits based on reroll type
+    if (vfxType === 'single') {
+      triggerFallenCrackSettle();
+    } else if (vfxType === 'total') {
+      triggerFallenEmberCrossfade();
+    }
 
     // Call completion callback (store unlock)
     if (onCompleteCallback) {
@@ -298,10 +360,18 @@ export function createRerollVFXController(uniforms, renderer, store) {
     }
   }
 
+  /**
+   * Set fallen portrait elements for effects
+   */
+  function setFallenPortraits(portraits) {
+    fallenElements = portraits;
+  }
+
   return {
     startSingle,
     startTotal,
     stop,
+    setFallenPortraits,
     isPlaying: () => isPlaying
   };
 }

@@ -155,10 +155,13 @@ export function updateButtonGating(buttons, state) {
 /**
  * Setup reroll button handlers
  */
-export function setupRerollButtons(buttons, stars, store, selectionLogic) {
+export function setupRerollButtons(buttons, stars, store, selectionLogic, getVFXController = null) {
   if (!buttons || !stars || !store) return;
 
   const { singleRerollBtn, totalRerollBtn } = buttons;
+
+  // Store pending reroll state for VFX completion callbacks
+  let pendingRerollState = null;
 
   /**
    * Handle single reroll
@@ -191,17 +194,14 @@ export function setupRerollButtons(buttons, stars, store, selectionLogic) {
         state.selectedLivingId
       );
 
-      // Start animation via store
-      store.startSingleReroll(cardRect);
+      // Store pending state for VFX completion
+      pendingRerollState = newState;
 
       // Update logic state
       selectionLogic.rngState = newState.rngState;
 
-      // Animation will call completeSingleReroll when done
-      // For now, simulate completion after a delay
-      setTimeout(() => {
-        store.completeSingleReroll(newState);
-      }, 1500); // Placeholder - Three.js layer will call this
+      // Start animation via store (VFX completion will call store.completeSingleReroll)
+      store.startSingleReroll(cardRect);
     });
   }
 
@@ -228,17 +228,14 @@ export function setupRerollButtons(buttons, stars, store, selectionLogic) {
         rerollsRemaining: state.rerollsRemaining
       });
 
-      // Start animation via store
-      store.startTotalReroll();
+      // Store pending state for VFX completion
+      pendingRerollState = newState;
 
       // Update logic state
       selectionLogic.rngState = newState.rngState;
 
-      // Animation will call completeTotalReroll when done
-      // For now, simulate completion after a delay
-      setTimeout(() => {
-        store.completeTotalReroll(newState);
-      }, 2000); // Placeholder - Three.js layer will call this
+      // Start animation via store (VFX completion will call store.completeTotalReroll)
+      store.startTotalReroll();
     });
   }
 
@@ -253,4 +250,10 @@ export function setupRerollButtons(buttons, stars, store, selectionLogic) {
 
   // Initial update
   updateButtonGating(buttons, store.getState());
+
+  // Return API for accessing pending state
+  return {
+    getPendingRerollState: () => pendingRerollState,
+    clearPendingRerollState: () => { pendingRerollState = null; }
+  };
 }
