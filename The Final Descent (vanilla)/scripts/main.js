@@ -209,7 +209,7 @@ class IntroPageApp {
       console.log('[IntroPage] Transition complete, navigating to Roster Selection');
 
       // Navigate to Roster Selection UI
-      window.location.href = 'roster-selection.html';
+      window.location.href = 'roster/index.html';
     });
   }
 
