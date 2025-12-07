@@ -316,9 +316,12 @@ function createDOMStructure(root) {
   };
 }
 
-// Auto-initialize if this is the main entry point
-if (import.meta.url === new URL(document.currentScript?.src || '', window.location.href).href) {
+// Auto-initialize when DOM is ready
+if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     initializeRosterSelection();
   });
+} else {
+  // DOM already loaded
+  initializeRosterSelection();
 }
