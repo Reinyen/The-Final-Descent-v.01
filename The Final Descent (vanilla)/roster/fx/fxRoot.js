@@ -109,6 +109,88 @@ export function initFx(canvas) {
         return mask * strength;
       }
 
+      // Stardust particle system for reroll effects
+      vec3 stardustParticles(vec2 uv, vec2 center, float progress, float strength, int nodeIndex) {
+        vec3 color = vec3(0.0);
+
+        // Generate particles in a grid around center
+        for (float i = 0.0; i < 30.0; i += 1.0) {
+          vec2 seed = vec2(i * 0.173, float(nodeIndex) * 0.271);
+          float rnd1 = hash(seed);
+          float rnd2 = hash(seed + vec2(1.337, 2.449));
+          float rnd3 = hash(seed + vec2(3.141, 5.926));
+
+          // Initial position around center
+          float angle = rnd1 * 6.28318;
+          float radius = rnd2 * 0.15;
+          vec2 initialPos = center + vec2(cos(angle), sin(angle)) * radius;
+
+          // Spiral motion parameters
+          float spiralSpeed = 0.3 + rnd3 * 0.4;
+          float spiralRadius = radius + progress * (0.2 + rnd2 * 0.3);
+          float spiralAngle = angle + progress * 3.14159 * spiralSpeed;
+
+          // Particle position during animation
+          vec2 particlePos = center + vec2(
+            cos(spiralAngle) * spiralRadius * (1.0 - progress * 0.7),
+            sin(spiralAngle) * spiralRadius * (1.0 - progress * 0.7) - progress * (0.3 + rnd1 * 0.2)
+          );
+
+          // Distance to particle
+          float dist = length(uv - particlePos);
+          float particleSize = 0.003 + rnd2 * 0.002;
+          float particle = smoothstep(particleSize * 2.0, 0.0, dist);
+
+          // Particle color - blue-white stardust
+          vec3 particleColor = mix(
+            vec3(0.6, 0.8, 1.0),
+            vec3(1.0, 1.0, 1.0),
+            rnd3
+          );
+
+          // Fade particles in/out based on progress
+          float alpha = smoothstep(0.0, 0.1, progress) * smoothstep(1.0, 0.7, progress);
+
+          color += particleColor * particle * alpha * strength;
+        }
+
+        return color;
+      }
+
+      // Coalescence effect - particles reforming into card
+      vec3 coalesceEffect(vec2 uv, vec2 center, float progress, float strength) {
+        vec3 color = vec3(0.0);
+
+        // Reverse the particle effect - particles converging
+        for (float i = 0.0; i < 25.0; i += 1.0) {
+          vec2 seed = vec2(i * 0.197, i * 0.313);
+          float rnd1 = hash(seed);
+          float rnd2 = hash(seed + vec2(7.89, 1.23));
+          float rnd3 = hash(seed + vec2(4.56, 9.87));
+
+          // Particles converge from spiral to center
+          float angle = rnd1 * 6.28318;
+          float startRadius = 0.25 + rnd2 * 0.15;
+          float radius = startRadius * (1.0 - progress);
+
+          vec2 particlePos = center + vec2(cos(angle), sin(angle)) * radius;
+
+          float dist = length(uv - particlePos);
+          float particleSize = 0.004 + rnd3 * 0.003;
+          float particle = smoothstep(particleSize * 2.0, 0.0, dist);
+
+          // Blue-white color
+          vec3 particleColor = mix(vec3(0.5, 0.7, 1.0), vec3(1.0), rnd2);
+
+          // Fade as they converge
+          float alpha = smoothstep(0.0, 0.2, progress) * smoothstep(1.0, 0.8, progress);
+
+          color += particleColor * particle * alpha * strength;
+        }
+
+        return color;
+      }
+
       void main() {
         vec2 uv = vUv;
         vec3 color = vec3(0.0);
@@ -127,8 +209,26 @@ export function initFx(canvas) {
           float ember = smoothstep(0.12, 0.0, dist) * uEmberStrength[i];
           color += vec3(0.2, 0.5, 0.8) * glow;
           color += vec3(0.9, 0.45, 0.2) * ember;
-          float crack = crackMask(uv, pos, uCrackStrength[i] * fallen);
+          float crack = crackMask(uv, pos, uCrackStrength[i] * (fallen + uCrackStrength[i] * 0.5));
           color += vec3(0.8, 0.6, 0.4) * crack * 0.4;
+
+          // Reroll particle effects for Living nodes (indices 3-5)
+          if (i >= 3 && uRerollActive > 0.5) {
+            float emberStr = uEmberStrength[i];
+
+            // During spiral phase (ember > 0), show stardust particles
+            if (emberStr > 0.01 && uRerollProgress < 0.7) {
+              float spiralProgress = uRerollProgress * 1.5;
+              color += stardustParticles(uv, pos, spiralProgress, emberStr, i);
+            }
+
+            // During coalescence phase, show particles reforming
+            if (uRerollProgress > 0.6 && uRerollProgress < 1.0) {
+              float coalesceProgress = (uRerollProgress - 0.6) / 0.4;
+              float coalesceStr = 1.0 - alive;
+              color += coalesceEffect(uv, pos, coalesceProgress, coalesceStr);
+            }
+          }
         }
 
         if (uSweepT > 0.0) {
