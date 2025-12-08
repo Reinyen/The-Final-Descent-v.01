@@ -313,19 +313,7 @@ export function createCinematicController(uniforms, renderer, store) {
 
     isPlaying = false;
 
-    // Finalize uniforms
-    uniforms.uPhase.value = 1.0;
-    uniforms.uVignetteStrength.value = 0; // Disable vignette
-    uniforms.uDustStrength.value = 0; // Disable dust
-    uniforms.uDustDriftSpeed.value = 0;
-
-    // Disable ALL node glows - remove background effects entirely
-    for (let i = 0; i < 6; i++) {
-      uniforms.uNodeAlive.value[i] = 0;
-      uniforms.uNodeFallen.value[i] = 0;
-      uniforms.uCrackStrength.value[i] = 0;
-      uniforms.uEmberStrength.value[i] = 0;
-    }
+    // Background rendering will be destroyed by rosterMain, no need to set uniforms
 
     // Unlock UI via store
     if (store) {
