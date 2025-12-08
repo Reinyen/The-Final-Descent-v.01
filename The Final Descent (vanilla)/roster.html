@@ -138,14 +138,14 @@
       // ---- Particle burst system ----
       const PARTICLE_OPTS = {
         particles: 60,
-        baseSize: 1.5,
-        addedSize: 3,
-        baseTime: 30,
-        addedTime: 30,
-        baseRandom: 1,
-        addedRandom: 4,
-        radius: 50, // burst radius in pixels
-        baseAlpha: 0.7,
+        baseSize: 2,
+        addedSize: 4,
+        baseTime: 25,
+        addedTime: 35,
+        baseRandom: 2,
+        addedRandom: 5,
+        radius: 60, // burst radius in pixels
+        baseAlpha: 0.8,
         addedAlpha: 0.2,
         alphaRemoval: 3,
       };
@@ -163,15 +163,19 @@
         const radius = Math.random() * PARTICLE_OPTS.radius;
 
         this.time = (PARTICLE_OPTS.baseTime + PARTICLE_OPTS.addedTime * Math.random()) | 0;
-        this.tick = 0;
+        // Start particles at random points in their animation cycle for immediate visibility
+        this.tick = (Math.random() * this.time) | 0;
 
         this.size = (PARTICLE_OPTS.baseSize + PARTICLE_OPTS.addedSize * Math.random()) | 0;
 
         this.dx = (Math.cos(radian) * radius) | 0; // destination relative to center
         this.dy = (Math.sin(radian) * radius) | 0;
 
-        this.px = 0; // previous position relative to center
-        this.py = 0;
+        // Initialize previous position based on starting tick for immediate trails
+        const initialProportion = this.tick / this.time;
+        const initialArmonic = -Math.cos(initialProportion * Math.PI / 2) + 1;
+        this.px = (this.dx * initialArmonic) | 0;
+        this.py = (this.dy * initialArmonic) | 0;
         this.alpha = 0;
       };
 
@@ -539,14 +543,15 @@
         }
 
         // Draw particle bursts during flicker phase (when stars are still small)
-        if (flickerMix > 0 && flickerMix < 1) {
+        if (specialChosen && flickerMix >= 0 && flickerMix <= 1) {
           const specialPositions = [];
           for (let i=0; i<specialIdx.length; i++){
             const p = specialPos.get(specialIdx[i]);
             if (p) specialPositions.push(p);
           }
           // Particle intensity ramps up then down during flicker phase
-          const burstIntensity = Math.sin(flickerMix * Math.PI) * 0.85;
+          // Use a curve that maintains visibility throughout (min 0.3, max 1.0)
+          const burstIntensity = 0.3 + Math.sin(flickerMix * Math.PI) * 0.7;
           updateAndDrawParticles(specialPositions, burstIntensity);
         }
 
