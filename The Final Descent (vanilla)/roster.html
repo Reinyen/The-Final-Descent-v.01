@@ -141,17 +141,18 @@
         particles: 60,
         baseSize: 1.5,
         addedSize: 3,
-        baseTime: 30,
-        addedTime: 30,
+        baseTime: 12,        // Reduced to fit in 400ms window (at 60fps, ~12-24 frames)
+        addedTime: 12,
         baseRandom: 1,
         addedRandom: 4,
-        radius: 80, // burst radius in pixels (adjusted from reference s/2-20 where s=400)
-        baseAlpha: 0.7,
-        addedAlpha: 0.2,
+        radius: 80,          // Will be set dynamically to 4% of screen
+        baseAlpha: 0.9,      // Increased for visibility
+        addedAlpha: 0.1,
         alphaRemoval: 1,
       };
 
       let particleSystems = []; // One system per special star
+      let burstTriggered = false; // Track if burst has been triggered
 
       function Particle(centerX, centerY){
         this.cx = centerX;
@@ -187,21 +188,17 @@
         const proportion = this.tick / this.time;
         const armonic = -Math.cos(proportion * Math.PI / 2) + 1;
         const variation = PARTICLE_OPTS.baseRandom + PARTICLE_OPTS.addedRandom * Math.random();
-        const x = this.dx * armonic + Math.random() * variation | 0;
-        const y = this.dy * armonic + Math.random() * variation | 0;
-        const size = this.size * (1 - armonic);
+        const x = this.dx * armonic + (Math.random() - 0.5) * variation * 2 | 0;
+        const y = this.dy * armonic + (Math.random() - 0.5) * variation * 2 | 0;
 
         // Alpha decreases as particle travels outward (fade with distance)
         const alphaFade = 1 - proportion;
-        this.alpha = clamp((PARTICLE_OPTS.baseAlpha + PARTICLE_OPTS.addedAlpha * Math.random()) * alphaFade * 255, 0, 255);
+        this.alpha = (PARTICLE_OPTS.baseAlpha + PARTICLE_OPTS.addedAlpha * Math.random()) * alphaFade;
 
-        // Store current position for rendering
+        // Store current position and size for rendering
         this.currentX = x;
         this.currentY = y;
-        this.currentSize = size;
-
-        this.px = x;
-        this.py = y;
+        this.currentSize = this.size; // Keep size constant for visibility
 
         // Mark as dead when complete (don't reset/loop)
         if(proportion >= 1)
@@ -235,26 +232,31 @@
 
           const system = particleSystems[i];
 
-          // Update center for all particles
+          // Update and draw each particle
           for(let j = 0; j < system.particles.length; j++){
             const p = system.particles[j];
+            if(p.dead) continue;
+
             p.cx = pos.x;
             p.cy = pos.y;
+
+            // Step the particle (calculates new position)
             p.step();
-          }
 
-          // Draw particles
-          for(let j = 0; j < system.particles.length; j++){
-            const p = system.particles[j];
-            const alpha = (p.alpha / 255) * intensity;
-            if(alpha <= 0.01) continue;
+            // Draw trail from previous position to current position
+            const alpha = p.alpha * intensity;
+            if(alpha > 0.01){
+              ctx.strokeStyle = `hsla(25, 70%, 55%, ${alpha})`;
+              ctx.lineWidth = p.currentSize;
+              ctx.beginPath();
+              ctx.moveTo(p.cx + p.px, p.cy + p.py);
+              ctx.lineTo(p.cx + p.currentX, p.cy + p.currentY);
+              ctx.stroke();
+            }
 
-            ctx.strokeStyle = `hsla(25, 70%, 55%, ${alpha})`;
-            ctx.lineWidth = p.currentSize;
-            ctx.beginPath();
-            ctx.moveTo(p.cx + p.px, p.cy + p.py);
-            ctx.lineTo(p.cx + p.currentX, p.cy + p.currentY);
-            ctx.stroke();
+            // Update previous position for next frame
+            p.px = p.currentX;
+            p.py = p.currentY;
           }
         }
 
@@ -557,6 +559,16 @@
 
         // Draw particle bursts during burst phase (after flicker, before arrange)
         if (specialChosen && t >= tFlickerEnd && t < tBurstEnd) {
+          // Reset all particles at the start of burst phase (only once)
+          if (!burstTriggered) {
+            burstTriggered = true;
+            for (let i = 0; i < particleSystems.length; i++) {
+              for (let j = 0; j < particleSystems[i].particles.length; j++) {
+                particleSystems[i].particles[j].reset();
+              }
+            }
+          }
+
           const specialPositions = [];
           for (let i=0; i<specialIdx.length; i++){
             const p = specialPos.get(specialIdx[i]);
@@ -606,6 +618,7 @@
         buildStars(3000);
         specialIdx = [];
         specialChosen = false;
+        burstTriggered = false; // Reset burst trigger
         particleSystems = []; // Reset particle systems
         rosterUi.classList.remove('show');
 
