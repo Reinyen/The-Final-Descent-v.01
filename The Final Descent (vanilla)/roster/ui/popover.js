@@ -282,10 +282,10 @@ export function createPopoverController(popoverElement, store) {
    * Attach to Living cards
    */
   function attachToCards(cardElements, allCharacters) {
-    const state = store.getState();
-
     cardElements.forEach((cardElement, index) => {
       const enterHandler = () => {
+        // Get fresh state on each hover to reflect reroll changes
+        const state = store.getState();
         const characterId = state.livingIds[index];
         if (!characterId) return;
 
