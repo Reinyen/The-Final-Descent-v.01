@@ -273,27 +273,14 @@ export function initFx(canvas) {
 
   window.addEventListener('resize', resize);
 
-  let animationFrameId = null;
-
   function render(time) {
     const t = time * 0.001;
     uniforms.uTime.value = t;
     renderer.render(scene, camera);
-    animationFrameId = requestAnimationFrame(render);
+    requestAnimationFrame(render);
   }
 
-  function stop() {
-    if (animationFrameId) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
-    // Remove canvas from DOM
-    if (canvas && canvas.parentNode) {
-      canvas.parentNode.removeChild(canvas);
-    }
-  }
-
-  animationFrameId = requestAnimationFrame(render);
+  requestAnimationFrame(render);
 
   return {
     uniforms,
@@ -302,7 +289,6 @@ export function initFx(canvas) {
     nodes,
     morph,
     rerollFx,
-    resize,
-    stop
+    resize
   };
 }

@@ -140,12 +140,6 @@ export async function initializeRosterSelection(config = {}) {
     cinematicController.start(livingIds, fallenIds, livingElements, fallenElements);
   });
 
-  // Destroy background rendering system when cinematic completes
-  store.on(EventTypes.CINEMATIC_COMPLETE, () => {
-    console.log('[Roster Main] Destroying background animation system');
-    fx.stop();
-  });
-
   // Wire up reroll VFX events
   store.on(EventTypes.REROLL_SINGLE_START, ({ characterId, cardRect }) => {
     const currentState = store.getState();
