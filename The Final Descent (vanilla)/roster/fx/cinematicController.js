@@ -315,19 +315,16 @@ export function createCinematicController(uniforms, renderer, store) {
 
     // Finalize uniforms
     uniforms.uPhase.value = 1.0;
-    uniforms.uVignetteStrength.value = 0.4; // Settle to ambient vignette
-    uniforms.uDustStrength.value = 0.2; // Enable ambient dust
-    uniforms.uDustDriftSpeed.value = 0.1;
+    uniforms.uVignetteStrength.value = 0; // Disable vignette
+    uniforms.uDustStrength.value = 0; // Disable dust
+    uniforms.uDustDriftSpeed.value = 0;
 
-    // All Living nodes fully alive
-    for (let i = 3; i < 6; i++) {
-      uniforms.uNodeAlive.value[i] = 1.0;
-    }
-
-    // All Fallen nodes dimmed
-    for (let i = 0; i < 3; i++) {
-      uniforms.uNodeAlive.value[i] = 0.3;
-      uniforms.uNodeFallen.value[i] = 1.0;
+    // Disable ALL node glows - remove background effects entirely
+    for (let i = 0; i < 6; i++) {
+      uniforms.uNodeAlive.value[i] = 0;
+      uniforms.uNodeFallen.value[i] = 0;
+      uniforms.uCrackStrength.value[i] = 0;
+      uniforms.uEmberStrength.value[i] = 0;
     }
 
     // Unlock UI via store
