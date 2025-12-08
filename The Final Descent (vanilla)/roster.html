@@ -112,11 +112,11 @@
       let W = 0, H = 0, DPR = 1;
 
       const TIMINGS = {
-        blackHold: 500,
-        bgFade: 300,
-        twinkleRamp: 1000,
-        specialFlicker: 600,
-        arrange: 1600,
+        blackHold: 875,
+        bgFade: 525,
+        twinkleRamp: 1750,
+        specialFlicker: 1050,
+        arrange: 2800,
       };
 
       function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
@@ -476,7 +476,7 @@
           blackout.style.opacity = '0';
         } else {
           setTimeout(() => {
-            blackout.style.transition = 'opacity 120ms linear';
+            blackout.style.transition = 'opacity 210ms linear';
             blackout.style.opacity = '0';
           }, TIMINGS.blackHold);
         }
@@ -484,7 +484,7 @@
         // Clean up blackout display after fade
         setTimeout(() => {
           blackout.style.display = 'none';
-        }, prefersReduced ? 10 : (TIMINGS.blackHold + 160));
+        }, prefersReduced ? 10 : (TIMINGS.blackHold + 280));
 
         startTime = performance.now();
         rafId = requestAnimationFrame(frame);
