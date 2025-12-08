@@ -135,6 +135,119 @@
         };
       }
 
+      // ---- Particle burst system ----
+      const PARTICLE_OPTS = {
+        particles: 60,
+        baseSize: 1.5,
+        addedSize: 3,
+        baseTime: 30,
+        addedTime: 30,
+        baseRandom: 1,
+        addedRandom: 4,
+        radius: 50, // burst radius in pixels
+        baseAlpha: 0.7,
+        addedAlpha: 0.2,
+        alphaRemoval: 3,
+      };
+
+      let particleSystems = []; // One system per special star
+
+      function Particle(centerX, centerY){
+        this.cx = centerX;
+        this.cy = centerY;
+        this.reset();
+      }
+
+      Particle.prototype.reset = function(){
+        const radian = Math.random() * Math.PI * 2;
+        const radius = Math.random() * PARTICLE_OPTS.radius;
+
+        this.time = (PARTICLE_OPTS.baseTime + PARTICLE_OPTS.addedTime * Math.random()) | 0;
+        this.tick = 0;
+
+        this.size = (PARTICLE_OPTS.baseSize + PARTICLE_OPTS.addedSize * Math.random()) | 0;
+
+        this.dx = (Math.cos(radian) * radius) | 0; // destination relative to center
+        this.dy = (Math.sin(radian) * radius) | 0;
+
+        this.px = 0; // previous position relative to center
+        this.py = 0;
+        this.alpha = 0;
+      };
+
+      Particle.prototype.step = function(){
+        ++this.tick;
+
+        const proportion = this.tick / this.time;
+        const armonic = -Math.cos(proportion * Math.PI / 2) + 1;
+        const variation = PARTICLE_OPTS.baseRandom + PARTICLE_OPTS.addedRandom * Math.random();
+        const x = this.dx * armonic + Math.random() * variation | 0;
+        const y = this.dy * armonic + Math.random() * variation | 0;
+        const size = this.size * (1 - armonic);
+
+        this.alpha = clamp((PARTICLE_OPTS.baseAlpha + PARTICLE_OPTS.addedAlpha * Math.random()) * 255, 0, 255);
+
+        // Store current position for rendering
+        this.currentX = x;
+        this.currentY = y;
+        this.currentSize = size;
+
+        this.px = x;
+        this.py = y;
+
+        if(proportion >= 1)
+          this.reset();
+      };
+
+      function initParticleSystems(){
+        particleSystems = [];
+        for(let i = 0; i < 6; i++){
+          const particles = [];
+          for(let j = 0; j < PARTICLE_OPTS.particles; j++){
+            particles.push(new Particle(0, 0)); // center will be updated per frame
+          }
+          particleSystems.push({ particles, alphaBuffer: null });
+        }
+      }
+
+      function updateAndDrawParticles(specialPositions, intensity){
+        if(particleSystems.length === 0) return;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+
+        for(let i = 0; i < Math.min(specialPositions.length, particleSystems.length); i++){
+          const pos = specialPositions[i];
+          if(!pos) continue;
+
+          const system = particleSystems[i];
+
+          // Update center for all particles
+          for(let j = 0; j < system.particles.length; j++){
+            const p = system.particles[j];
+            p.cx = pos.x;
+            p.cy = pos.y;
+            p.step();
+          }
+
+          // Draw particles
+          for(let j = 0; j < system.particles.length; j++){
+            const p = system.particles[j];
+            const alpha = (p.alpha / 255) * intensity;
+            if(alpha <= 0.01) continue;
+
+            ctx.strokeStyle = `hsla(25, 70%, 55%, ${alpha})`;
+            ctx.lineWidth = p.currentSize;
+            ctx.beginPath();
+            ctx.moveTo(p.cx + p.px, p.cy + p.py);
+            ctx.lineTo(p.cx + p.currentX, p.cy + p.currentY);
+            ctx.stroke();
+          }
+        }
+
+        ctx.restore();
+      }
+
       function resize(){
         const rect = canvas.getBoundingClientRect();
         DPR = clamp(window.devicePixelRatio || 1, 1, 2);
@@ -233,6 +346,9 @@
           s.sx0 = s.nx;
           s.sy0 = s.ny;
         }
+
+        // Initialize particle burst systems for each special star
+        initParticleSystems();
       }
 
       function computeTargets(){
@@ -422,6 +538,18 @@
           drawStarSprite(x, y, r, a, s.spriteIdx);
         }
 
+        // Draw particle bursts during flicker phase (when stars are still small)
+        if (flickerMix > 0 && flickerMix < 1) {
+          const specialPositions = [];
+          for (let i=0; i<specialIdx.length; i++){
+            const p = specialPos.get(specialIdx[i]);
+            if (p) specialPositions.push(p);
+          }
+          // Particle intensity ramps up then down during flicker phase
+          const burstIntensity = Math.sin(flickerMix * Math.PI) * 0.85;
+          updateAndDrawParticles(specialPositions, burstIntensity);
+        }
+
         // Draw special stars on top
         for (let i=0; i<specialIdx.length; i++){
           const idx = specialIdx[i];
@@ -461,6 +589,7 @@
         buildStars(3000);
         specialIdx = [];
         specialChosen = false;
+        particleSystems = []; // Reset particle systems
         rosterUi.classList.remove('show');
 
         // DOM: hard black for 0.5s
