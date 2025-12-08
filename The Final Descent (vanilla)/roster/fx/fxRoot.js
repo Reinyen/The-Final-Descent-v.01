@@ -284,6 +284,7 @@ export function initFx(canvas) {
 
   return {
     uniforms,
+    renderer,
     background,
     nodes,
     morph,
