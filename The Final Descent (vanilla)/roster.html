@@ -138,16 +138,16 @@
       // ---- Particle burst system ----
       const PARTICLE_OPTS = {
         particles: 60,
-        baseSize: 2,
-        addedSize: 4,
-        baseTime: 25,
-        addedTime: 35,
-        baseRandom: 2,
-        addedRandom: 5,
-        radius: 60, // burst radius in pixels
-        baseAlpha: 0.8,
+        baseSize: 1.5,
+        addedSize: 3,
+        baseTime: 30,
+        addedTime: 30,
+        baseRandom: 1,
+        addedRandom: 4,
+        radius: 80, // burst radius in pixels (adjusted from reference s/2-20 where s=400)
+        baseAlpha: 0.7,
         addedAlpha: 0.2,
-        alphaRemoval: 3,
+        alphaRemoval: 1,
       };
 
       let particleSystems = []; // One system per special star
@@ -542,8 +542,8 @@
           drawStarSprite(x, y, r, a, s.spriteIdx);
         }
 
-        // Draw particle bursts during flicker phase (when stars are still small)
-        if (specialChosen && flickerMix >= 0 && flickerMix <= 1) {
+        // Draw particle bursts during flicker phase only (when stars are still small)
+        if (specialChosen && t >= tTwinkleEnd && t < tFlickerEnd) {
           const specialPositions = [];
           for (let i=0; i<specialIdx.length; i++){
             const p = specialPos.get(specialIdx[i]);
