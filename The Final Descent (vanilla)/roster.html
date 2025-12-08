@@ -116,6 +116,7 @@
         bgFade: 525,
         twinkleRamp: 1750,
         specialFlicker: 1050,
+        burst: 400,
         arrange: 2800,
       };
 
@@ -163,23 +164,24 @@
         const radius = Math.random() * PARTICLE_OPTS.radius;
 
         this.time = (PARTICLE_OPTS.baseTime + PARTICLE_OPTS.addedTime * Math.random()) | 0;
-        // Start particles at random points in their animation cycle for immediate visibility
-        this.tick = (Math.random() * this.time) | 0;
+        // Start all particles at tick 0 (burst simultaneously)
+        this.tick = 0;
 
         this.size = (PARTICLE_OPTS.baseSize + PARTICLE_OPTS.addedSize * Math.random()) | 0;
 
         this.dx = (Math.cos(radian) * radius) | 0; // destination relative to center
         this.dy = (Math.sin(radian) * radius) | 0;
 
-        // Initialize previous position based on starting tick for immediate trails
-        const initialProportion = this.tick / this.time;
-        const initialArmonic = -Math.cos(initialProportion * Math.PI / 2) + 1;
-        this.px = (this.dx * initialArmonic) | 0;
-        this.py = (this.dy * initialArmonic) | 0;
+        // Start all particles at center (0, 0)
+        this.px = 0;
+        this.py = 0;
         this.alpha = 0;
+        this.dead = false;
       };
 
       Particle.prototype.step = function(){
+        if (this.dead) return;
+
         ++this.tick;
 
         const proportion = this.tick / this.time;
@@ -189,7 +191,9 @@
         const y = this.dy * armonic + Math.random() * variation | 0;
         const size = this.size * (1 - armonic);
 
-        this.alpha = clamp((PARTICLE_OPTS.baseAlpha + PARTICLE_OPTS.addedAlpha * Math.random()) * 255, 0, 255);
+        // Alpha decreases as particle travels outward (fade with distance)
+        const alphaFade = 1 - proportion;
+        this.alpha = clamp((PARTICLE_OPTS.baseAlpha + PARTICLE_OPTS.addedAlpha * Math.random()) * alphaFade * 255, 0, 255);
 
         // Store current position for rendering
         this.currentX = x;
@@ -199,11 +203,16 @@
         this.px = x;
         this.py = y;
 
+        // Mark as dead when complete (don't reset/loop)
         if(proportion >= 1)
-          this.reset();
+          this.dead = true;
       };
 
       function initParticleSystems(){
+        // Calculate burst radius as 4% of screen (matching the target star size)
+        const minDim = Math.min(W, H);
+        PARTICLE_OPTS.radius = minDim * 0.04;
+
         particleSystems = [];
         for(let i = 0; i < 6; i++){
           const particles = [];
@@ -485,7 +494,8 @@
         const tBgEnd = tBlackEnd + TIMINGS.bgFade;
         const tTwinkleEnd = tBgEnd + TIMINGS.twinkleRamp;
         const tFlickerEnd = tTwinkleEnd + TIMINGS.specialFlicker;
-        const tArrangeEnd = tFlickerEnd + TIMINGS.arrange;
+        const tBurstEnd = tFlickerEnd + TIMINGS.burst;
+        const tArrangeEnd = tBurstEnd + TIMINGS.arrange;
 
         // Background fade (0.3s) after 0.5s black
         const bgOpacity = prefersReduced ? 1 : clamp((t - tBlackEnd) / TIMINGS.bgFade, 0, 1);
@@ -496,12 +506,15 @@
         // Special stars
         if (!specialChosen && (prefersReduced || t >= tTwinkleEnd)) chooseSpecialStars();
 
-        // Golden flicker over 0.6s
+        // Golden flicker over 1050ms
         const flickerMix = prefersReduced ? 1 : clamp((t - tTwinkleEnd) / TIMINGS.specialFlicker, 0, 1);
         const flickerEase = easeOutCubic(flickerMix);
 
-        // Arrange/expand over 1.6s
-        const arrangeMix = prefersReduced ? 1 : clamp((t - tFlickerEnd) / TIMINGS.arrange, 0, 1);
+        // Burst over 400ms
+        const burstMix = prefersReduced ? 1 : clamp((t - tFlickerEnd) / TIMINGS.burst, 0, 1);
+
+        // Arrange/expand over 2800ms (starts AFTER burst completes)
+        const arrangeMix = prefersReduced ? 1 : clamp((t - tBurstEnd) / TIMINGS.arrange, 0, 1);
         const arrangeEase = easeInOutCubic(arrangeMix);
 
         // UI appears once arrangement begins (subtle)
@@ -542,16 +555,15 @@
           drawStarSprite(x, y, r, a, s.spriteIdx);
         }
 
-        // Draw particle bursts during flicker phase only (when stars are still small)
-        if (specialChosen && t >= tTwinkleEnd && t < tFlickerEnd) {
+        // Draw particle bursts during burst phase (after flicker, before arrange)
+        if (specialChosen && t >= tFlickerEnd && t < tBurstEnd) {
           const specialPositions = [];
           for (let i=0; i<specialIdx.length; i++){
             const p = specialPos.get(specialIdx[i]);
             if (p) specialPositions.push(p);
           }
-          // Particle intensity ramps up then down during flicker phase
-          // Use a curve that maintains visibility throughout (min 0.3, max 1.0)
-          const burstIntensity = 0.3 + Math.sin(flickerMix * Math.PI) * 0.7;
+          // Burst intensity: very bright and obvious
+          const burstIntensity = 1.0;
           updateAndDrawParticles(specialPositions, burstIntensity);
         }
 
