@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Roster Selection - The Final Descent</title>
+  <style>
+    :root{
+      --bg:#000;
+      --ink:rgba(255,255,255,.92);
+      --muted:rgba(255,255,255,.62);
+      --card:rgba(10,10,16,.34);
+      --stroke:rgba(255,255,255,.10);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--ink);
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+      overflow:hidden;
+    }
+    .no-select{user-select:none}
+
+    /* App container */
+    #app{position:relative; height:100%; width:100%}
+
+    /* Roster page */
+    #roster{
+      position:absolute; inset:0;
+      background:#000;
+      overflow:hidden;
+    }
+
+    #space{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      display:block;
+    }
+
+    .roster-ui{
+      position:absolute; left:24px; top:24px;
+      border:1px solid var(--stroke);
+      background:rgba(0,0,0,.26);
+      backdrop-filter: blur(10px);
+      border-radius:18px;
+      padding:14px 16px;
+      min-width: 240px;
+      box-shadow: 0 18px 70px rgba(0,0,0,.55);
+      opacity:0;
+      transform: translateY(-6px);
+      transition: opacity .6s ease, transform .6s ease;
+      pointer-events:none;
+    }
+    .roster-ui.show{opacity:1; transform: translateY(0)}
+    .roster-title{font-weight:700; letter-spacing:.08em; text-transform:uppercase; font-size:13px}
+    .roster-sub{color:var(--muted); margin-top:6px; font-size:13px}
+
+    .blackout{
+      position:absolute; inset:0;
+      background:#000;
+      opacity:1;
+      pointer-events:none;
+    }
+
+    /* Subtle vignette */
+    .vignette{
+      position:absolute; inset:-2px;
+      background:radial-gradient(1200px 900px at 50% 55%, rgba(0,0,0,0) 55%, rgba(0,0,0,.62) 100%);
+      pointer-events:none;
+    }
+
+    /* Reduce-motion: skip long animations */
+    @media (prefers-reduced-motion: reduce){
+      .roster-ui{transition:none}
+    }
+  </style>
+</head>
+<body class="no-select">
+  <div id="app">
+    <!-- Roster Selection page -->
+    <section id="roster">
+      <canvas id="space" aria-hidden="true"></canvas>
+      <div id="rosterUi" class="roster-ui">
+        <div class="roster-title">Roster Selection</div>
+        <div class="roster-sub">Six sparks emerge from the starfield.</div>
+      </div>
+      <div class="vignette"></div>
+      <div id="blackout" class="blackout"></div>
+    </section>
+  </div>
+
+  <script>
+    (function(){
+      "use strict";
+
+      // ---- Starfield slice ----
+      const canvas = document.getElementById('space');
+      const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+      const blackout = document.getElementById('blackout');
+      const rosterUi = document.getElementById('rosterUi');
+      const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      /** @type {{ nx:number, ny:number, r:number, a:number, twAmp:number, twSpd:number, twPh:number, seed:number, spriteIdx:number, special?:boolean, sx0?:number, sy0?:number }} */
+      let stars = [];
+      let sprites = [];
+      let rafId = null;
+      let startTime = 0;
+      let specialIdx = [];
+      let specialChosen = false;
+      let W = 0, H = 0, DPR = 1;
+
+      const TIMINGS = {
+        blackHold: 500,
+        bgFade: 300,
+        twinkleRamp: 1000,
+        specialFlicker: 600,
+        arrange: 1600,
+      };
+
+      function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+      function lerp(a,b,t){ return a + (b-a)*t; }
+      function easeInOutCubic(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2; }
+      function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+
+      function mulberry32(seed){
+        let a = seed >>> 0;
+        return function(){
+          a |= 0;
+          a = (a + 0x6D2B79F5) | 0;
+          let t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function resize(){
+        const rect = canvas.getBoundingClientRect();
+        DPR = clamp(window.devicePixelRatio || 1, 1, 2);
+        W = Math.max(1, Math.floor(rect.width));
+        H = Math.max(1, Math.floor(rect.height));
+        canvas.width = Math.floor(W * DPR);
+        canvas.height = Math.floor(H * DPR);
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      }
+
+      function makeStarSprite(baseR){
+        const pad = Math.ceil(baseR * 6);
+        const size = pad * 2;
+        const c = document.createElement('canvas');
+        c.width = size;
+        c.height = size;
+        const g = c.getContext('2d');
+        const cx = pad, cy = pad;
+
+        // Outer halo
+        let grd = g.createRadialGradient(cx, cy, 0, cx, cy, pad);
+        grd.addColorStop(0.00, 'rgba(255,255,255,0.80)');
+        grd.addColorStop(0.12, 'rgba(255,255,255,0.55)');
+        grd.addColorStop(0.32, 'rgba(200,220,255,0.20)');
+        grd.addColorStop(1.00, 'rgba(0,0,0,0.0)');
+        g.fillStyle = grd;
+        g.fillRect(0,0,size,size);
+
+        // Hot core
+        grd = g.createRadialGradient(cx, cy, 0, cx, cy, baseR * 1.6);
+        grd.addColorStop(0.00, 'rgba(255,255,255,1.00)');
+        grd.addColorStop(0.50, 'rgba(255,255,255,0.75)');
+        grd.addColorStop(1.00, 'rgba(255,255,255,0.00)');
+        g.fillStyle = grd;
+        g.beginPath();
+        g.arc(cx, cy, baseR * 1.6, 0, Math.PI*2);
+        g.fill();
+
+        return { canvas:c, baseR, size };
+      }
+
+      function buildSprites(){
+        sprites = [
+          makeStarSprite(0.55),
+          makeStarSprite(0.85),
+          makeStarSprite(1.20),
+          makeStarSprite(1.70),
+        ];
+      }
+
+      function pickSpriteIdx(r){
+        if (r < 0.7) return 0;
+        if (r < 1.0) return 1;
+        if (r < 1.4) return 2;
+        return 3;
+      }
+
+      function buildStars(count){
+        stars = new Array(count);
+        for (let i=0; i<count; i++){
+          // Slightly biased distribution: more stars toward top (space) but still full coverage.
+          const nx = Math.random();
+          const ny = Math.pow(Math.random(), 0.78); // bias upward a bit
+
+          // Size distribution: mostly small, a few larger.
+          const u = Math.random();
+          const r = (u < 0.86) ? lerp(0.35, 0.95, Math.random()) :
+                    (u < 0.98) ? lerp(0.95, 1.55, Math.random()) :
+                                 lerp(1.55, 2.25, Math.random());
+
+          // Brightness distribution.
+          const a = clamp(lerp(0.10, 0.95, Math.pow(Math.random(), 0.58)), 0.06, 0.98);
+
+          // Twinkle characteristics.
+          const twAmp = lerp(0.08, 0.38, Math.random());
+          const twSpd = lerp(0.35, 1.85, Math.random());
+          const twPh = Math.random() * Math.PI * 2;
+          const seed = (Math.random() * 1e9) | 0;
+          const spriteIdx = pickSpriteIdx(r);
+
+          stars[i] = { nx, ny, r, a, twAmp, twSpd, twPh, seed, spriteIdx };
+        }
+      }
+
+      function chooseSpecialStars(){
+        if (specialChosen) return;
+        specialChosen = true;
+
+        const picks = new Set();
+        while (picks.size < 6) picks.add((Math.random() * stars.length) | 0);
+        specialIdx = Array.from(picks);
+
+        for (let k=0; k<specialIdx.length; k++){
+          const s = stars[specialIdx[k]];
+          s.special = true;
+          s.sx0 = s.nx;
+          s.sy0 = s.ny;
+        }
+      }
+
+      function computeTargets(){
+        // Two rows of three, centered.
+        // Use normalized positions so resize stays stable.
+        const col = [0.30, 0.50, 0.70];
+        const row = [0.42, 0.63];
+        const targets = [];
+        for (let r=0; r<2; r++){
+          for (let c=0; c<3; c++){
+            targets.push({ nx: col[c], ny: row[r] });
+          }
+        }
+        return targets;
+      }
+
+      function drawBackground(bgOpacity){
+        // Base black
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0,0,W,H);
+
+        if (bgOpacity <= 0) return;
+
+        // Spherical purple glow from bottom
+        const gx = W * 0.5;
+        const gy = H * 1.06;
+        const radius = Math.max(W, H) * 1.05;
+        const grd = ctx.createRadialGradient(gx, gy, 0, gx, gy, radius);
+        grd.addColorStop(0.00, `rgba(170, 90, 255, ${0.55 * bgOpacity})`);
+        grd.addColorStop(0.18, `rgba(120, 40, 235, ${0.30 * bgOpacity})`);
+        grd.addColorStop(0.42, `rgba(60, 10, 130, ${0.16 * bgOpacity})`);
+        grd.addColorStop(0.72, `rgba(10, 8, 20, ${0.08 * bgOpacity})`);
+        grd.addColorStop(1.00, `rgba(0, 0, 0, 0)`);
+        ctx.fillStyle = grd;
+        ctx.fillRect(0,0,W,H);
+
+        // Soft top falloff to keep upper space black
+        const v = ctx.createLinearGradient(0,0,0,H);
+        v.addColorStop(0.0, `rgba(0,0,0,${0.75 * (1-bgOpacity)})`);
+        v.addColorStop(0.35, 'rgba(0,0,0,0)');
+        v.addColorStop(1.0, `rgba(0,0,0,0)`);
+        ctx.fillStyle = v;
+        ctx.fillRect(0,0,W,H);
+      }
+
+      function drawStarSprite(x, y, r, alpha, spriteIdx){
+        const spr = sprites[spriteIdx];
+        const scale = r / spr.baseR;
+        const size = spr.size * scale;
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(spr.canvas, x - size/2, y - size/2, size, size);
+      }
+
+      function drawSpecialStar(x, y, r, alpha, energy, tNow, seed){
+        // Core
+        ctx.save();
+        ctx.globalAlpha = 1;
+
+        // Outer golden halo
+        ctx.globalCompositeOperation = 'lighter';
+        const haloR = r * lerp(1.7, 2.15, energy);
+        let grd = ctx.createRadialGradient(x, y, 0, x, y, haloR);
+        grd.addColorStop(0.00, `rgba(255, 230, 170, ${0.60 * energy})`);
+        grd.addColorStop(0.12, `rgba(255, 205, 110, ${0.48 * energy})`);
+        grd.addColorStop(0.35, `rgba(255, 165, 40, ${0.22 * energy})`);
+        grd.addColorStop(1.00, `rgba(0, 0, 0, 0)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(x, y, haloR, 0, Math.PI*2);
+        ctx.fill();
+
+        // Warm bloom
+        grd = ctx.createRadialGradient(x, y, 0, x, y, r * 1.35);
+        grd.addColorStop(0.00, `rgba(255,255,255,${0.90 * alpha})`);
+        grd.addColorStop(0.20, `rgba(255,240,200,${0.78 * alpha})`);
+        grd.addColorStop(0.55, `rgba(255,190,80,${0.34 * alpha})`);
+        grd.addColorStop(1.00, `rgba(0,0,0,0)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.35, 0, Math.PI*2);
+        ctx.fill();
+
+        // Hot core (sharp)
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = clamp(alpha + 0.25, 0, 1);
+        ctx.fillStyle = 'rgba(255,255,255,1)';
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(1.2, r * 0.28), 0, Math.PI*2);
+        ctx.fill();
+
+        // Energy sparks (stable per ~33ms tick to avoid pure noise)
+        const tick = Math.floor(tNow / 33);
+        const rand = mulberry32((seed ^ (tick * 2654435761)) >>> 0);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineWidth = Math.max(1, r * 0.03);
+        for (let i=0; i<Math.floor(8 + 10*energy); i++){
+          const ang = rand() * Math.PI * 2;
+          const len = r * lerp(0.32, 0.78, rand()) * (0.6 + 0.7*energy);
+          const wob = (rand() - 0.5) * r * 0.08;
+          const x1 = x + Math.cos(ang) * (r * 0.55 + wob);
+          const y1 = y + Math.sin(ang) * (r * 0.55 + wob);
+          const x2 = x + Math.cos(ang) * (r * 0.55 + len);
+          const y2 = y + Math.sin(ang) * (r * 0.55 + len);
+          const a = 0.08 + 0.26 * energy * rand();
+          ctx.strokeStyle = `rgba(255, 200, 90, ${a})`;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+
+        // Subtle ring shimmer
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 0.22 * energy;
+        ctx.strokeStyle = 'rgba(255, 210, 120, 1)';
+        ctx.lineWidth = Math.max(1, r * 0.02);
+        const ringR = r * lerp(0.95, 1.25, energy);
+        ctx.beginPath();
+        ctx.arc(x, y, ringR, 0, Math.PI*2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      function frame(now){
+        const t = now - startTime;
+
+        // Timeline boundaries
+        const tBlackEnd = TIMINGS.blackHold;
+        const tBgEnd = tBlackEnd + TIMINGS.bgFade;
+        const tTwinkleEnd = tBgEnd + TIMINGS.twinkleRamp;
+        const tFlickerEnd = tTwinkleEnd + TIMINGS.specialFlicker;
+        const tArrangeEnd = tFlickerEnd + TIMINGS.arrange;
+
+        // Background fade (0.3s) after 0.5s black
+        const bgOpacity = prefersReduced ? 1 : clamp((t - tBlackEnd) / TIMINGS.bgFade, 0, 1);
+
+        // Twinkle ramps in over 1s
+        const twinkleMix = prefersReduced ? 1 : clamp((t - tBgEnd) / TIMINGS.twinkleRamp, 0, 1);
+
+        // Special stars
+        if (!specialChosen && (prefersReduced || t >= tTwinkleEnd)) chooseSpecialStars();
+
+        // Golden flicker over 0.6s
+        const flickerMix = prefersReduced ? 1 : clamp((t - tTwinkleEnd) / TIMINGS.specialFlicker, 0, 1);
+        const flickerEase = easeOutCubic(flickerMix);
+
+        // Arrange/expand over 1.6s
+        const arrangeMix = prefersReduced ? 1 : clamp((t - tFlickerEnd) / TIMINGS.arrange, 0, 1);
+        const arrangeEase = easeInOutCubic(arrangeMix);
+
+        // UI appears once arrangement begins (subtle)
+        if (arrangeMix > 0.12) rosterUi.classList.add('show');
+        else rosterUi.classList.remove('show');
+
+        // Draw
+        drawBackground(bgOpacity);
+
+        const minDim = Math.min(W, H);
+        const specialTargetR = minDim * 0.04; // radius ~= 4% -> diameter ~= 8%
+        const targets = computeTargets();
+
+        // Precompute special positions
+        const specialPos = new Map();
+        for (let i=0; i<specialIdx.length; i++){
+          const s = stars[specialIdx[i]];
+          const ox = s.nx * W;
+          const oy = s.ny * H;
+          const tx = targets[i].nx * W;
+          const ty = targets[i].ny * H;
+          const x = lerp(ox, tx, arrangeEase);
+          const y = lerp(oy, ty, arrangeEase);
+          const r = lerp(s.r, specialTargetR, arrangeEase);
+          specialPos.set(specialIdx[i], { x, y, r, ox, oy, tx, ty });
+        }
+
+        // Draw far stars first
+        ctx.globalCompositeOperation = 'source-over';
+        for (let i=0; i<stars.length; i++){
+          const s = stars[i];
+          if (s.special) continue;
+          const x = s.nx * W;
+          const y = s.ny * H;
+          const tw = Math.sin(s.twPh + (now * 0.001) * s.twSpd * 2.0);
+          const a = clamp(s.a * (1 + twinkleMix * s.twAmp * tw), 0.02, 1);
+          const r = s.r * (1 + twinkleMix * 0.08 * tw);
+          drawStarSprite(x, y, r, a, s.spriteIdx);
+        }
+
+        // Draw special stars on top
+        for (let i=0; i<specialIdx.length; i++){
+          const idx = specialIdx[i];
+          const s = stars[idx];
+          const p = specialPos.get(idx);
+          if (!p) continue;
+
+          // Base twinkle still applies, but subdued as it becomes a focal point.
+          const tw = Math.sin(s.twPh + (now * 0.001) * s.twSpd * 1.6);
+          const baseA = clamp(s.a * (1 + twinkleMix * 0.22 * tw), 0.08, 1);
+
+          // Energy combines flicker stage and arrange stage.
+          const energyOsc = 0.55 + 0.45 * Math.sin((now * 0.001) * (9.5 + (s.seed % 7)) + s.twPh);
+          const energy = clamp((flickerEase * 0.95 + arrangeEase * 0.75) * energyOsc, 0, 1);
+
+          // Slight breathing while expanding
+          const breathe = 1 + 0.03 * energy * Math.sin((now * 0.001) * 4.0 + s.twPh);
+          const rr = p.r * breathe;
+
+          // Under-glow
+          drawSpecialStar(p.x, p.y, rr, baseA, energy, now, s.seed);
+
+          // Add a sharp white core sprite for detail
+          ctx.globalCompositeOperation = 'lighter';
+          drawStarSprite(p.x, p.y, Math.max(1.6, rr * 0.22), clamp(0.55 + 0.45*energy, 0, 1), 2);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+
+        rafId = requestAnimationFrame(frame);
+      }
+
+      function startRosterSlice(){
+        if (rafId) cancelAnimationFrame(rafId);
+
+        resize();
+        buildSprites();
+        buildStars(3000);
+        specialIdx = [];
+        specialChosen = false;
+        rosterUi.classList.remove('show');
+
+        // DOM: hard black for 0.5s
+        blackout.style.transition = 'none';
+        blackout.style.opacity = '1';
+        blackout.style.display = 'block';
+
+        // Ensure black screen is visible immediately
+        blackout.getBoundingClientRect();
+
+        // Fade blackout out just after hold, while background fades in (canvas handles bg fade)
+        if (prefersReduced){
+          blackout.style.opacity = '0';
+        } else {
+          setTimeout(() => {
+            blackout.style.transition = 'opacity 120ms linear';
+            blackout.style.opacity = '0';
+          }, TIMINGS.blackHold);
+        }
+
+        // Clean up blackout display after fade
+        setTimeout(() => {
+          blackout.style.display = 'none';
+        }, prefersReduced ? 10 : (TIMINGS.blackHold + 160));
+
+        startTime = performance.now();
+        rafId = requestAnimationFrame(frame);
+      }
+
+      // Keep crisp on resize
+      window.addEventListener('resize', () => {
+        resize();
+      });
+
+      // Allow quick restart for iteration (press 'R' key)
+      window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'r') {
+          startRosterSlice();
+        }
+      });
+
+      // Auto-start on page load
+      startRosterSlice();
+    })();
+  </script>
+</body>
+</html>
