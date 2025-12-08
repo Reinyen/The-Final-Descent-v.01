@@ -206,10 +206,8 @@ class IntroPageApp {
     this.isTransitioning = true;
     this.transition.start(() => {
       // This callback is called when transition completes
-      console.log('[IntroPage] Transition complete, navigating to Roster Selection');
-
-      // Navigate to Roster Selection UI
-      window.location.href = 'roster/index.html';
+      console.log('[IntroPage] Transition complete');
+      // Roster selection removed - intro page only
     });
   }
 
