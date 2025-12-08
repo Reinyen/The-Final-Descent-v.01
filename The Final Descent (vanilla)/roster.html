@@ -206,9 +206,9 @@
       };
 
       function initParticleSystems(){
-        // Calculate burst radius as 4% of screen (matching the target star size)
+        // Calculate burst radius as 8% of screen (2x the target star size)
         const minDim = Math.min(W, H);
-        PARTICLE_OPTS.radius = minDim * 0.04;
+        PARTICLE_OPTS.radius = minDim * 0.08;
 
         particleSystems = [];
         for(let i = 0; i < 6; i++){
