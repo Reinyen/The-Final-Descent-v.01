@@ -313,22 +313,7 @@ export function createCinematicController(uniforms, renderer, store) {
 
     isPlaying = false;
 
-    // Finalize uniforms
-    uniforms.uPhase.value = 1.0;
-    uniforms.uVignetteStrength.value = 0.4; // Settle to ambient vignette
-    uniforms.uDustStrength.value = 0.2; // Enable ambient dust
-    uniforms.uDustDriftSpeed.value = 0.1;
-
-    // All Living nodes fully alive
-    for (let i = 3; i < 6; i++) {
-      uniforms.uNodeAlive.value[i] = 1.0;
-    }
-
-    // All Fallen nodes dimmed
-    for (let i = 0; i < 3; i++) {
-      uniforms.uNodeAlive.value[i] = 0.3;
-      uniforms.uNodeFallen.value[i] = 1.0;
-    }
+    // Background rendering will be destroyed by rosterMain, no need to set uniforms
 
     // Unlock UI via store
     if (store) {
