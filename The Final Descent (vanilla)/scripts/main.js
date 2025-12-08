@@ -206,8 +206,9 @@ class IntroPageApp {
     this.isTransitioning = true;
     this.transition.start(() => {
       // This callback is called when transition completes
-      console.log('[IntroPage] Transition complete');
-      // Roster selection removed - intro page only
+      console.log('[IntroPage] Transition complete - navigating to roster selection');
+      // Navigate to roster selection page
+      window.location.href = 'roster.html';
     });
   }
 
