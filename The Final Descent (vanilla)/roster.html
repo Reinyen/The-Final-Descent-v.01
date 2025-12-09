@@ -1036,7 +1036,9 @@
           s.special = true;
           s.sx0 = s.nx;
           s.sy0 = s.ny;
-          s.isFallen = k >= 3; // First 3 = Living, Last 3 = Fallen
+          // Don't mark as Fallen yet - all stars start identical
+          s.isFallen = false;
+          s.fallenIndex = k; // Store which ones will become Fallen later
         }
 
         initParticleSystems();
@@ -1192,6 +1194,16 @@
         const fallenMarkMix = prefersReduced ? 1 : clamp((t - tArrangeEnd) / TIMINGS.fallenMark, 0, 1);
         const fallenMarkEase = easeOutCubic(fallenMarkMix);
 
+        // Mark stars as Fallen during the fallenMark phase
+        if (specialChosen && fallenMarkMix > 0 && fallenMarkMix < 1) {
+          for (let k=0; k<specialIdx.length; k++){
+            const s = stars[specialIdx[k]];
+            if (s.fallenIndex >= 3 && !s.isFallen) {
+              s.isFallen = true; // Transition starts
+            }
+          }
+        }
+
         const positioningMix = prefersReduced ? 1 : clamp((t - tFallenMarkEnd) / TIMINGS.positioning, 0, 1);
         const positioningEase = easeInOutCubic(positioningMix);
 
@@ -1235,16 +1247,19 @@
         const specialPos = new Map();
         for (let i=0; i<specialIdx.length; i++){
           const s = stars[specialIdx[i]];
-          const target = targets[i];
+          // Determine which target based on fallenIndex
+          const targetIndex = s.fallenIndex;
+          const target = targets[targetIndex];
           const ox = s.nx * W;
           const oy = s.ny * H;
 
-          // Arrange phase: move to initial grid
+          // Arrange phase: move to initial grid (same row for all during arrange)
+          const initialTargetY = 0.42; // All start at the same row
           const arrangedX = lerp(ox, target.nx * W, arrangeEase);
-          const arrangedY = lerp(oy, target.ny * H, arrangeEase);
+          const arrangedY = lerp(oy, initialTargetY * H, arrangeEase);
 
-          // Positioning phase: Living stay, Fallen sink
-          const finalY = target.isFallen
+          // Positioning phase: Fallen sink to bottom row
+          const finalY = s.isFallen
             ? lerp(arrangedY, target.ny * H, positioningEase)
             : arrangedY;
 
