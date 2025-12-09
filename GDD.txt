@@ -1,2354 +1,503 @@
-THE FINAL DESCENT – GAME DESIGN DOCUMENT
+The Final Descent - Complete Game Design Document
+Version 1.0 - Production Ready
 
-Version: 1.0
-Part 1 of 2
+Executive Summary
+The Final Descent is a browser-based roguelike RPG where players command a three-person crew descending through a dying space station as it spirals into a black hole. Unlike traditional roguelikes focused on combat mastery, success means preserving knowledge and life—transmitting a final archive before reality unmakes itself.
+Drawing inspiration from FTL's crew management, Slay the Spire's deck-building mechanics, Into the Breach's transparent information design, and Inscryption's visual storytelling, this game creates tension through cascading system failures rather than difficulty spikes.
+The Echo system transforms unselected crew into hostile encounters, while the Combo Ability system rewards strategic crew preservation. Every run becomes a narrative of sacrifice and coordination as reality collapses.
 
-TABLE OF CONTENTS (PARTS 1 & 2)
+Core Game Loop
+The Macro Loop (Run Structure)
+1. Crew Selection Phase
+The game begins with all 6 crew members alive and available. The selection process:
 
-Vision & High-Level Overview
-1.1 Core Concept
-1.2 Themes & Emotional Tone
-1.3 Target Experience & Run Length
+Initial Draw: System randomly selects 3 crew members
+Reroll Options (Player chooses ONE):
 
-Core Game Structure
-2.1 Descent Loop (Macro)
-2.2 Combat Loop (Micro)
+Full Reroll (2 chances): Discard all 3, draw 3 new from all 6
+Single Swap (1 chance): Keep 2 crew, replace 1 with random draw from remaining 3
 
-Player Party & Progression
-3.1 The Eleventh – Roster Overview
-3.2 Core Attributes
-3.3 Level System & Level_Value Table
 
-Core Combat Systems
-4.1 Turn Order & Round Flow
-4.2 Shared Stamina (SP) – “Fading Nerve”
-4.3 Initiative & Speed
-4.4 Win/Loss Conditions
+The Echo Consequence: The 3 crew NOT selected become "Echoes"—dead versions that haunt the station
 
-Actions & Ability System
-5.1 Ability Types
-5.2 SP Costs & Role of Combos
-5.3 Always-Available Actions (Last Resort Suite)
-5.4 Random Action Pool – “Four Fates Draw”
+Living Crew: Your active party with full abilities
+Echo Crew: Hostile encounters, reality distortions, corrupted memories
 
-Resolution Rules & Formulas
-6.1 Damage & Healing – “Shared Blood”
-6.2 Multi-User Abilities (Duos & Trios)
-6.3 Random Chances (Status Application)
 
-Status Effects – “Tide of Decay”
-7.1 Status Effect Fields
-7.2 Stacking & Capacity Rules
-7.3 Tick Order & Resolution Priority
-7.4 Common Status Families
 
-Player Characters & Single-Character Abilities
-8.1 Dranick – Tank / Support
-8.2 Eline – Scout / Status Control
-8.3 Varro – Balanced / Hybrid
-8.4 Kestril – Tactical Support
-8.5 Lira – Healer / Agile Striker
-8.6 Grim – Berserker / Damage
+This creates narrative weight—you're not just choosing your party, you're choosing who dies.
+2. The Neural Network Map
+Each ring presents as a JavaScript-rendered neural network visualization:
 
-Duo Combos – Actions for Two
+Initial State: Entire network appears dim and inactive
+Starting Node: Pulses with light, energy travels along synaptic paths
+Path Revelation: Completing a node sends energy bursts to 2-3 connected nodes
+Progressive Illumination: Each completed path brightens permanently
+Hidden Connections: Some paths only reveal after specific conditions
+The Exit Node: Remains dark until 60% of ring is complete, then begins pulsing
 
-Trio Combos – Actions for Three
+Visual Design:
 
-Dungeon & Floor Structure
+Nodes glow with different colors based on type (combat=red, resource=green, etc.)
+Energy flows along paths like synaptic firing
+Completed nodes remain lit but dimmed
+Current position marked by bright pulsing ring
+Mouse-over shows node preview without spoiling exact contents
 
-Enemy Design & Scaling – “Pressure Curve”
+3. Descent Structure
 
-Final Encounter & End-Game Flow
+5 Rings total, each a larger neural network than the last
+Ring 1: 7 nodes, Ring 2: 9 nodes, Ring 3: 11 nodes, Ring 4: 13 nodes, Ring 5: Final arena
+Players must complete at least 60% of nodes before exit unlocks
+Some nodes become inaccessible once passed (one-way paths)
 
-Data & Implementation Conventions
+4. The Archive System
 
-Coder Cheat Sheet (Summary Reference)
+Collect Data Fragments (universal currency for scoring)
+Archive has 10 slots—choose what to preserve:
 
-1. VISION & HIGH-LEVEL OVERVIEW
-1.1 Core Concept
+Genome samples (2 slots each, 500 points)
+Black box recordings (1 slot each, 300 points)
+Crew memories (1 slot each, 200 points)
 
-The Final Descent is a single-player, party-based, turn-based roguelike focused on tension, sacrifice, and legacy.
 
-The player controls three members of a six-person expedition known as The Eleventh. The mission is to descend through a procedurally generated dungeon, survive long enough to reach its heart, and leave behind a magical record of their journey. The run always ends in retreat or death; the “victory” state is successfully preserving the party’s story, not killing a final boss.
+Can overwrite slots but lose previous content permanently
 
-There is no traditional final boss kill condition. Instead, the final encounter is unwinnable by design, and the goal is to endure until a scripted retreat can be executed.
 
-1.2 Themes & Emotional Tone
+The Micro Loop (Combat Resolution)
+Streamlined Turn-Based Combat
+Initiative System
 
-Duty over survival: Characters know they will not return; their duty is to gather knowledge and seal the threat.
+Simple speed values: Fast (3), Normal (2), Slow (1)
+Turn order = Character Speed + Ability Speed + Modifiers
+Always visible, no hidden information
+Player acts before enemies on ties
 
-Legacy against oblivion: Runs are judged by the message left behind and the story the player constructs.
+Shared Stamina System
 
-Pressure and anxiety: Systems (limited SP, dangerous enemies, unpredictable action pools) are tuned to keep the player under constant, but fair, stress.
+Party shares 8 stamina points
+Base regeneration: 4 points per round start
 
-The atmosphere is low fantasy with occult and temporal elements. Visual tone is muted, with sharp highlights during key actions and combos.
+Jonas in party: +1 extra regeneration
+Emergency Power active: +2 extra
+System Strain (Ring 4+): -1 regeneration
 
-1.3 Target Experience & Run Length
 
-For version 1.0:
+Abilities cost 0-3 stamina
+Free actions always available (0 stamina):
 
-A complete run consists of 4 dungeon floors.
+Basic Attack (character-specific damage)
+Guard (reduce incoming damage by 50%)
+Use Tool (consume item)
 
-Each floor has:
 
-One Start room.
 
-One Exit room.
+The Four-Fate Hand
 
-A connected graph of intermediate rooms (5–10 per floor).
-
-The party’s Level is always equal to the current floor number (1–4). Levels beyond 4 are reserved for future content.
-
-Each full run should feel compact but meaningful: the goal is to get players quickly to interesting decisions and emotional beats, rather than long grinds.
-
-2. CORE GAME STRUCTURE
-2.1 Descent Loop (Macro)
-
-The Descent Loop describes progression across floors.
-
-Party Selection
-
-At the start of a run, the game randomly selects 3 characters from the 6 members of The Eleventh.
-
-In 1.0, party selection is fully random; future versions may add drafting or rerolls.
-
-Enter Floor N
-
-A room graph for Floor N is generated with a guaranteed traversable path from Start room to Exit room.
-
-Floor number equals party Level.
-
-Explore Rooms
-
-From the Start room, the player chooses linked rooms to move into.
-
-The map is a node graph (not strictly grid-based), shown as connected nodes.
-
-Room Events
-Each room can be:
-
-Enemy – triggers a combat encounter.
-
-Narrative – dialogue, lore, or decision-making events.
-
-Resource – loot, healing, SP restoration, or special interactions.
-
-Trap – hazards dealing damage or inflicting status.
-
-Empty – safe rooms with no direct gameplay effect.
-
-Floor 4 may additionally contain a special Antechamber and Final Chamber.
-
-Resolve & Manage
-
-After each event, the player manages party resources:
-
-Hit Points (HP)
-
-Shared Stamina Points (SP)
-
-Status effects
-
-Consumables (items)
-
-Exit & Descent
-
-Upon clearing the Exit room on a floor, the party descends to the next floor.
-
-On entering a new floor, all living party members increase to the new Level value.
-
-Final Floor & Endgame
-
-Floor 4 leads eventually to the Final Chamber encounter.
-
-The run ends in failure (total party incapacitation) or success (triggered retreat and legacy sequence).
-
-2.2 Combat Loop (Micro)
-
-Inside an Enemy room, the game switches to turn-based combat.
-
-Combat Start
-
-Enemies are instantiated according to the room’s encounter definition.
-
-Party begins combat with 10 SP in the shared pool.
-
-All statuses on party and enemies are applied as carried in from exploration.
-
-Start of Round
-
-Status effects resolve according to the Tide of Decay rules.
-
-SP is generated using Fading Nerve (Section 4.2).
-
-A new 4-action random pool is drawn (Four Fates Draw).
-
-Player sees:
-
-Current SP
-
-The 4 random abilities
-
-Always-available options (Basic Strike, Guard, Use Item).
-
-Action Assignment Phase
-
-Player selects actions for each conscious party member:
-
-From the random pool (Standard/Special/Duo/Trio/Party actions).
-
-From always-available actions.
-
-Each selection consumes SP from the shared pool.
-
-Each character may be assigned at most one action per round.
-
-Duo and Trio actions consume the actions of all participants.
-
-Initiative Phase
-
-For every acting combatant, compute initiative as base SPD plus the selected ability’s speed modifier.
-
-All combatants with assigned actions (party and enemies) are sorted into an initiative order.
-
-Action Resolution Phase
-
-Units act in order from highest to lowest initiative.
-
-If a unit is incapacitated or otherwise unable to act when their turn arrives, their selected action is canceled for that round.
-
-End of Round
-
-Any unused SP carries over but is subject to Fading Nerve clamping.
-
-Check win/loss conditions.
-
-If battle continues, a new round begins at step 2.
-
-3. PLAYER PARTY & PROGRESSION
-3.1 The Eleventh – Roster Overview
-
-Six playable characters; three are in the active party each run.
-
-Name	Role	HP (base)	CON	SPD
-Dranick	Tank / Support	120	9	2
-Eline	Scout / Status Ctrl	70	8	6
-Varro	Balanced / Hybrid	90	8	4
-Kestril	Tactical Support	80	10	3
-Lira	Healer / Agile Striker	85	9	5
-Grim	Berserker / Damage	110	6	3
-
-HP: base health at Level 1 before scaling.
-
-CON: Conviction; contributes to damage and healing calculations.
-
-SPD: Speed; the base part of initiative.
-
-3.2 Core Attributes
-
-Every player character and enemy has the following core combat attributes:
-
-HP (Hit Points)
-
-Current health value.
-
-When HP reaches 0 or below, the unit is incapacitated (KO) and cannot act.
-
-CON (Conviction)
-
-Represents mental and spiritual resilience.
-
-Used in the Shared Blood formula to scale damage and healing.
-
-SPD (Speed)
-
-Determines how quickly units act within a round.
-
-Combined with ability-specific speed modifiers to calculate initiative.
-
-No other core numerical attributes (such as Strength or Intelligence) are required at version 1.0; everything is expressed via HP, CON, SPD, and statuses.
-
-3.3 Level System & Level_Value Table
-
-Party members’ Level is equal to the current floor number:
-
-Floor 1 → Level 1
-
-Floor 2 → Level 2
-
-Floor 3 → Level 3
-
-Floor 4 → Level 4
-
-Levels affect the Conviction term in damage and healing formulas.
-
-Level_Value is a per-level multiplier:
-
-Level	Level_Value
-1	0.5
-2	0.6
-3	0.7
-4	0.8
-
-For future expansion beyond Floor 4, Level_Value can continue to increase by 0.1 per level as needed.
-
-There is no separate experience system in 1.0: leveling is entirely tied to floor progression.
-
-4. CORE COMBAT SYSTEMS
-4.1 Turn Order & Round Flow
-
-Each combat round follows this exact sequence:
-
-Status Tick – all ongoing status effects apply their damage/healing and update durations.
-
-SP Gain – the party’s shared SP pool is increased (Section 4.2).
-
-Action Pool Draw – Four Fates Draw generates 4 random abilities.
-
-Action Assignment – player chooses actions for each party member, constrained by SP.
-
-Initiative Calculation – all acting units are ordered by SPD plus speed modifiers.
-
-Action Execution – units act in order; actions may be canceled if the acting unit is incapacitated first.
-
-Round End – leftover SP is clamped, win/loss conditions are checked.
-
-This round structure is consistent for all encounters, including the final unwinnable fight.
-
-4.2 Shared Stamina (SP) – “Fading Nerve”
-
-The party uses a shared SP pool for all actions.
-
-SP is an integer resource; fractional values are never used.
-
-Starting SP:
-
-At the start of every combat encounter, the party begins with 10 SP.
-
-SP Gain Each Round:
-
-At the start of each round (including Round 1), the party gains 6 SP.
-
-The SP pool can never exceed 18 SP at any time; any surplus is lost.
-
-End-of-Round Clamp (Fading Nerve):
-
-After all actions have resolved and before the next round begins, if the party has more than 12 SP remaining, their SP is reduced to 12 SP.
-
-This creates the following design behavior:
-
-The player can temporarily spike SP by playing conservatively, but cannot hoard indefinitely.
-
-To maximize efficiency, players are encouraged to spend boldly each round, rather than always saving for a single giant combo.
-
-4.3 Initiative & Speed
-
-Base Initiative:
-
-Each unit’s base initiative is their SPD value.
-
-Ability Speed Modifier:
-
-Each ability (Standard, Special, Duo, Trio, or Party Action) has a speed modifier, which can be positive (faster), zero, or negative (slower).
-
-Final Initiative per Round:
-
-When a unit is assigned an action, their initiative for that round is:
-
-Base SPD plus the ability’s speed modifier.
-
-Sorting Rules:
-
-Units with higher initiative number act before those with lower.
-
-If two units have the same initiative:
-
-Player characters act before enemies.
-
-If two player characters tie, their order can be consistent (for example, fixed roster order) or any stable rule.
-
-If two enemies tie, order can follow the order they were created or a stable sorting rule.
-
-If a unit does not receive an action that round (for example, due to insufficient SP or deliberate idling), they do not appear in the initiative list.
-
-4.4 Win/Loss Conditions
-
-Standard Encounters:
-
-Victory: All enemies in the encounter are incapacitated.
-
-Defeat: All party members are incapacitated (HP at 0 or below).
-
-Final Encounter Exception:
-
-The Final Chamber enemies are flagged as Unwinnable.
-
-Unwinnable enemies cannot be reduced below 1 HP.
-
-Victory is instead achieved by surviving until the Doom Threshold triggers and successfully executing the Retreat action (details in Section 13).
-
-5. ACTIONS & ABILITY SYSTEM
-5.1 Ability Types
-
-All player-facing abilities are classified into the following categories:
-
-Standard Abilities
-
-Core actions specific to each character.
-
-Cost 3 SP in most cases.
-
-Typically single-target attacks, defenses, or small buffs/debuffs.
-
-Special Abilities
-
-Stronger, signature abilities for each character.
-
-Cost 5 SP.
-
-Often involve powerful effects, more damage, or larger area of effect.
-
-Duo Combos
-
-Actions that require exactly two specific characters to participate.
-
-Use both participants’ actions for the round.
-
-High-impact, mid-to-high SP cost.
-
-Trio Combos
-
-Actions that require all three current party members.
-
-Use all party actions for the round.
-
-Very high impact and high SP cost; some are limited to once per combat.
-
-Party Actions
-
-General-purpose actions such as Use Item or Retreat.
-
-Some Party Actions are always available; others may appear in the random action pool.
-
-5.2 SP Costs & Role of Combos
-
-Typical SP costs by type:
-
-Standard: 3 SP
-
-Special: 5 SP
-
-Duo: usually 7 to 9 SP
-
-Trio: usually 11 to 16 SP
-
-Party Action: varies by action (3 SP for Use Item; 0 SP for special cases like Final Retreat once triggered).
-
-Combos are high-commitment, high-impact tools:
-
-They consume the actions of 2 or 3 characters in that round.
-
-They usually provide strong damage and/or strong buffs/debuffs.
-
-They are designed to be situationally powerful, not default choices every round.
-
-Single-character actions remain highly attractive because they:
-
-Are more flexible.
-
-Allow multiple characters to act in the same round.
-
-Often provide reliable control effects (taunt, marks, healing, regen, vulnerability, etc.).
-
-5.3 Always-Available Actions (Last Resort Suite)
-
-These actions are always visible and selectable during combat for each conscious character. They are not part of the random action pool.
-
-Basic Strike
-
-Cost: 2 SP
-
-User: Any conscious party member
-
-Target: Single enemy
-
-Effect:
-
-Deals a small, fixed amount of damage (for example, 5 damage), independent of CON and Level.
-
-Purpose:
-
-Provides a low-cost attack option when SP is low or the random pool is unfavorable.
-
-Guard
-
-Cost: 2 SP
-
-User: Any conscious party member
-
-Target: Self
-
-Effect:
-
-Reduces damage taken by that character by 40% until their next turn.
-
-Purpose:
-
-Allows defensive play even if defensive abilities do not appear in the random pool.
-
-Use Item
-
-Cost: 3 SP
-
-User: Any conscious party member
-
-Target: Depends on item selected
-
-Availability:
-
-Only available if the party has at least one usable combat item.
-
-Effect:
-
-Opens a sub-selection to choose an item.
-
-Items may heal, remove debuffs, deal damage, or apply status effects.
-
-Always-available actions ensure that the player never feels completely helpless, even with a poor random roll.
-
-5.4 Random Action Pool – “Four Fates Draw”
-
-Each round, the game offers the player 4 random abilities drawn from the party’s available actions.
-
-Source Pool for Random Draw:
-
-All Standard and Special abilities of the current three party members.
-
-All Duo combos available for the current party composition.
-
-All Trio combos available for the current party composition.
-
-Any Party Actions designated as pool-based (none by default in 1.0; this is reserved for future expansion).
-
-Role Tags:
-
-Each ability in the source pool has one or more role tags, such as:
-
-Offense
-
-Support
-
-Defense
-
-Control
-
-Utility
-
-These tags are used when constructing the pool for the round.
-
-Four Fates Draw Algorithm (Conceptual):
-
-Guarantee at least one Offense-tagged ability in the pool, if any exist.
-
-Guarantee at least one Support or Defense-tagged ability in the pool, if any exist.
-
-Fill remaining slots (until there are 4 total) with random abilities from the source pool, excluding those already chosen.
-
-No ability appears more than once in the 4-slot pool.
-
-The previous round’s pool does not affect the current one; the draw is entirely fresh each round.
-
-This results in a pool that is unpredictable but fair, always offering at least one offensive option and usually one stabilizing/support option, assuming such abilities are present in the party’s kits.
-
-6. RESOLUTION RULES & FORMULAS
-6.1 Damage & Healing – “Shared Blood”
-
-Unless otherwise specified, direct damage and direct healing follow a shared formula:
-
-Final damage or healing equals the ability’s Set Value plus a Conviction-based bonus.
-
-The Conviction-based bonus equals the acting unit’s Conviction multiplied by Level_Value, rounded up.
-
-In words:
-
-Final Value = Set Value + (Conviction × Level_Value, rounded up)
-
-For single-user abilities, the Conviction used is the acting character’s CON.
-
-6.2 Multi-User Abilities (Duos & Trios)
-
-For Duo and Trio combos, Conviction scaling uses the average Conviction of all participating characters:
-
-Take the Conviction (CON) values of all participating characters.
-
-Compute the average.
-
-Round this average up to the nearest whole number.
-
-Multiply this value by Level_Value for the current floor.
-
-Round that result up to get the Conviction-based bonus term.
-
-Final damage or healing for a combo then follows:
-
-Final Value = Set Value + (Average Conviction × Level_Value, rounded up)
-
-This ensures that combos benefit from both participants without exploding in power from adding multiple Conviction stats directly.
-
-6.3 Random Chances (Status Application)
-
-Many abilities apply status effects with a percentage chance (for example, 30% or 50%). Unless otherwise stated:
-
-Each status application chance is an independent check, evaluated once per target per ability use.
-
-If an ability hits multiple targets, each target rolls separately.
-
-Status effects that “trigger when hit” (such as Spell Parry’s reflection) are resolved at the time of the triggering event.
-
-There is no separate hit or miss system in v1.0; all attacks connect, and only status effects may be probabilistic.
-
-7. STATUS EFFECTS – “TIDE OF DECAY”
-7.1 Status Effect Fields
-
-Every status effect instance in the game is defined by:
-
-Status ID – a unique identifier used internally.
-
-Display Name – player-facing name (for example, Poison, Bleed, Gravemark).
-
-Type – one of:
-
-Damage over Time (DoT)
-
-Heal over Time (HoT)
-
-Buff
-
-Debuff
-
-Control (stun, paralysis, etc.)
-
-Family – a grouping key used for stacking rules. Examples:
-
-Poison
-
-Bleed
-
-Burn
-
-Regen
-
-DamageUp
-
-DamageDown
-
-SPDUp
-
-SPDDown
-
-MagicVuln
-
-CritUp
-
-DamageTakenDown
-
-EvasionUp
-
-Magnitude – the numeric strength of the effect.
-
-Duration – the number of rounds remaining.
-
-Status effects are attached to individual combatants.
-
-7.2 Stacking & Capacity Rules
-
-To keep behavior predictable and avoid runaway stacking:
-
-Each unit can have at most:
-
-Three active DoT effects at the same time.
-
-Three active HoT effects at the same time.
-
-There is no fixed limit on Buffs, Debuffs, or Control effects, but family rules apply (below).
-
-Same-Family Effects:
-
-If a new status of the same family is applied to a unit that already has an active status from that family:
-
-Compare magnitudes.
-
-Keep the higher magnitude of the two.
-
-Reset the duration to the new effect’s full duration.
-
-In other words, same-family statuses do not stack in strength; they refresh and overwrite based on which is stronger.
-
-Different-Family Effects:
-
-Status effects with different families can stack freely.
-
-Example: a unit can be affected by Poison, Bleed, and Burn simultaneously.
-
-7.3 Tick Order & Resolution Priority
-
-At the start of every combat round, before SP is gained, each unit resolves their status effects in the following order:
-
-All DoT effects apply their damage and reduce HP accordingly.
-
-All HoT effects apply their healing and increase HP accordingly (respecting maximum HP).
-
-Buff, Debuff, and Control effects apply any on-tick secondary behaviors if specified. Most only modify values passively and do not have a per-tick effect.
-
-Duration Reduction
-
-After all effects have processed, each status effect’s duration is reduced by 1.
-
-Cleanup
-
-Any status effect whose duration has reached zero is removed.
-
-This order guarantees that damage over time is applied before ongoing healing, and that a status effect always lasts for exactly the number of full rounds specified.
-
-7.4 Common Status Families
-
-The following are standard status families used across abilities:
-
-Poison (DoT): Deals periodic damage; thematic focus on toxins.
-
-Bleed (DoT): Deals periodic physical damage; often from slashes and punctures.
-
-Burn (DoT): Deals periodic fire or magical heat damage.
-
-Regen (HoT): Restores HP over multiple rounds.
-
-DamageUp (Debuff/Buff): Increases damage dealt or damage taken, depending on context.
-
-DamageDown (Debuff): Reduces damage dealt by the affected unit.
-
-DamageTakenDown (Buff): Reduces damage taken by the affected unit.
-
-SPDUp (Buff): Increases Speed.
-
-SPDDown (Debuff): Reduces Speed.
-
-MagicVuln (Debuff): Increases damage taken from magic.
-
-CritUp (Buff): Increases chance of critical hits (if crit mechanics are used).
-
-EvasionUp (Buff): Increases chance to avoid or reduce incoming damage, where such mechanics are implemented.
-
-Control (e.g., Stun, Paralysis): Prevents the unit from acting for some duration.
-
-Each named status effect in abilities is associated with one of these families, so the stacking rules are clear and consistent.
-
-8. PLAYER CHARACTERS & SINGLE-CHARACTER ABILITIES
-
-All abilities in this section use the Shared Blood formula unless explicitly noted.
-
-For each ability, the following values are defined:
-
-SP cost
-
-Target type
-
-Speed modifier
-
-Set Value
-
-Effects (including status applications and special rules)
-
-8.1 Dranick – Tank / Support
-
-Role:
-Frontline protector and damage sponge. Dranick draws enemy attacks, mitigates damage, and stabilizes the party with heavy strikes and conditional healing.
-
-Base Stats:
-HP 120, CON 9, SPD 2.
-
-Ability 1: Bonebreaker Mace
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Single enemy
-
-Speed Modifier: +2
-
-Set Value: 7
-
-Effects:
-
-Deals physical damage to the target using Dranick’s Conviction.
-
-Has a 50% chance to apply Shattered Guard to the target:
-
-Family: DamageDown
-
-Magnitude: Reduces damage dealt by 20%
-
-Duration: 2 rounds
-
-Ability 2: Final Vow
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Single enemy
-
-Speed Modifier: 0
-
-Set Value: 5
-
-Effects:
-
-Deals light damage to the target.
-
-Applies Taunt on Dranick for 2 rounds:
-
-Enemies preferentially target Dranick where target choice is ambiguous.
-
-Applies Bulwark on Dranick for 2 rounds:
-
-Family: DamageTakenDown
-
-Magnitude: Reduces damage taken by 30%
-
-Ability 3: Undying Judgment
-
-Type: Special
-
-SP Cost: 5
-
-Target: Single enemy
-
-Speed Modifier: -1
-
-Set Value: 13
-
-Effects:
-
-Deals heavy physical damage to the target.
-
-If Dranick is below 50% of his maximum HP after the attack, he is healed for 40% of the damage dealt by this ability.
-
-If the ability incapacitates the target, all allies gain Guarded Spirits for 1 round:
-
-Family: DamageTakenDown
-
-Magnitude: Reduces damage taken by 15%
-
-8.2 Eline – Scout / Status Control
-
-Role:
-Fast skirmisher who applies damage over time and manipulates enemy tempo. Excels at exploiting wounded targets.
-
-Base Stats:
-HP 70, CON 8, SPD 6.
-
-Ability 1: Twin Thorns
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Single enemy
-
-Speed Modifier: +4
-
-Set Value: 6
-
-Effects:
-
-Deals physical damage to the target.
-
-Applies Bleed to the target:
-
-Type: DoT
-
-Family: Bleed
-
-Magnitude: 4 damage per round
-
-Duration: 3 rounds
-
-Ability 2: Burrow Buddy
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Self
-
-Speed Modifier: +5
-
-Set Value: 0
-
-Effects:
-
-Applies Evasion on Eline for 1 round:
-
-Family: EvasionUp
-
-Magnitude: Increases Eline’s chance to avoid or reduce damage by 30% (implementation-dependent).
-
-Applies Burrowed Momentum on Eline for 2 rounds:
-
-Family: SPDUp
-
-Magnitude: Increases Eline’s Speed by 2.
-
-The next Twin Thorns used within 2 rounds gains an additional 2 Set Value, increasing its damage.
-
-Ability 3: Marsh Ambush
-
-Type: Special
-
-SP Cost: 5
-
-Target: Single enemy
-
-Speed Modifier: +1
-
-Set Value: 11
-
-Effects:
-
-Deals physical damage to the target.
-
-If the target has any active DoT effect (such as Poison, Bleed, or Burn), this ability gains an additional 4 Set Value before calculating damage.
-
-Has a 30% chance to apply Dazed:
-
-Family: SPDDown
-
-Magnitude: Reduces Speed by 2
-
-Duration: 2 rounds
-
-8.3 Varro – Balanced / Hybrid
-
-Role:
-Versatile arcane warrior. Can deal splash damage, reflect attacks, and mark enemies to amplify damage.
-
-Base Stats:
-HP 90, CON 8, SPD 4.
-
-Ability 1: Arc Lash
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Single enemy (with splash)
-
-Speed Modifier: +3
-
-Set Value: 7
-
-Effects:
-
-Deals magic damage to the primary target.
-
-Deals 50% of the final damage to a second random enemy in the same group, if one exists.
-
-Ability 2: Spell Parry
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Self
-
-Speed Modifier: +2
-
-Set Value: 0
-
-Effects:
-
-Applies Arcane Guard to Varro for 1 round or until he is hit:
-
-Family: DamageTakenDown
-
-Magnitude: Reduces damage taken by 40%.
-
-If Varro is hit while Arcane Guard is active, he reflects 50% of the reduced damage back to the attacker as magic damage, after which Arcane Guard ends.
-
-Ability 3: Gravemark Seal
-
-Type: Special
-
-SP Cost: 5
-
-Target: Single enemy
-
-Speed Modifier: -1
-
-Set Value: 10
-
-Effects:
-
-Deals magic damage to the target.
-
-Applies Gravemark:
-
-Family: DamageUp
-
-Magnitude: Increases all damage the target takes by 25%
-
-Duration: 2 rounds
-
-8.4 Kestril – Tactical Support
-
-Role:
-Controls initiative and tempo, manipulates future damage, and stabilizes the party with cleanses.
-
-Base Stats:
-HP 80, CON 10, SPD 3.
-
-Ability 1: Future Flare
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Single enemy
-
-Speed Modifier: +2
-
-Set Value: 5
-
-Effects:
-
-Deals magic damage to the target.
-
-Applies Future Sight mark on the target for 2 rounds:
-
-The next hit against this target within 2 rounds gains an additional 4 Set Value.
-
-Ability 2: Foresight Step
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Self
-
-Speed Modifier: +6
-
-Set Value: 0
-
-Effects:
-
-Applies Speed Insight:
-
-Family: SPDUp
-
-Magnitude: +3 Speed
-
-Duration: 2 rounds
-
-Applies Anticipation:
-
-Family: EvasionUp
-
-Magnitude: +20% improved evasion
-
-Duration: 1 round
-
-Ability 3: Rewind Pulse
-
-Type: Special
-
-SP Cost: 5
-
-Target: Entire party
-
-Speed Modifier: 0
-
-Set Value: 8 (heal)
-
-Effects:
-
-Heals all allies using the Shared Blood formula.
-
-Removes one random debuff from each ally (for example, Poison, Bleed, SPDDown, DamageDown).
-
-8.5 Lira – Healer / Agile Striker
-
-Role:
-Surgical striker and primary healer. Applies targeted vulnerabilities and strong single-target heals.
-
-Base Stats:
-HP 85, CON 9, SPD 5.
-
-Ability 1: Pressure Point Strike
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Single enemy
-
-Speed Modifier: +5
-
-Set Value: 7
-
-Effects:
-
-Deals physical damage to the target.
-
-Applies Exposed:
-
-Family: DamageUp
-
-Magnitude: Increases damage taken from single-target abilities by 15%
-
-Duration: 2 rounds
-
-Ability 2: Breath
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Single ally
-
-Speed Modifier: +3
-
-Set Value: 7 (heal)
-
-Effects:
-
-Heals the target.
-
-If the target is below 50% of maximum HP, also applies Gentle Regen:
-
-Type: HoT
-
-Family: Regen
-
-Magnitude: 4 HP per round
-
-Duration: 2 rounds
-
-Ability 3: Red Thread
-
-Type: Special
-
-SP Cost: 5
-
-Target: Single ally
-
-Speed Modifier: +1
-
-Set Value: 10 (heal)
-
-Effects:
-
-Heals the target.
-
-Applies Threadbind to the target for 2 rounds:
-
-30% of the damage they take is redirected to Lira instead.
-
-Applies Ward to Lira for 2 rounds:
-
-Family: DamageTakenDown
-
-Magnitude: reduces damage taken by 20%.
-
-8.6 Grim – Berserker / Damage
-
-Role:
-High-risk, high-reward damage dealer. Sacrifices his own HP to amplify destructive output and pressure enemies.
-
-Base Stats:
-HP 110, CON 6, SPD 3.
-
-Ability 1: Soilcrack Fist
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Single enemy
-
-Speed Modifier: +1
-
-Set Value: 9
-
-Effects:
-
-Deals heavy physical damage to the target.
-
-Grim loses HP equal to 15% of the damage dealt by this ability.
-
-Ability 2: Fury Guard
-
-Type: Standard
-
-SP Cost: 3
-
-Target: Self
-
-Speed Modifier: -1
-
-Set Value: 0
-
-Effects:
-
-Applies Rage Armor for 1 round:
-
-Family: DamageTakenDown
-
-Magnitude: reduces damage taken by 30%.
-
-Applies Blood Fury for 2 rounds:
-
-Family: DamageUp
-
-Magnitude: increases damage dealt by 20%.
-
-Grim loses 5% of his maximum HP when the ability is used.
-
-Ability 3: Relic Howl
-
-Type: Special
-
-SP Cost: 5
-
-Target: All enemies
-
-Speed Modifier: -2
-
-Set Value: 10 (damage to each enemy)
-
-Effects:
-
-Deals magic damage to all enemies.
-
-Applies Terror:
-
-Family: SPDDown
-
-Magnitude: reduces Speed by 1
-
-Duration: 2 rounds
-
-END OF PART 1
-(Part 2 continues with Duo & Trio Combos, Dungeon Structure, Enemy Scaling, Final Encounter, Data Conventions, and Coder Cheat Sheet.)
-
-THE FINAL DESCENT – GAME DESIGN DOCUMENT
-
-Version: 1.0
-Part 2 of 2
-
-9. DUO COMBOS – ACTIONS FOR TWO
-
-All Duo abilities:
-
-Require the two named characters to be conscious and available.
-
-Consume SP once and use both participants’ actions for that round.
-
-Use the Shared Blood formula with the average Conviction of the two participants.
-
-Set Values below are base values before Conviction scaling.
-
-9.1 Dranick Duos
-
-Grave in Bloom – Dranick + Eline
-
-SP Cost: 8
-
-Target: All enemies
-
-Set Value: 18
-
-Effects:
-
-Deals physical damage to all enemies.
-
-Applies Rotting Ground to all enemies:
-
-Type: DoT
-
-Family: Poison
-
-Magnitude: 3 damage per round
-
-Duration: 2 rounds
-
-Arcane Bastion – Dranick + Varro
-
-SP Cost: 7
-
-Target: Party
-
-Set Value: 9 (heal)
-
-Effects:
-
-Heals all allies.
-
-Applies Arcane Shell to all allies for 1 round:
-
-Family: DamageTakenDown
-
-Magnitude: reduces damage taken by 20%.
-
-Temporal Bulwark – Dranick + Kestril
-
-SP Cost: 7
-
-Target: Party
-
-Set Value: 0
-
-Effects:
-
-Applies Time Shield for 1 round:
-
-Family: DamageTakenDown
-
-Magnitude: reduces damage taken by 50%.
-
-Applies Haste Field for 1 round:
-
-Family: SPDUp
-
-Magnitude: +2 Speed to all allies.
-
-Guardian’s Breath – Dranick + Lira
-
-SP Cost: 8
-
-Target: Party
-
-Set Value: 12 (heal)
-
-Effects:
-
-Heals all allies.
-
-Applies Minor Regen:
-
-Type: HoT
-
-Family: Regen
-
-Magnitude: 3 HP per round
-
-Duration: 2 rounds
-
-Unstoppable Force – Dranick + Grim
-
-SP Cost: 8
-
-Target: Single enemy
-
-Set Value: 26
-
-Effects:
-
-Deals massive physical damage to the target.
-
-Applies Crushed Armor:
-
-Family: DamageUp
-
-Magnitude: increases all damage the target takes by 20%
-
-Duration: 1 round
-
-9.2 Eline Duos
-
-Witching Thorns – Eline + Varro
-
-SP Cost: 7
-
-Target: Single enemy
-
-Set Value: 20
-
-Effects:
-
-Deals magic-tinged physical damage.
-
-Applies Curse of Thorns:
-
-Family: Bleed
-
-Magnitude: 3 damage per round
-
-Duration: 3 rounds
-
-Applies Arcane Weakness:
-
-Family: MagicVuln
-
-Magnitude: increases magic damage taken by 15%
-
-Duration: 2 rounds
-
-Venom Foretold – Eline + Kestril
-
-SP Cost: 7
-
-Target: Single enemy
-
-Set Value: 22
-
-Effects:
-
-Deals high damage to the target.
-
-Applies Poison:
-
-Family: Poison
-
-Magnitude: 5 damage per round
-
-Duration: 3 rounds
-
-If the target is marked by Future Sight (Kestril’s mark), the mark is consumed and Venom Foretold gains +4 additional Set Value before damage is calculated.
-
-Swift Mercy – Eline + Lira
-
-SP Cost: 8
-
-Target: Single enemy
-
-Set Value: 24
-
-Effects:
-
-Deals precise single-target damage.
-
-If the target is below 50% HP, this ability gains +4 Set Value.
-
-Applies Bleed:
-
-Magnitude: 4 damage per round
-
-Duration: 2 rounds
-
-Savage Ambush – Eline + Grim
-
-SP Cost: 9
-
-Target: Single enemy
-
-Set Value: 28
-
-Effects:
-
-Deals very high burst damage.
-
-50% chance to apply Stagger:
-
-Family: SPDDown
-
-Magnitude: -3 Speed
-
-Duration: 1 round
-
-9.3 Varro Duos
-
-Echoing Spell – Varro + Kestril
-
-SP Cost: 8
-
-Target: All enemies
-
-Set Value: 20
-
-Effects:
-
-Deals magic damage to all enemies.
-
-Enemies under Future Sight take 30% additional damage from this ability.
-
-Siphoning Seal – Varro + Lira
-
-SP Cost: 7
-
-Target: Single enemy
-
-Set Value: 19
-
-Effects:
-
-Deals magic damage to the target.
-
-Varro and Lira are healed for a combined 50% of the damage dealt, shared between them.
-
-Runic Juggernaut – Varro + Grim
-
-SP Cost: 9
-
-Target: Single enemy
-
-Set Value: 27
-
-Effects:
-
-Deals massive hybrid (physical and magic) damage.
-
-Applies Runebroken:
-
-Family: DamageDown
-
-Magnitude: reduces damage dealt by the target by 20%
-
-Duration: 1 round
-
-9.4 Kestril & Lira, Kestril & Grim, Lira & Grim
-
-Vital Thread – Kestril + Lira
-
-SP Cost: 7
-
-Target: Single ally
-
-Set Value: 20 (heal)
-
-Effects:
-
-Heals the target.
-
-Applies Fatebound:
-
-If the ally would be reduced to 0 HP during the current round, they instead remain at 1 HP and Fatebound is removed.
-
-Rage Foretold – Kestril + Grim
-
-SP Cost: 8
-
-Target: Single enemy
-
-Set Value: 24
-
-Effects:
-
-Deals powerful damage.
-
-If the target acts later in the same round, they also gain Bleed:
-
-Magnitude: 5 damage per round
-
-Duration: 2 rounds
-
-Soul-Fired Fury – Lira + Grim
-
-SP Cost: 8
-
-Target: Single enemy
-
-Set Value: 23
-
-Effects:
-
-Deals strong single-target damage.
-
-Applies Soulfire to Grim:
-
-Family: DamageUp
-
-Magnitude: increases damage dealt by 25%
-
-Duration: 1 round
-
-Applies Burn to the target:
-
-Magnitude: 4 damage per round
-
-Duration: 2 rounds
-
-10. TRIO COMBOS – ACTIONS FOR THREE
-
-Trio abilities:
-
-Require all three party members to be conscious.
-
-Consume all three party actions for the round.
-
-Use average Conviction of all three participants in the Shared Blood formula.
-
-Some trios are limited to once per combat to preserve drama.
-
-10.1 Dranick + Eline + Varro, Kestril, Lira, Grim
-
-Sealed Fate – Dranick, Eline, Varro
-
-SP Cost: 12
-
-Target: All enemies
-
-Set Value: 30
-
-Effects:
-
-Deals heavy AoE damage.
-
-Applies Doom Sigil:
-
-Family: DamageUp
-
-Magnitude: +15% damage taken
-
-Duration: 2 rounds
-
-Preserved Ground – Dranick, Eline, Kestril
-
-SP Cost: 11
-
-Target: All enemies
-
-Set Value: 16
-
-Effects:
-
-Deals light AoE damage.
-
-Applies Mire:
-
-Family: SPDDown
-
-Magnitude: -2 Speed
-
-Duration: 2 rounds
-
-Cycle of Rot & Growth – Dranick, Eline, Lira
-
-SP Cost: 12
-
-Target: All enemies and party
-
-Set Value: 18 (damage and heal)
-
-Effects:
-
-Deals AoE damage to all enemies.
-
-Heals all allies for the same Final Value.
-
-Applies Regen to all allies:
-
-Magnitude: 3 HP per round
-
-Duration: 2 rounds
-
-Mire and Maul – Dranick, Eline, Grim
-
-SP Cost: 13
-
-Target: Single enemy
-
-Set Value: 38
-
-Effects:
-
-Delivers an overwhelming physical blow.
-
-Applies Crippled:
-
-Family: DamageDown
-
-Magnitude: -25% damage dealt
-
-Duration: 1 round
-
-10.2 Dranick + Varro + Kestril, Lira, Grim
-
-Aegis of Ages – Dranick, Varro, Kestril
-
-SP Cost: 11
-
-Target: Party
-
-Set Value: 10 (heal)
-
-Effects:
-
-Heals all allies.
-
-Applies Temporal Aegis:
-
-Family: DamageTakenDown
-
-Magnitude: -40% damage taken
-
-Duration: 1 round
-
-Font of Life – Dranick, Varro, Lira
-
-SP Cost: 16
-
-Target: Party
-
-Set Value: special (full heal)
-
-Use Restriction: Once per combat
-
-Effects:
-
-Fully restores all allies to maximum HP.
-
-Applies Exhausted Font to all allies:
-
-Family: HealingReceivedDown
-
-Magnitude: -20% healing received
-
-Duration: 2 rounds
-
-Runic Colossus – Dranick, Varro, Grim
-
-SP Cost: 14
-
-Target: All enemies
-
-Set Value: 34
-
-Effects:
-
-Deals high hybrid damage to all enemies.
-
-Applies Shaken:
-
-Family: SPDDown
-
-Magnitude: -1 Speed
-
-Duration: 2 rounds
-
-10.3 Dranick + Kestril + Lira, Grim
-
-Vow of Foresight – Dranick, Kestril, Lira
-
-SP Cost: 11
-
-Target: Party
-
-Set Value: 0
-
-Effects:
-
-Applies Battle Premonition to all allies:
-
-Family: DamageUp
-
-Magnitude: +20% damage dealt
-
-Duration: 2 rounds
-
-Applies Haste of Fate:
-
-Family: SPDUp
-
-Magnitude: +2 Speed
-
-Duration: 2 rounds
-
-Guided Cataclysm – Dranick, Kestril, Grim
-
-SP Cost: 13
-
-Target: Single enemy
-
-Set Value: 40
-
-Effects:
-
-Deals massive single-target damage.
-
-If the target is affected by any “mark” (such as Gravemark, Future Sight, Exposed), this ability gains +5 Set Value.
-
-10.4 Dranick + Lira + Grim
-
-Sacred Fury – Dranick, Lira, Grim
-
-SP Cost: 13
-
-Target: Single enemy (plus party heal)
-
-Set Value: 36 (damage)
-
-Resolution Type: damage-scaled heal
-
-Effects:
-
-Deals high damage to the target.
-
-Heals all allies for 50% of the total damage dealt.
-
-10.5 Eline + Varro + Kestril, Lira, Grim
-
-Miasma of Paradox – Eline, Varro, Kestril
-
-SP Cost: 12
-
-Target: All enemies
-
-Set Value: 20
-
-Effects:
-
-Deals moderate magic damage to all enemies.
-
-Each enemy has a 40% chance to receive Paralysis:
-
-Type: Control
-
-Effect: lose their next action (one-round stun).
-
-Baleful Trinity – Eline, Varro, Lira
-
-SP Cost: 12
-
-Target: Single enemy
-
-Set Value: 36
-
-Effects:
-
-Deals high elemental damage.
-
-Applies Elemental Ruin:
-
-Family: MagicVuln
-
-Magnitude: +25% magic damage taken
-
-Duration: 2 rounds
-
-Arcane Ambush – Eline, Varro, Grim
-
-SP Cost: 13
-
-Target: Single enemy
-
-Set Value: 39
-
-Effects:
-
-Deals massive pincer damage.
-
-Applies Bleed:
-
-Magnitude: 5 damage per round
-
-Duration: 2 rounds
-
-10.6 Eline + Kestril + Lira, Grim
-
-Trinity of Grace – Eline, Kestril, Lira
-
-SP Cost: 12
-
-Target: Single enemy
-
-Set Value: 35
-
-Effects:
-
-Deals high precision damage.
-
-Applies Exposed and a Speed debuff:
-
-Exposed: +15% damage taken from single-target abilities, duration 2 rounds.
-
-SPDDown: -1 Speed, duration 2 rounds.
-
-Calculated Carnage – Eline, Kestril, Grim
-
-SP Cost: 13
-
-Target: All enemies
-
-Set Value: 30
-
-Effects:
-
-Deals strong AoE damage.
-
-Any enemy that attacked a party member in the previous round takes an additional 5 Set Value damage from this ability.
-
-Hunter’s Triage – Eline, Lira, Grim
-
-SP Cost: 12
-
-Target: Single enemy and party
-
-Set Value: 28 (damage) and 14 (heal)
-
-Effects:
-
-Deals high damage to a single enemy.
-
-Heals all allies with a moderate AoE heal.
-
-10.7 Varro + Kestril + Lira, Grim
-
-Seal of Providence – Varro, Kestril, Lira
-
-SP Cost: 11
-
-Target: Party
-
-Set Value: 12 (heal)
-
-Effects:
-
-Heals all allies.
-
-Applies Guided Strikes:
-
-Family: CritUp
-
-Magnitude: +15% critical hit chance
-
-Duration: 2 rounds
-
-Anathema Strike – Varro, Kestril, Grim
-
-SP Cost: 13
-
-Target: Single enemy
-
-Set Value: 35
-
-Effects:
-
-Deals high magic damage.
-
-Applies Defense Shred:
-
-Family: DamageUp
-
-Magnitude: +20% damage taken
-
-Duration: 2 rounds
-
-Soulcrushing Weight – Varro, Lira, Grim
-
-SP Cost: 13
-
-Target: All enemies
-
-Set Value: 24
-
-Effects:
-
-Deals moderate AoE damage.
-
-Applies Burdened:
-
-Family: SPDDown
-
-Magnitude: -2 Speed
-
-Duration: 1 round
-
-10.8 Kestril + Lira + Grim
-
-Climax of Fate – Kestril, Lira, Grim
-
-SP Cost: 15
-
-Target: Single enemy
-
-Set Value: 45
-
-Use Restriction: Once per combat
-
-Effects:
-
-Deals the highest single-target damage in the game.
-
-If the target is incapacitated by this hit, applies Fate’s Grace to all allies:
-
-Family: DamageUp
-
-Magnitude: +20% damage dealt
-
-Duration: 1 round
-
-11. DUNGEON & FLOOR STRUCTURE
-
-Floors: 4 per run.
-
-Room Graph: Each floor is a connected graph of rooms with exactly one Start and one Exit room.
-
-Typical room count by floor:
-
-Floor 1: 5–7 rooms
-
-Floor 2: 6–8 rooms
-
-Floor 3: 7–9 rooms
-
-Floor 4: 8–10 rooms (includes Antechamber and Final Chamber sequence)
-
-Room types include:
-
-Enemy
-
-Narrative
-
-Resource
-
-Trap
-
-Empty
-
-Boss (Final Chamber)
-
-Each room stores:
-
-Its unique ID
-
-Its type
-
-Whether it has been cleared
-
-Its links to other rooms
-
-Event data, such as which enemy encounter, narrative event, or trap it contains.
-
-A path from Start to Exit is always guaranteed to exist on each floor.
-
-12. ENEMY DESIGN & SCALING – “PRESSURE CURVE”
-
-Enemies are defined by:
-
-Base HP, CON, SPD (for Floor 1)
-
-Archetype (Trash, Elite, Brute, Skirmisher, Support)
-
-Abilities (similar structure to player abilities)
-
-Passives (such as on-death splits)
-
-Tags (for vulnerability or synergy)
-
-12.1 Archetype Multipliers
-
-Archetypes adjust HP, Conviction, and Speed:
-
-Trash:
-
-HP multiplier: 0.8
-
-CON multiplier: 0.8
-
-SPD multiplier: 1.0
-
-Elite:
-
-HP multiplier: 1.4
-
-CON multiplier: 1.2
-
-SPD multiplier: 1.0
-
-Brute:
-
-HP multiplier: 1.8
-
-CON multiplier: 1.0
-
-SPD multiplier: 0.8
-
-Skirmisher:
-
-HP multiplier: 0.7
-
-CON multiplier: 0.9
-
-SPD multiplier: 1.5
-
-Support:
-
-HP multiplier: 1.0
-
-CON multiplier: 1.1
-
-SPD multiplier: 1.0
-
-12.2 Floor-Based Scaling
-
-For Floor number F (1–4), scaling multipliers are:
-
-HP multiplier from floor: 1 plus 0.25 for each floor beyond the first.
-
-Damage scaling reference: 1 plus 0.20 for each floor beyond the first.
-
-Conviction scaling: 1 plus 0.10 for each floor beyond the first.
-
-Final HP for an enemy at floor F:
-
-Base HP
-
-Multiplied by archetype HP multiplier
-
-Multiplied by floor HP multiplier
-
-Rounded to the nearest integer.
-
-Final CON is scaled similarly with archetype and floor Conviction multipliers. SPD is multiplied by the archetype SPD multiplier only and does not scale further with floor.
-
-13. FINAL ENCOUNTER & END-GAME FLOW
-13.1 Final Chamber & Unwinnable Flag
-
-The Final Chamber is on Floor 4.
-
-Enemies in this room are flagged as Unwinnable:
-
-Their HP cannot be reduced below 1.
-
-Any incoming damage that would reduce them to 0 HP instead leaves them at 1.
-
-13.2 Doom Threshold & Retreat Logic
-
-The fight proceeds normally until the Doom Threshold is reached:
-
-Doom Threshold is triggered when either:
-
-The party’s combined current HP divided by combined maximum HP drops below 30%, or
-
-The fight has lasted 5 or more rounds.
-
-When the Doom Threshold triggers:
-
-A flag is set indicating the encounter is now in the final phase.
-
-The standard Attack command in the UI is replaced by a Retreat Party Action.
-
-At the start of the next round:
-
-If the party’s SP is below 10, it is raised to 10.
-
-All allies gain Retreat Ward:
-
-They cannot be reduced below 1 HP until the Retreat action resolves.
-
-Retreat Action:
-
-Cost: 0 SP once the final phase begins.
-
-Initiative: resolves before all other actions in the round.
-
-Condition: if at least one party member is still conscious when Retreat is chosen, it always succeeds.
-
-On success:
-
-Combat ends.
-
-The party is transported back to the Antechamber room.
-
-A fixed end-game sequence plays, culminating in the Legacy Preserved screen, marking the run as a win.
-
-If the party is wiped before triggering Doom Threshold or before Retreat is chosen, the run ends as a failure.
-
-14. DATA & IMPLEMENTATION CONVENTIONS
-
-While no code is included in this document, the following conventions guide data structures:
-
-IDs use lower_snake_case (for example, char_dranick, abl_bonebreaker_mace, ene_mireling_standard, status_poison_basic).
-
-Characters include:
-
-Character ID
-
-Display name
-
-Role description
-
-Base stats (HP, CON, SPD)
-
-List of abilities
-
-Tags (role, narrative hooks)
-
-Abilities include:
-
-Ability ID
-
-Display name
-
-Owner(s) (single character, duo, or trio)
-
-Type (Standard, Special, Duo, Trio, Party Action)
-
-SP cost
-
-Set Value
-
-Speed modifier
-
-Target type (Self, Single ally, Party, Single enemy, All enemies)
-
-Role tags (Offense, Support, Defense, Control, Utility)
-
-Resolution type (standard, full_heal, damage_scaled_heal, custom)
-
-Description of effects
-
-List of statuses applied, if any
-
-Flags such as once_per_combat, disabled_in_future_versions, etc.
-
-Status Effects include:
-
-ID, display name
-
-Type (DoT, HoT, Buff, Debuff, Control)
-
-Family
-
-Magnitude
-
-Duration
-
-Description
-
-Enemies include:
-
-Enemy ID, display name
-
-Archetype
-
-Base stats (HP, CON, SPD at floor 1)
-
-Abilities and passives
-
-Tags (for example, SludgeType, VulnerableToBurn)
-
-Flag unwinnable for Final Chamber enemies.
-
-Rooms include:
-
-Room ID
-
-Room type
-
-Cleared state and whether events have been triggered
-
-Links to other room IDs
-
-Embedded event data, such as which encounter or narrative event.
-
-15. CODER CHEAT SHEET (SUMMARY)
-
-Core Constants
-
-Party size: 3
-
-Floors per run: 4
-
-Starting SP per encounter: 10
-
-SP gain per round: 6
-
-Maximum SP at any moment: 18
-
-End-of-round SP clamp: maximum 12
-
-Party level equals floor number (1–4)
-
-Formulas
-
-Level_Value:
-
-Level 1: 0.5
-
-Level 2: 0.6
-
-Level 3: 0.7
-
-Level 4: 0.8
-
-Single-user abilities:
-
-Final damage or healing = Set Value + (user CON × Level_Value, rounded up)
-
-Multi-user (Duo/Trio) abilities:
-
-Use average CON of participants, rounded up, instead of single CON.
+Draw 4 cards from combined crew abilities each round
+Each crew member has 6 abilities total (18 possible draws)
+Combo Abilities appear when both required crew are alive
+Cards show: Stamina cost, speed, damage/effect preview
+Unused cards discarded at round end
+
+Enemy Transparency
+
+All enemy intentions visible
+Damage numbers shown before confirmation
+No hidden modifiers or surprise mechanics
+
+
+Combat Mathematics
+Core Damage Formula
+Final Damage = (Base Ability Damage × Character Modifier × Status Multipliers) - Target Defense
+
+Status Multipliers:
+- Marked: +50% damage taken
+- Lensed: 2x effect (damage or healing)
+- Guardian Stance: -50% damage taken
+- Weakened: +3 flat damage taken
+
+Minimum damage is always 1 (unless immune)
+Critical System
+Base Critical Chance = 5%
+Critical Damage = 1.5x
+
+Modifiers:
+- Kai's abilities: +10% crit chance
+- Focused status: +15% crit chance
+- Enemy Exposed: +25% crit chance against
+Character Base Statistics
+CharacterBase HPDamage ModBase SpeedBase DefenseIona400.9xNormal5Rhea251.0xNormal2Jonas200.8xFast1Sara301.0xNormal3Kai201.2xSlow0Maya250.7xNormal2
 
 Status System
+Core Conditions (Only 6 Total)
+Resource Pressures:
 
-Types: DoT, HoT, Buff, Debuff, Control
+Mutation (0-100 scale): At 100, crew member transforms
+Stress (0-100 scale): At 100, crew member panics and skips turn
+Injury: -2 max HP until treated
 
-Max active DoTs per unit: 3
+Combat Modifiers:
+4. Lensed: Next action happens twice (good or bad)
+5. Delayed: Action resolves next turn
+6. Marked: Takes +50% damage from next hit
+Each status has clear visual indicator and numerical counter. No complex stacking.
 
-Max active HoTs per unit: 3
+Complete Crew Abilities
+IONA KADE — Security Chief (Tank)
+AbilityStaminaDamageEffectSpeedShield Bash16Stun for 1 turnNormalDefensive Stance00-50% damage this turnFastSuppressing Fire24Damage all enemiesNormalGuardian Protocol20Redirect next 2 attacks to selfFastTactical Advance18+4 damage if target StunnedNormalLast Stand315Gain 10 temp HPSlow
+DR. RHEA MYLES — Botanist (DoT)
+AbilityStaminaDamageEffectSpeedToxic Spores13Poison (3 dmg/turn × 3)NormalOvergrowth20Poisoned enemies take 6 damageFastParasitic Vines25Steal 3 HP from targetSlowPheromone Cloud10Enemies attack randomlyNormalThorn Volley17+2 damage per poisoned enemyNormalBloom of Decay30All enemies: Poison + 8 damageNormal
+JONAS REEVE — Technician (Support)
+AbilityStaminaDamageEffectSpeedQuick Fix00Restore 2 stamina to partyFastOvercharge10Next ability costs -1 staminaFastSystem Scan14Apply Marked to enemyNormalEmergency Power20Party gains +1 speed (2 turns)FastDischarge210+2 damage per party buffNormalFull Reboot30Reset cooldowns, restore 8 staminaSlow
+CAPTAIN SARA CHEN — Commander (Balanced)
+AbilityStaminaDamageEffectSpeedRally Cry10Allies gain +3 damage next attackFastTactical Order05Direct ally to attack immediatelyNormalInspiring Presence10Remove all party debuffsNormalCoordinated Assault28All allies attack for 4 damageNormalStrategic Retreat20Party takes -5 damage next turnFastCaptain's Resolve312Party immune to Stress (3 turns)Normal
+DR. KAI TORRES — Physicist (Burst)
+AbilityStaminaDamageEffectSpeedQuantum Strike1850% chance to hit twiceNormalTime Dilation20Target acts twice next turnVariableGravity Well26Pull and damage all enemiesSlowPhase Shift10Untargetable for 1 turnFastParticle Beam320Pierce through enemy lineNormalSingularity325Void deals 3 dmg/turn to allSlow
+MAYA OKONKWO — Life Support (Healer)
+AbilityStaminaDamageEffectSpeedEmergency Heal10Restore 8 HPFastPurifying Breath10Remove status, heal 3 HPNormalVital Signs00Party regenerates 2 HP/turnNormalAdrenaline Shot20Target gains Lensed + 10 temp HPFastBioscan15Reduce target's max HP by 3NormalResurrection Protocol30Revive ally with 10 HPSlow
 
-Same-family status: keep highest magnitude, refresh duration
+Combo Abilities System
+Core Mechanics
+Combo Abilities are powerful synchronized actions requiring 2 specific living crew members. Unlocked after completing Ring 1.
+Requirements:
 
-Different-family statuses: stack freely
+Both crew members alive
+Combined stamina cost (3-6 total)
+Both crew members' turns consumed
+1-per-combat limitation
+Visually distinct cards with dual-character art
 
-Tick order at start of round:
+Complete Combo List
+Combo NameRequired CrewCostEffectSpeedCoordinated StrikeIona + Jonas518 damage, apply Marked, restore 2 staminaFastBiotic OverflowRhea + Maya48 poison to all enemies, heal all allies 6 HPNormalTemporal AnchorSara + Kai5Skip enemy turn, all allies gain LensedFastFortress ProtocolIona + Sara4Party gains 10 temp HP, immune to status (2 turns)NormalReality CascadeKai + Rhea625 damage to random enemy, 50% spread chanceSlowEmergency TriageMaya + Jonas3Revive crew at 15 HP, cleanse all statusFastCommand OverrideSara + Jonas4Reset stamina to 8, draw 2 cardsNormalQuantum GardenKai + Rhea5Field deals 6 damage/turn for 3 turnsNormalShield WallIona + Maya4Next 3 attacks deal half damageFastData BurstJonas + Kai3Reveal intentions 2 turns, party +2 speedFast
 
-Apply all DoT damage
+Room Types
+Distribution
 
-Apply all HoT healing
+Combat Rooms (40%): Fight 2-4 enemies, gain fragments/tools
+Resource Rooms (30%): Non-combat choices with risk/reward
+Event Rooms (20%): Story moments, Echo encounters
+Rest Rooms (10%): Reduce conditions OR gain tool OR archive fragment
 
-Resolve any on-tick Buff/Debuff/Control effects
 
-Decrement durations
+Enemy Roster
+Ring 1 - "Garden Corruption"
+EnemyHPDefSpeedAbilitiesRewardOvergrown Servitor151NormalPrune (5 dmg), Entangle (stun)1 FragmentSpore Cloud80FastToxic Burst (3 to all), Proliferate (spawn copy)1 Fragment + ToolRoot System203SlowDrain (steal 4 HP), Harden (+2 def)2 Fragments
+Ring 2 - "Domestic Failures"
+EnemyHPDefSpeedAbilitiesRewardMemory Leak180FastData Drain (remove card), Overflow (8 dmg + stress)2 FragmentsEcho Crew302NormalCorrupted crew abilities, immune to status3 Fragments + MemorySurveillance Swarm12×30FastSynchronized Strike (6 per unit), Scatter (+1 def)2 Fragments
+Ring 3 - "Laboratory Horrors"
+EnemyHPDefSpeedAbilitiesRewardFailed Experiment252NormalMutate Self, Unstable Strike (10-20), Contaminate (+15 mutation)3 Fragments + ToolQuantum Anomaly201VariablePhase Out, Temporal Strike (15 delayed), Reality Tear3 FragmentsBio-Hazard300SlowViral Load (poison all), Adaptation, Death Burst (10 to all)3 Fragments + Kit
+Ring 4 - "Collider Catastrophe"
+EnemyHPDefSpeedAbilitiesRewardGravity Well354SlowCrushing Force (12 + slow), Event Horizon, Singularity (25 to all)4 FragmentsEnergy Cascade280FastChain Lightning (8, jumps), Overload (3× next), System Shock4 Fragments + ToolThe Forgotten403NormalRemember (copy ability), Forget (remove buffs), Entropy5 Fragments + Expansion
+Ring 5 - "Core Observatory"
+EnemyHPDefSpeedSpecialThree Echoes50 each2VariableAll dead crew together, share 25% damageReality Fragment∞∞FastEnvironmental hazard: Unmake, Temporal Loop, Final Collapse (turn 10)
 
-Remove any expired statuses
+Mutation System
+Progression Thresholds
 
-Initiative
+25 Points: Tier 1 Mutation (minor benefit/drawback)
+50 Points: Tier 2 Mutation (moderate changes)
+75 Points: Tier 3 Mutation (major transformation)
+100 Points: Terminal Transformation (become enemy)
 
-Initiative = SPD + ability speed modifier
+Complete Mutation List
+Tier 1 (25 Mutation)
+MutationBenefitDrawbackPhotosynthetic SkinRegen 1 HP/turn in light+2 damage from fireEnhanced Reflexes+1 Speed below 50% HP-2 Max HPRedundant OrgansSurvive fatal blow at 1 HP-25% healing receivedHeightened SensesSee intentions 1 turn earlyDouble stress gains
+Tier 2 (50 Mutation)
+MutationBenefitDrawbackCarapace Formation+3 Defense-1 Speed permanentlyNeural BifurcationDraw 1 extra card25% random targetingMetabolic OverdriveAbilities cost -1 staminaTake 2 damage/turnSymbiotic ColonyImmune to poison/diseaseShare status with allies
+Tier 3 (75 Mutation)
+MutationBenefitDrawbackTemporal Desync25% chance act twice25% chance skip turnCrystalline Bones+50% all damageShatter on crit (death)Hive IntegrationShare buffs with partyShare damage takenVoid TouchedAttacks ignore defenseCannot be healed by allies
+Mutation Scaling
+0-25: No combat modifiers
+26-50: +10% damage dealt/taken
+51-75: +20% damage dealt/taken
+76-99: +30% damage dealt/taken
+100: Transform into The Transformed (2× HP, uses corrupted abilities)
 
-Higher initiative acts first
+The Neural Network Progression
+Ring-by-Ring Details
+Ring 1: "Upper Gardens"
 
-Ties: player characters before enemies; within each side, consistent tie-breaking rule (such as roster order)
+7 nodes, simple branching paths
+Introduces: Basic combat, mutation system
+Enemies: Garden corruptions
+No Echo encounters
 
-Random Action Pool
+Ring 2: "Crew Quarters"
 
-4 abilities per round
+9 nodes, first locked paths
+Introduces: Stress mechanics, combo abilities
+First Echo encounter
+Memory fragments available
 
-Source: Standards, Specials, Duos, Trios, and pool-based Party Actions
+Ring 3: "The Laboratory"
 
-At least 1 Offense-tagged ability if possible
+11 nodes, complex web pattern
+Introduces: Lensing effects, advanced mutations
+Second Echo encounter
+Environmental hazards active
 
-At least 1 Support or Defense-tagged ability if possible
+Ring 4: "Collider Spine"
 
-No duplicates in the same round
+13 nodes, multiple required paths
+All mechanics active, stamina strain
+Third Echo encounter
+Reality distortions frequent
 
-Always-available actions (Basic Strike, Guard, Use Item) sit outside the random pool
+Ring 5: "Core Observatory"
 
-Final Encounter Rules
+Single massive arena
+10-turn survival challenge
+All three Echoes present
+Reality Fragment countdown
 
-Unwinnable enemies cannot drop below 1 HP
 
-Doom Threshold triggers when:
+Endgame Sequence
+The Core Observatory Challenge
+Turn-by-Turn Breakdown:
 
-Party HP ratio < 30%, or
+Turns 1-3: Environmental hazards (increasing mutation, gravity wells)
+Turns 4-6: Echo crew coordinated assault
+Turns 7-9: Reality breakdown (random teleports, time loops)
+Turn 10: Launch window opens
 
-Round count ≥ 5
+Victory Conditions:
 
-After Doom Threshold:
+"Launch Archive" action available
+Requires 3 stamina + one full turn
+Other crew must protect launcher
+Success triggers ending cutscene
 
-SP raised to at least 10 at next round start
+Scoring System
 
-All allies gain Retreat Ward (cannot drop below 1 HP until Retreat resolves)
+Data Fragments: 100 points each
+Genome Samples: 500 points each
+Black Box Data: 300 points each
+Crew Memories: 200 points each
+Living Crew Bonus: 1000 points each
+Perfect Run Bonus: 10,000 points
 
-Retreat is a 0 SP Party Action that acts before all others and always succeeds if at least one ally is conscious
 
-Abilities & Combos
+Save System Architecture
+LocalStorage Structure
+javascriptSaveData = {
+  version: "1.0.0",
+  profile: {
+    totalRuns: 0,
+    successfulRuns: 0,
+    totalDataCollected: 0,
+    unlockedContent: [],
+    unlockedCombos: [],
+    achievements: [],
+    statistics: {}
+  },
+  currentRun: {
+    active: false,
+    seed: null,
+    ring: 1,
+    nodes: [],
+    crew: {
+      living: [],
+      echoes: [],
+      stats: {}
+    },
+    inventory: {
+      tools: [],
+      dataFragments: 0,
+      archive: []
+    },
+    combatState: null,
+    timestamp: null
+  },
+  settings: {
+    audio: { master: 1.0, sfx: 1.0, music: 1.0 },
+    display: { fullscreen: false, highContrast: false },
+    gameplay: { autoSave: true, confirmActions: true }
+  },
+  metadata: {
+    lastPlayed: null,
+    playTime: 0,
+    saveCount: 0,
+    checksum: null
+  }
+}
+Save Features
 
-Single abilities are tuned so that using 2–3 of them in a round is competitive with one Duo or Trio in terms of total damage/control.
+Auto-save after each node
+Manual save in pause menu
+Emergency save on browser close
+Combat state preservation
+Save validation and migration
+Optional Google Drive sync
+Maximum size: 100KB
 
-Duo damage abilities generally deliver roughly 2.2–3.0 damage per SP (before Conviction scaling).
 
-Trio abilities range from powerful control and party-wide effects to top-end burst (Climax of Fate), with the strongest ones limited to once per combat or carrying tradeoffs (such as Exhausted Font).
+UI/UX Design
+Browser-Optimized Layout
+Main View (Center):
+
+Neural network map during navigation
+Combat arena during encounters
+Clean, minimal design
+
+Status Bar (Top):
+
+Stamina pool (visual bar with numbers)
+Current ring indicator
+Archive slots (10 boxes)
+
+Crew Panel (Bottom):
+
+3 character portraits
+HP bars and status indicators
+Mutation/Stress progress bars
+
+Hand Display (Bottom Center):
+
+4 ability cards horizontal
+Combo abilities visually distinct
+Stamina costs clearly marked
+
+Turn Order (Right Side):
+
+Vertical timeline
+Enemy intentions visible
+Status effect icons
+
+Control Scheme
+
+Mouse: Primary interaction
+Keyboard: 1-4 for cards, TAB cycle crew, SPACE confirm
+Touch: Large tap targets, swipe navigation
+
+Visual Identity
+
+Color Language:
+
+Blue: Active/selectable
+Green: Beneficial/resource
+Red: Hostile/danger
+Purple: Echo/corruption
+White: Neutral/information
+
+
+Neural network aesthetic
+Clean, readable fonts
+
+
+Meta-Progression
+Unlockable Content
+
+New Tools (collect 10 unique items)
+Crew Backstories (encounter each Echo)
+Station Logs (find black box data)
+True Ending Mode (complete one run)
+Combo Abilities (complete Ring 1)
+
+The Persistent Archive
+
+Gallery of collected fragments
+Complete narrative assembly
+Statistics tracking
+Best run showcase
+
+No Power Creep: All unlocks are lateral options
+
+Balancing Targets
+Difficulty Curve
+
+Ring 1: 90% survival
+Ring 2: 70% survival
+Ring 3: 50% survival
+Ring 4: 30% survival
+Ring 5: 10% completion
+
+Resource Economy
+
+15-20 data fragments per run
+3-4 tools maximum
+Limited healing forces momentum
+Mutation management critical
+
+Time Investment
+
+Average run: 25-30 minutes
+Successful run: 35-40 minutes
+Maximum: 45 minutes
+
+
+Technical Specifications
+Performance Requirements
+
+60 FPS on integrated graphics
+<50MB total assets
+2-second load time
+LocalStorage saves <100KB
+
+Browser Compatibility
+
+Chrome/Edge 90+
+Firefox 88+
+Safari 14+
+Mobile browser support
+
+Accessibility Features
+
+High contrast mode
+Colorblind palettes
+Readable fonts
+Keyboard navigation
+
+
+Development Priorities
+Phase 1 - Core Combat
+
+Damage formulas implementation
+36 basic abilities system
+Enemy AI patterns
+Combat balance testing
+
+Phase 2 - Meta Systems
+
+Mutation system (12 types)
+Save/load functionality
+Combo ability triggers
+Echo encounter logic
+
+Phase 3 - Polish
+
+Neural network visualization
+Visual feedback systems
+Achievement tracking
+Tutorial implementation
+
+Post-Launch Roadmap
+
+Daily challenges (fixed seeds)
+Speed run mode
+Community archive
+New crew as free updates
+
+
+Critical Integration Points
+
+Combo + Mutation: High mutation may cause combo misfires
+Save + Combat: Mid-combat saves preserve exact state/RNG
+Enemy + Archive: Specific drops per enemy type
+Speed + Damage: Fast high-damage limited by stamina
+Mutation + Echo: Echoes retain crew mutations
+
+
+Success Metrics
+
+Combat Duration: 3-4 turns average
+Mutation Transformation: 1 per 3 runs
+Save File Size: <50KB compressed
+Combo Usage: 2+ per run
+Enemy Variety: 80% roster encountered per run
+
+
+Final Design Notes
+The Final Descent creates meaning through mechanical storytelling. The Echo system ensures every crew selection has narrative weight—those not chosen become the obstacles you face. The Combo Ability system rewards keeping crew alive, creating protection priorities beyond simple survival.
+The neural network visualization serves both as intuitive navigation and thematic reinforcement—watching synapses fire as the station's consciousness fails. Every system interconnects: stamina forces tactical choices, mutations provide risk/reward, combos encourage crew synergy, and the Archive gives permanent meaning to temporary runs.
+This is a game about inevitable failure that remains worth playing—because the question isn't whether you'll survive, but what truth you'll preserve before the end.
