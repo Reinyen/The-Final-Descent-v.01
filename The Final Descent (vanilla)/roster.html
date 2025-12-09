@@ -1201,24 +1201,26 @@
         const uiFadeMix = prefersReduced ? 1 : clamp((t - tMorphEnd) / TIMINGS.uiFadeIn, 0, 1);
 
         // Show character cards when morphing begins
-        if (morphMix > 0.1 && !window.rosterState.animationComplete) {
-          window.createCharacterCards();
-          window.showCharacterCards();
+        if (morphMix > 0.1 && window.rosterState && !window.rosterState.animationComplete) {
+          window.createCharacterCards && window.createCharacterCards();
+          window.showCharacterCards && window.showCharacterCards();
         }
 
         // Show UI elements in sequence
-        if (uiFadeMix > 0) {
-          window.rosterElements.titlePanel.classList.add('show');
-        }
-        if (uiFadeMix > 0.3) {
-          window.rosterElements.rerollModule.classList.add('show');
-        }
-        if (uiFadeMix > 0.6) {
-          window.rosterElements.controlPanel.classList.add('show');
+        if (window.rosterElements) {
+          if (uiFadeMix > 0) {
+            window.rosterElements.titlePanel.classList.add('show');
+          }
+          if (uiFadeMix > 0.3) {
+            window.rosterElements.rerollModule.classList.add('show');
+          }
+          if (uiFadeMix > 0.6) {
+            window.rosterElements.controlPanel.classList.add('show');
+          }
         }
 
         // Enable interaction when fully complete
-        if (uiFadeMix >= 1 && !window.rosterState.canInteract) {
+        if (uiFadeMix >= 1 && window.rosterState && !window.rosterState.canInteract) {
           window.rosterState.canInteract = true;
           window.rosterState.animationComplete = true;
         }
@@ -1371,10 +1373,12 @@
         burstTriggered = false;
         particleSystems = [];
 
-        // Reset UI
-        window.rosterElements.titlePanel.classList.remove('show');
-        window.rosterElements.rerollModule.classList.remove('show');
-        window.rosterElements.controlPanel.classList.remove('show');
+        // Reset UI (only if elements are loaded)
+        if (window.rosterElements) {
+          window.rosterElements.titlePanel.classList.remove('show');
+          window.rosterElements.rerollModule.classList.remove('show');
+          window.rosterElements.controlPanel.classList.remove('show');
+        }
 
         blackout.style.transition = 'none';
         blackout.style.opacity = '1';
