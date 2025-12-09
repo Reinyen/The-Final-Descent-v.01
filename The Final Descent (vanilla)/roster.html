@@ -1253,15 +1253,16 @@
           const ox = s.nx * W;
           const oy = s.ny * H;
 
-          // Arrange phase: move to initial grid (same row for all during arrange)
-          const initialTargetY = 0.42; // All start at the same row
+          // Arrange phase: all 6 move to 2x3 grid (top 3 at row 0.42, bottom 3 at row 0.63)
+          // This creates "two neat rows of three" while all still golden
+          const arrangeTargetY = (s.fallenIndex < 3) ? 0.42 : 0.63;
           const arrangedX = lerp(ox, target.nx * W, arrangeEase);
-          const arrangedY = lerp(oy, initialTargetY * H, arrangeEase);
+          const arrangedY = lerp(oy, arrangeTargetY * H, arrangeEase);
 
-          // Positioning phase: Fallen sink to bottom row
-          const finalY = s.isFallen
-            ? lerp(arrangedY, target.ny * H, positioningEase)
-            : arrangedY;
+          // Positioning phase: Living move to top row, Fallen move to bottom row
+          // (This rearranges them so Living=top, Fallen=bottom regardless of initial position)
+          const finalTargetY = s.isFallen ? 0.70 : 0.35;
+          const finalY = lerp(arrangedY, finalTargetY * H, positioningEase);
 
           const x = arrangedX;
           const y = finalY;
