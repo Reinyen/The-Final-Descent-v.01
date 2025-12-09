@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Database Test - The Final Descent</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Courier New', monospace;
+      background: #000;
+      color: #0f0;
+      line-height: 1.6;
+    }
+    h1, h2 { color: #0ff; }
+    .section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #0f0;
+      border-radius: 4px;
+    }
+    .success { color: #0f0; }
+    .error { color: #f00; }
+    .warning { color: #ff0; }
+    .info { color: #0ff; }
+    pre {
+      background: #111;
+      padding: 10px;
+      border-left: 3px solid #0f0;
+      overflow-x: auto;
+    }
+    button {
+      background: #0f0;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      font-family: inherit;
+      font-weight: bold;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #0ff;
+    }
+    .test-result {
+      margin: 10px 0;
+      padding: 8px;
+      border-left: 3px solid;
+    }
+    .test-result.pass { border-color: #0f0; }
+    .test-result.fail { border-color: #f00; }
+  </style>
+</head>
+<body>
+  <h1>🧪 The Final Descent - Database Test Suite</h1>
+
+  <div class="section">
+    <h2>Quick Actions</h2>
+    <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="testCharacters()">Test Characters</button>
+    <button onclick="testAbilities()">Test Abilities</button>
+    <button onclick="testCombos()">Test Combos</button>
+    <button onclick="testCrewSelection()">Test Crew Selection</button>
+    <button onclick="location.reload()">Reset</button>
+  </div>
+
+  <div id="output"></div>
+
+  <script type="module">
+    import { GameDB } from './data/database.js';
+
+    // Make GameDB available globally for console
+    window.GameDB = GameDB;
+
+    const output = document.getElementById('output');
+
+    function log(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = `test-result ${type}`;
+      div.innerHTML = message;
+      output.appendChild(div);
+    }
+
+    function section(title) {
+      const div = document.createElement('div');
+      div.className = 'section';
+      div.innerHTML = `<h2>${title}</h2>`;
+      output.appendChild(div);
+      return div;
+    }
+
+    window.runAllTests = function() {
+      output.innerHTML = '';
+      log('🚀 Starting full test suite...', 'info');
+
+      // Database validation
+      const sec1 = section('Database Validation');
+      const validation = GameDB.validate();
+
+      if (validation.valid) {
+        sec1.innerHTML += `<p class="success">✅ Database validation passed!</p>`;
+      } else {
+        sec1.innerHTML += `<p class="error">❌ Database validation failed!</p>`;
+        validation.errors.forEach(err => {
+          sec1.innerHTML += `<p class="error">  - ${err}</p>`;
+        });
+      }
+
+      validation.warnings.forEach(warn => {
+        sec1.innerHTML += `<p class="warning">⚠️  ${warn}</p>`;
+      });
+
+      sec1.innerHTML += `<pre>${JSON.stringify(validation.summary, null, 2)}</pre>`;
+
+      // Run individual tests
+      testCharacters();
+      testAbilities();
+      testCombos();
+      testStatus();
+      testCrewSelection();
+      testCombat();
+
+      log('✅ All tests completed!', 'success');
+    };
+
+    window.testCharacters = function() {
+      const sec = section('Character Tests');
+
+      // Test 1: Get all characters
+      const allChars = GameDB.getAllCharacters();
+      sec.innerHTML += allChars.length === 6
+        ? `<p class="success">✅ Found all 6 characters</p>`
+        : `<p class="error">❌ Expected 6 characters, found ${allChars.length}</p>`;
+
+      // Test 2: Get specific character
+      const iona = GameDB.getCharacter('iona');
+      sec.innerHTML += iona && iona.name === 'Iona Kade'
+        ? `<p class="success">✅ Character lookup works</p>`
+        : `<p class="error">❌ Character lookup failed</p>`;
+
+      // Test 3: Character display info
+      const displayInfo = GameDB.getCharacterDisplayInfo('kai');
+      sec.innerHTML += displayInfo && displayInfo.quote
+        ? `<p class="success">✅ Character display info works</p>`
+        : `<p class="error">❌ Character display info failed</p>`;
+
+      // Test 4: Echo generation
+      const echo = GameDB.createEcho('sara');
+      sec.innerHTML += echo && echo.isEcho
+        ? `<p class="success">✅ Echo generation works</p>`
+        : `<p class="error">❌ Echo generation failed</p>`;
+
+      sec.innerHTML += `<pre>${JSON.stringify(iona, null, 2)}</pre>`;
+    };
+
+    window.testAbilities = function() {
+      const sec = section('Ability Tests');
+
+      // Test 1: Get character abilities
+      const ionaAbilities = GameDB.getCharacterAbilities('iona');
+      sec.innerHTML += ionaAbilities.length === 6
+        ? `<p class="success">✅ Iona has 6 abilities</p>`
+        : `<p class="error">❌ Iona should have 6 abilities, found ${ionaAbilities.length}</p>`;
+
+      // Test 2: Get specific ability
+      const shieldBash = GameDB.getAbility('iona_shield_bash');
+      sec.innerHTML += shieldBash && shieldBash.staminaCost === 1
+        ? `<p class="success">✅ Ability lookup works</p>`
+        : `<p class="error">❌ Ability lookup failed</p>`;
+
+      // Test 3: Draw hand
+      const hand = GameDB.drawHand(['iona', 'jonas', 'maya']);
+      sec.innerHTML += hand.length === 4
+        ? `<p class="success">✅ Draw hand returns 4 cards</p>`
+        : `<p class="error">❌ Draw hand should return 4 cards, got ${hand.length}</p>`;
+
+      // Test 4: Can cast ability
+      const canCast = GameDB.canCastAbility('iona_shield_bash', 5);
+      const cantCast = GameDB.canCastAbility('iona_last_stand', 2);
+      sec.innerHTML += canCast && !cantCast
+        ? `<p class="success">✅ Stamina check works</p>`
+        : `<p class="error">❌ Stamina check failed</p>`;
+
+      sec.innerHTML += `<h3>Sample Hand:</h3><pre>${JSON.stringify(hand.map(a => ({
+        name: a.name,
+        cost: a.staminaCost,
+        damage: a.damage
+      })), null, 2)}</pre>`;
+    };
+
+    window.testCombos = function() {
+      const sec = section('Combo Tests');
+
+      // Test 1: Get all combos
+      const allCombos = GameDB.getAllCombos();
+      sec.innerHTML += allCombos.length === 10
+        ? `<p class="success">✅ Found all 10 combos</p>`
+        : `<p class="error">❌ Expected 10 combos, found ${allCombos.length}</p>`;
+
+      // Test 2: Get available combos
+      const crew1 = ['iona', 'jonas', 'maya'];
+      const available1 = GameDB.getAvailableCombos(crew1);
+      sec.innerHTML += available1.length > 0
+        ? `<p class="success">✅ Found ${available1.length} available combos for [Iona, Jonas, Maya]</p>`
+        : `<p class="warning">⚠️  No combos available for crew</p>`;
+
+      // Test 3: Specific combo check
+      const canUse = GameDB.canUseCombo('combo_coordinated_strike', ['iona', 'jonas', 'sara'], false);
+      sec.innerHTML += canUse
+        ? `<p class="success">✅ Combo availability check works</p>`
+        : `<p class="error">❌ Combo should be available</p>`;
+
+      // Test 4: Combo pairs
+      const pairs = GameDB.getComboPairs(['iona', 'jonas', 'maya']);
+      sec.innerHTML += `<p class="info">ℹ️  Generated combo status for ${pairs.length} combos</p>`;
+
+      sec.innerHTML += `<h3>Available Combos:</h3><pre>${JSON.stringify(available1.map(c => ({
+        name: c.name,
+        required: c.requiredCrew,
+        cost: c.staminaCost
+      })), null, 2)}</pre>`;
+    };
+
+    window.testStatus = function() {
+      const sec = section('Status & Mutation Tests');
+
+      // Test 1: Get status effects
+      const allStatus = GameDB.getAllStatusEffects();
+      sec.innerHTML += allStatus.length >= 10
+        ? `<p class="success">✅ Found ${allStatus.length} status effects</p>`
+        : `<p class="error">❌ Expected at least 10 status effects</p>`;
+
+      // Test 2: Get mutations
+      const allMutations = GameDB.getAllMutations();
+      sec.innerHTML += allMutations.length === 12
+        ? `<p class="success">✅ Found all 12 mutations</p>`
+        : `<p class="error">❌ Expected 12 mutations, found ${allMutations.length}</p>`;
+
+      // Test 3: Mutation thresholds
+      const shouldTransform = GameDB.shouldTransform(100);
+      const shouldntTransform = GameDB.shouldTransform(75);
+      sec.innerHTML += shouldTransform && !shouldntTransform
+        ? `<p class="success">✅ Transformation threshold works</p>`
+        : `<p class="error">❌ Transformation threshold failed</p>`;
+
+      // Test 4: Damage modifiers
+      const mods = GameDB.getMutationDamageModifiers(55);
+      sec.innerHTML += mods.dealt === 1.20 && mods.taken === 1.20
+        ? `<p class="success">✅ Mutation damage modifiers work</p>`
+        : `<p class="error">❌ Expected +20% at 55 mutation</p>`;
+
+      sec.innerHTML += `<h3>Tier 1 Mutations:</h3><pre>${JSON.stringify(GameDB.getMutationsByTier(1).map(m => ({
+        name: m.name,
+        benefit: m.benefit,
+        drawback: m.drawback
+      })), null, 2)}</pre>`;
+    };
+
+    window.testCrewSelection = function() {
+      const sec = section('Crew Selection Tests');
+
+      // Test 1: Initial draw
+      const initial = GameDB.initialCrewDraw();
+      sec.innerHTML += initial.length === 3
+        ? `<p class="success">✅ Initial draw returns 3 characters</p>`
+        : `<p class="error">❌ Initial draw should return 3</p>`;
+
+      // Test 2: Full reroll
+      const reroll = GameDB.fullReroll();
+      sec.innerHTML += reroll.length === 3
+        ? `<p class="success">✅ Full reroll returns 3 characters</p>`
+        : `<p class="error">❌ Full reroll should return 3</p>`;
+
+      // Test 3: Single swap
+      const swapped = GameDB.singleSwap(['iona', 'jonas']);
+      sec.innerHTML += swapped && !['iona', 'jonas'].includes(swapped.id)
+        ? `<p class="success">✅ Single swap returns new character</p>`
+        : `<p class="error">❌ Single swap failed</p>`;
+
+      // Test 4: Get Echoes
+      const echoes = GameDB.getEchoesFromSelection(['iona', 'jonas', 'maya']);
+      sec.innerHTML += echoes.length === 3
+        ? `<p class="success">✅ Echo generation returns 3 echoes</p>`
+        : `<p class="error">❌ Expected 3 echoes, got ${echoes.length}</p>`;
+
+      sec.innerHTML += `<h3>Initial Draw:</h3><pre>${JSON.stringify(initial.map(c => ({
+        id: c.id,
+        name: c.name,
+        role: c.specialization
+      })), null, 2)}</pre>`;
+
+      sec.innerHTML += `<h3>Echoes:</h3><pre>${JSON.stringify(echoes.map(e => ({
+        name: e.name,
+        lastWords: e.lastWords
+      })), null, 2)}</pre>`;
+    };
+
+    window.testCombat = function() {
+      const sec = section('Combat Utilities Tests');
+
+      // Test 1: Damage calculation
+      const damage = GameDB.calculateDamage({
+        baseDamage: 10,
+        characterModifier: 0.9,
+        isMarked: true,
+        targetDefense: 2,
+        mutationLevel: 0
+      });
+      sec.innerHTML += damage > 0
+        ? `<p class="success">✅ Damage calculation works (result: ${damage})</p>`
+        : `<p class="error">❌ Damage calculation failed</p>`;
+
+      // Test 2: Turn order
+      const entities = [
+        { id: 'player1', speed: 2, isPlayer: true },
+        { id: 'enemy1', speed: 3, isPlayer: false },
+        { id: 'player2', speed: 3, isPlayer: true }
+      ];
+      const sorted = GameDB.calculateTurnOrder(entities);
+      sec.innerHTML += sorted[0].id === 'player2' // Speed 3, player wins tie
+        ? `<p class="success">✅ Turn order calculation works</p>`
+        : `<p class="error">❌ Turn order calculation failed</p>`;
+
+      // Test 3: Critical roll
+      let critCount = 0;
+      for (let i = 0; i < 1000; i++) {
+        if (GameDB.rollCritical(0.05, 0)) critCount++;
+      }
+      const critPercent = (critCount / 1000 * 100).toFixed(1);
+      sec.innerHTML += critPercent >= 4 && critPercent <= 6
+        ? `<p class="success">✅ Crit rolls working (~${critPercent}% over 1000 rolls)</p>`
+        : `<p class="warning">⚠️  Crit rolls: ${critPercent}% (expected ~5%)</p>`;
+
+      sec.innerHTML += `<h3>Turn Order Result:</h3><pre>${JSON.stringify(sorted, null, 2)}</pre>`;
+    };
+
+    // Auto-run on load
+    log('Database loaded successfully. Click "Run All Tests" to begin.', 'success');
+    log('You can also access the database in the console via: <code>GameDB</code>', 'info');
+  </script>
+</body>
+</html>
