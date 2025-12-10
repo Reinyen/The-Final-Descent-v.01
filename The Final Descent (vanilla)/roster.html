@@ -585,31 +585,34 @@
     function positionCards() {
       const cards = Array.from(elements.cardsContainer.children);
 
-      // Living cards: top row (3 positions)
+      // Get star positions from canvas if available
+      const col = [0.30, 0.50, 0.70];
+
+      // Living cards: top row (centered over Living stars)
       const livingPositions = [
-        { x: 30, y: 35 },
-        { x: 50, y: 35 },
-        { x: 70, y: 35 },
+        { x: col[0] * 100, y: 35 },
+        { x: col[1] * 100, y: 35 },
+        { x: col[2] * 100, y: 35 },
       ];
 
-      // Fallen plaques: bottom row (3 positions)
+      // Fallen plaques: bottom row (centered over Fallen stars)
       const fallenPositions = [
-        { x: 30, y: 70 },
-        { x: 50, y: 70 },
-        { x: 70, y: 70 },
+        { x: col[0] * 100, y: 70 },
+        { x: col[1] * 100, y: 70 },
+        { x: col[2] * 100, y: 70 },
       ];
 
       cards.forEach((card, i) => {
         if (card.dataset.type === 'living') {
           const index = parseInt(card.dataset.index);
           const pos = livingPositions[index];
-          card.style.left = `calc(${pos.x}% - 130px)`;  // Center card (260px / 2)
+          card.style.left = `${pos.x}%`;
           card.style.top = `${pos.y}%`;
           card.style.transform = 'translate(-50%, -50%)';
         } else if (card.dataset.type === 'fallen') {
           const index = parseInt(card.dataset.index);
           const pos = fallenPositions[index];
-          card.style.left = `calc(${pos.x}% - 90px)`;  // Center plaque (180px / 2)
+          card.style.left = `${pos.x}%`;
           card.style.top = `${pos.y}%`;
           card.style.transform = 'translate(-50%, -50%)';
         }
@@ -809,7 +812,9 @@
         specialFlicker: 1050,
         burst: 400,
         arrange: 2800,
-        fallenMark: 800,        // NEW: Mark 3 as Fallen
+        syncPulse: 300,          // NEW: Synchronized pulse when settled
+        sweepWave: 400,          // NEW: Selection sweep wave
+        fallenMark: 900,         // NEW: Mark 3 as Fallen (stutter + cracks + dim)
         positioning: 1200,       // NEW: Living high, Fallen low
         morphToCards: 1400,      // NEW: Stars morph to cards
         uiFadeIn: 600,           // NEW: UI elements appear
@@ -1171,9 +1176,9 @@
         const tFlickerEnd = tTwinkleEnd + TIMINGS.specialFlicker;
         const tBurstEnd = tFlickerEnd + TIMINGS.burst;
         const tArrangeEnd = tBurstEnd + TIMINGS.arrange;
-
-        // NEW timeline phases
-        const tFallenMarkEnd = tArrangeEnd + TIMINGS.fallenMark;
+        const tSyncPulseEnd = tArrangeEnd + TIMINGS.syncPulse;
+        const tSweepEnd = tSyncPulseEnd + TIMINGS.sweepWave;
+        const tFallenMarkEnd = tSweepEnd + TIMINGS.fallenMark;
         const tPositioningEnd = tFallenMarkEnd + TIMINGS.positioning;
         const tMorphEnd = tPositioningEnd + TIMINGS.morphToCards;
         const tUIFadeEnd = tMorphEnd + TIMINGS.uiFadeIn;
@@ -1191,8 +1196,15 @@
         const arrangeEase = easeInOutCubic(arrangeMix);
 
         // NEW animation phases
-        const fallenMarkMix = prefersReduced ? 1 : clamp((t - tArrangeEnd) / TIMINGS.fallenMark, 0, 1);
+        const syncPulseMix = prefersReduced ? 1 : clamp((t - tArrangeEnd) / TIMINGS.syncPulse, 0, 1);
+        const sweepMix = prefersReduced ? 1 : clamp((t - tSyncPulseEnd) / TIMINGS.sweepWave, 0, 1);
+        const fallenMarkMix = prefersReduced ? 1 : clamp((t - tSweepEnd) / TIMINGS.fallenMark, 0, 1);
         const fallenMarkEase = easeOutCubic(fallenMarkMix);
+
+        // Synchronized pulse: all stars bloom at end of arrange
+        const pulseAmount = syncPulseMix < 0.5
+          ? easeOutCubic(syncPulseMix * 2) // bloom out
+          : easeInCubic((1 - syncPulseMix) * 2); // return to normal
 
         // Mark stars as Fallen during the fallenMark phase
         if (specialChosen && fallenMarkMix > 0 && fallenMarkMix < 1) {
@@ -1362,16 +1374,55 @@
           const energy = clamp((flickerEase * 0.95 + arrangeEase * 0.75) * energyOsc, 0, 1);
 
           const breathe = 1 + 0.03 * energy * Math.sin((now * 0.001) * 4.0 + s.twPh);
-          const rr = p.r * breathe;
+
+          // Synchronized pulse effect
+          const pulseMult = 1 + pulseAmount * 0.25; // 25% size increase during pulse
+          const pulseAlpha = 1 + pulseAmount * 0.4; // 40% brightness increase
+
+          // Selection sweep effect
+          const sweepProgress = sweepMix;
+          const starXNorm = (p.x / W); // normalized X position
+          const sweepAtStar = clamp((sweepProgress - starXNorm + 0.1) * 10, 0, 1); // wave hits this star
+          const sweepRimTighten = sweepAtStar > 0 && sweepAtStar < 1 ? Math.sin(sweepAtStar * Math.PI) * 0.3 : 0;
+
+          // Stutter effect for Fallen stars during marking
+          let stutterX = 0, stutterY = 0;
+          if (s.isFallen && fallenMarkMix < 0.4) {
+            const rand = mulberry32(s.seed + Math.floor(now / 50));
+            stutterX = (rand() - 0.5) * p.r * 0.15;
+            stutterY = (rand() - 0.5) * p.r * 0.15;
+          }
+
+          const rr = p.r * breathe * pulseMult;
+          const finalX = p.x + stutterX;
+          const finalY = p.y + stutterY;
+          const finalAlpha = baseA * pulseAlpha * (1 + sweepRimTighten);
 
           // Fade out stars as cards appear
           const starOpacity = 1 - morphMix * 0.7;
 
+          // Draw falling ash for Fallen stars during marking
+          if (s.isFallen && fallenMarkMix > 0.1 && fallenMarkMix < 0.6) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = (0.6 - fallenMarkMix) * 1.5;
+            const ashCount = 8;
+            const rand = mulberry32(s.seed);
+            for (let a = 0; a < ashCount; a++) {
+              const ashX = finalX + (rand() - 0.5) * p.r * 0.5;
+              const ashY = finalY + p.r * 0.5 + fallenMarkMix * p.r * 3;
+              const ashSize = rand() * 1.5 + 0.5;
+              ctx.fillStyle = `rgba(200, 180, 255, ${rand() * 0.4})`;
+              ctx.fillRect(ashX, ashY, ashSize, ashSize);
+            }
+            ctx.restore();
+          }
+
           ctx.globalAlpha = starOpacity;
-          drawSpecialStar(p.x, p.y, rr, baseA, energy, now, s.seed, s.isFallen, fallenMarkEase);
+          drawSpecialStar(finalX, finalY, rr, finalAlpha, energy, now, s.seed, s.isFallen, fallenMarkEase);
 
           ctx.globalCompositeOperation = 'lighter';
-          drawStarSprite(p.x, p.y, Math.max(1.6, rr * 0.22), clamp(0.55 + 0.45*energy, 0, 1) * starOpacity, 2);
+          drawStarSprite(finalX, finalY, Math.max(1.6, rr * 0.22), clamp(0.55 + 0.45*energy, 0, 1) * starOpacity, 2);
           ctx.globalCompositeOperation = 'source-over';
         }
 
