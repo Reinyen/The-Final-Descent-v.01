@@ -161,64 +161,64 @@ export class MapUIOverlay {
   }
 
   /**
-   * Draw detailed preview (when node is selected)
+   * Draw detailed preview (when node is selected) - 50% smaller
    */
   drawDetailedPreview() {
     const node = this.selectedNode;
 
     this.ctx.save();
 
-    // Center panel
-    const panelWidth = 400;
-    const panelHeight = 200;
+    // Center panel (50% smaller: 400→200, 200→100)
+    const panelWidth = 200;
+    const panelHeight = 100;
     const panelX = (this.canvas.width - panelWidth) / 2;
-    const panelY = this.canvas.height - panelHeight - 120;
+    const panelY = this.canvas.height - panelHeight - 140;
 
     // Background with glow
     this.ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
-    this.ctx.shadowBlur = 20;
+    this.ctx.shadowBlur = 15;
 
     this.ctx.fillStyle = 'rgba(10, 10, 16, 0.95)';
     this.ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
     this.ctx.lineWidth = 2;
 
-    this.roundRect(panelX, panelY, panelWidth, panelHeight, 12);
+    this.roundRect(panelX, panelY, panelWidth, panelHeight, 8);
     this.ctx.fill();
     this.ctx.stroke();
 
     this.ctx.shadowBlur = 0;
 
-    // Title
+    // Title (smaller font)
     this.ctx.fillStyle = '#FFD700';
-    this.ctx.font = 'bold 18px "Rajdhani", sans-serif';
+    this.ctx.font = 'bold 14px "Rajdhani", sans-serif';
     this.ctx.textAlign = 'center';
     this.ctx.fillText(
       this.getNodeTypeName(node.type).toUpperCase(),
       panelX + panelWidth / 2,
-      panelY + 25
+      panelY + 20
     );
 
-    // Description
+    // Description (smaller font, tighter wrap)
     this.ctx.fillStyle = '#ffffff';
-    this.ctx.font = '14px "Rajdhani", sans-serif';
+    this.ctx.font = '11px "Rajdhani", sans-serif';
     this.ctx.textAlign = 'center';
 
     const description = getNodeTypeDescription(node.type);
     this.wrapText(
       description,
       panelX + panelWidth / 2,
-      panelY + 60,
-      panelWidth - 60,
-      20
+      panelY + 40,
+      panelWidth - 40,
+      14
     );
 
-    // Node ID (debug)
+    // Node ID (debug) - smaller
     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    this.ctx.font = '11px "Rajdhani", sans-serif';
+    this.ctx.font = '9px "Rajdhani", sans-serif';
     this.ctx.fillText(
       `Node: ${node.id}`,
       panelX + panelWidth / 2,
-      panelY + panelHeight - 20
+      panelY + panelHeight - 12
     );
 
     this.ctx.restore();
