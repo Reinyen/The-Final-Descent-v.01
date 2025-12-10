@@ -263,45 +263,47 @@ export class MapController {
   }
 
   /**
-   * Reveal nodes connected to the given node
+   * Reveal nodes connected to the given node (Roguelike logic)
    */
   revealConnectedNodes(nodeId) {
-    const node = this.networkData.nodes.find(n => n.id === nodeId);
-    if (!node) return;
+    const currentNode = this.networkData.nodes.find(n => n.id === nodeId);
+    if (!currentNode) return;
 
-    console.log(`[MapController] Revealing connections from ${nodeId}:`, node.connections);
+    console.log(`[MapController] Revealing connections from ${nodeId}:`, currentNode.connections);
 
-    // Reveal connected nodes
-    node.connections.forEach(connectedId => {
-      const connectedNode = this.networkData.nodes.find(n => n.id === connectedId);
-
-      if (connectedNode && !connectedNode.revealed) {
-        connectedNode.revealed = true;
-
-        // Set state based on current situation
-        if (connectedNode.state === NodeStates.HIDDEN) {
-          connectedNode.state = NodeStates.AVAILABLE;
-        }
-
-        console.log(`  - Revealed ${connectedId} (${connectedNode.type})`);
-      }
-
-      // Reveal connection
-      const connection = this.networkData.connections.find(c =>
-        (c.from === nodeId && c.to === connectedId) ||
-        (c.to === nodeId && c.from === connectedId)
-      );
-
-      if (connection) {
-        connection.revealed = true;
+    // First, mark ALL previously available nodes as LOCKED (no backtracking)
+    this.networkData.nodes.forEach(n => {
+      if (n.state === NodeStates.AVAILABLE && n.id !== currentNode.id) {
+        n.state = NodeStates.LOCKED;
+        console.log(`  - Locked ${n.id} (no backtracking)`);
       }
     });
 
-    // Mark non-connected available nodes as locked
-    this.networkData.nodes.forEach(n => {
-      if (n.state === NodeStates.AVAILABLE && !node.connections.includes(n.id)) {
-        if (n.id !== this.currentNodeId) {
-          n.state = NodeStates.LOCKED;
+    // Now reveal and make AVAILABLE only the direct neighbors of current node
+    currentNode.connections.forEach(connectedId => {
+      const connectedNode = this.networkData.nodes.find(n => n.id === connectedId);
+
+      if (connectedNode) {
+        // Reveal the node if not already revealed
+        if (!connectedNode.revealed) {
+          connectedNode.revealed = true;
+          console.log(`  - Revealed ${connectedId} (${connectedNode.type})`);
+        }
+
+        // Make AVAILABLE if not already completed or current
+        if (connectedNode.state !== NodeStates.COMPLETED && connectedNode.state !== NodeStates.CURRENT) {
+          connectedNode.state = NodeStates.AVAILABLE;
+          console.log(`  - Made ${connectedId} AVAILABLE`);
+        }
+
+        // Reveal connection
+        const connection = this.networkData.connections.find(c =>
+          (c.from === nodeId && c.to === connectedId) ||
+          (c.to === nodeId && c.from === connectedId)
+        );
+
+        if (connection) {
+          connection.revealed = true;
         }
       }
     });
@@ -324,26 +326,25 @@ export class MapController {
 
     console.log(`[MapController] Progress: ${visitedCount}/${totalNodes} (required: ${requiredCount})`);
 
-    // Unlock exit if requirements met
+    // Unlock exit if requirements met (just change state, don't teleport)
     if (visitedCount >= requiredCount && exitNode) {
-      if (exitNode.state !== NodeStates.AVAILABLE && exitNode.state !== NodeStates.CURRENT) {
-        console.log('[MapController] Exit node unlocked!');
+      if (exitNode.state === NodeStates.LOCKED || exitNode.state === NodeStates.HIDDEN) {
+        console.log('[MapController] 60% completion reached! Exit node unlocked!');
 
-        // Make exit available from current node
-        const currentNode = this.networkData.nodes.find(n => n.id === this.currentNodeId);
-        if (currentNode && !currentNode.connections.includes(exitNode.id)) {
-          currentNode.connections.push(exitNode.id);
-          exitNode.connections.push(currentNode.id);
-
-          this.networkData.connections.push({
-            from: currentNode.id,
-            to: exitNode.id,
-            revealed: true
-          });
-        }
-
+        // Just change the exit state - it's already in the network with real connections
         exitNode.state = NodeStates.AVAILABLE;
         exitNode.revealed = true;
+
+        // Reveal connections to the exit node
+        exitNode.connections.forEach(connectedId => {
+          const connection = this.networkData.connections.find(c =>
+            (c.from === exitNode.id && c.to === connectedId) ||
+            (c.to === exitNode.id && c.from === connectedId)
+          );
+          if (connection) {
+            connection.revealed = true;
+          }
+        });
 
         this.renderer.updateNetwork(this.networkData);
       }
