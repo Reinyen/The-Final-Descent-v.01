@@ -39,6 +39,15 @@
       position:absolute; inset:0;
       width:100%; height:100%;
       display:block;
+      z-index: 1;
+    }
+
+    #orbs-overlay{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      display:block;
+      pointer-events:none;
+      z-index: 2;
     }
 
     /* Character cards (Living - large) */
@@ -417,6 +426,7 @@
   <div id="app">
     <section id="roster">
       <canvas id="space" aria-hidden="true"></canvas>
+      <canvas id="orbs-overlay" aria-hidden="true"></canvas>
 
       <!-- Title Panel -->
       <div id="titlePanel" class="title-panel">
@@ -1039,9 +1049,13 @@
       let uniforms, texture;
       let threeInitialized = false;
 
-      // Canvas for overlay orbs
+      // Canvas for Three.js WebGL background
       const canvas = document.getElementById('space');
-      const ctx = canvas.getContext('2d', { alpha: true });
+
+      // Separate canvas for 2D orb overlay
+      const orbCanvas = document.getElementById('orbs-overlay');
+      const ctx = orbCanvas.getContext('2d', { alpha: true });
+
       const blackout = document.getElementById('blackout');
       const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -1228,18 +1242,19 @@
       }
 
       function onWindowResize() {
-        if (!renderer) return;
-
         W = window.innerWidth;
         H = window.innerHeight;
 
-        renderer.setSize(W, H);
-        uniforms.u_resolution.value.x = renderer.domElement.width;
-        uniforms.u_resolution.value.y = renderer.domElement.height;
+        // Resize Three.js renderer
+        if (renderer) {
+          renderer.setSize(W, H);
+          uniforms.u_resolution.value.x = renderer.domElement.width;
+          uniforms.u_resolution.value.y = renderer.domElement.height;
+        }
 
-        // Also update canvas overlay size
-        canvas.width = W;
-        canvas.height = H;
+        // Also update orbs overlay canvas size
+        orbCanvas.width = W;
+        orbCanvas.height = H;
       }
 
       // ========================================================================
@@ -1669,6 +1684,9 @@
           startRosterSlice();
         }
       });
+
+      // Initialize canvas sizes first
+      onWindowResize();
 
       // Initialize Three.js and start animation
       initThreeJS();
