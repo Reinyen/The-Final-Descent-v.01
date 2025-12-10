@@ -72,7 +72,8 @@ export class MapController {
 
     this.renderer.loadNetwork(this.networkData);
 
-    console.log('[MapController] Ring loaded:', this.networkData);
+    console.log('[MapController] Ring loaded with', this.networkData.nodes.length, 'nodes');
+    console.log('[MapController] Network will remain static throughout ring exploration');
   }
 
   /**

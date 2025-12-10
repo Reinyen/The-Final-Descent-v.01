@@ -89,20 +89,8 @@ const nodeShaderCode = {
       vNodeType = nodeType;
       vPosition = position;
 
+      // Use original position without displacement to keep network stable
       vec3 pos = position;
-
-      // Crackling displacement for CURRENT (0) and AVAILABLE (1) nodes
-      if (nodeState < 1.5) {
-        float noise = snoise(position * 2.0 + uTime * 2.0);
-        float crackle = snoise(position * 8.0 + uTime * 8.0) * 0.5;
-        pos += normal * (noise * 0.15 + crackle * 0.08);
-      }
-
-      // Glass refraction for COMPLETED (4) nodes
-      if (nodeState > 3.5) {
-        float noise = snoise(position * 1.5 + uTime * 0.5);
-        pos += normal * noise * 0.05;
-      }
 
       vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
       vDistanceToCamera = -mvPosition.z;
