@@ -454,6 +454,171 @@
     </section>
   </div>
 
+  <!-- Three.js Library -->
+  <script src="./lib/three.min.js"></script>
+
+  <!-- Vertex Shader -->
+  <script id="vertexShader" type="x-shader/x-vertex">
+    void main() {
+        gl_Position = vec4( position, 1.0 );
+    }
+  </script>
+
+  <!-- Fragment Shader -->
+  <script id="fragmentShader" type="x-shader/x-fragment">
+    uniform vec2 u_resolution;
+    uniform vec2 u_mouse;
+    uniform float u_time;
+    uniform sampler2D u_noise;
+
+    #define PI 3.141592653589793
+    #define TAU 6.
+
+    const float multiplier = 15.5;
+
+    const float zoomSpeed = 10.;
+    const int layers = 10;
+
+    const int octaves = 5;
+
+    vec2 hash2(vec2 p)
+    {
+      vec2 o = texture2D( u_noise, (p+0.5)/256.0, -100.0 ).xy;
+      return o;
+    }
+
+    mat2 rotate2d(float _angle){
+        return mat2(cos(_angle),sin(_angle),
+                    -sin(_angle),cos(_angle));
+    }
+
+    vec3 hsb2rgb( in vec3 c ){
+      vec3 rgb = clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),
+                               6.0)-3.0)-1.0,
+                       0.0,
+                       1.0 );
+      rgb = rgb*rgb*(3.0-2.0*rgb);
+      return c.z * mix( vec3(1.0), rgb, c.y);
+    }
+
+    float hash(vec2 p)
+    {
+      float o = texture2D( u_noise, (p+0.5)/256.0, -100.0 ).x;
+      return o;
+    }
+    float noise(vec2 uv) {
+      vec2 id = floor(uv);
+      vec2 subuv = fract(uv);
+      vec2 u = subuv * subuv * (3. - 2. * subuv);
+      float a = hash(id);
+      float b = hash(id + vec2(1., 0.));
+      float c = hash(id + vec2(0., 1.));
+      float d = hash(id + vec2(1., 1.));
+      return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    }
+    float fbm(in vec2 uv) {
+      float s = .0;
+      float m = .0;
+      float a = .5;
+      for(int i = 0; i < octaves; i++) {
+        s += a * noise(uv);
+        m += a;
+        a *= .5;
+        uv *= 2.;
+      }
+      return s / m;
+    }
+
+    vec3 domain(vec2 z){
+      return vec3(hsb2rgb(vec3(atan(z.y,z.x)/TAU,1.,1.)));
+    }
+    vec3 colour(vec2 z) {
+        return domain(z);
+    }
+
+    // The render function is where we render the pattern to be added to the layer
+    vec3 render(vec2 uv, float scale, vec3 colour) {
+      vec2 id = floor(uv);
+      vec2 subuv = fract(uv);
+      vec2 rand = hash2(id);
+      float bokeh = abs(scale) * 1.;
+
+      float particle = 0.;
+
+      if(length(rand) > 1.3) {
+        vec2 pos = subuv-.5;
+        float field = length(pos);
+        particle = smoothstep(.3, 0., field);
+        particle += smoothstep(.4 * bokeh, 0.34 * bokeh, field);
+      }
+      return vec3(particle*2.);
+    }
+
+    vec3 renderLayer(int layer, int layers, vec2 uv, inout float opacity, vec3 colour, float n) {
+      vec2 _uv = uv;
+      // Scale
+      // Generating a scale value between zero and 1 based on a mod of u_time
+      // A frequency of 10 dixided by the layer index (10 / layers * layer)
+      float scale = mod((u_time + zoomSpeed / float(layers) * float(layer)) / zoomSpeed, -1.);
+      uv *= 20.; // The initial scale. Increasing this makes the cells smaller and the "speed" apepar faster
+      uv *= scale*scale; // then modifying the overall scale by the generated amount
+      // uv *= 1. + ( ( n*.5 ) * ( length(_uv) ) );
+      // uv += .5*float(layer);
+      uv = rotate2d(u_time / 10.) * uv; // rotarting
+      uv += vec2(25. + sin(u_time*.1)) * float(layer); // ofsetting the UV by an arbitrary amount to make the layer appear different
+
+      // render
+      vec3 pass = render(uv * multiplier, scale, colour) * .2; // render the pass
+
+       // this is the opacity of the layer fading in from the "bottom"
+      opacity = 1. + scale;
+      float _opacity = opacity;
+
+      // pass += n * .5 * mix(vec3(0., .5, 1.5), vec3(1., .5, 0.), opacity);
+
+      // This is the opacity of the layer fading out at the top (we want this minimal, hence the smoothstep)
+      float endOpacity = smoothstep(0., 0.4, scale * -1.);
+      opacity += endOpacity;
+
+      return pass * _opacity * endOpacity;
+    }
+
+    void main() {
+        vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy);
+
+        if(u_resolution.y < u_resolution.x) {
+          uv /= u_resolution.y;
+        } else {
+          uv /= u_resolution.x;
+        }
+
+        // uv.y += cos(u_time * .1) * .5;
+        // uv.x += sin(u_time * .1) * .5;
+
+        // float n = fbm(uv * 3. - 2.);
+        float n = fbm((uv + vec2(sin(u_time*.1), u_time*.1)) * 2. - 2.);
+
+        vec3 colour = vec3(0.);
+        // Modified color scheme: Teal (brighter) to Purple (darker)
+        // Teal: rgb(0, 128, 128) = hsl(180, 100%, 25%) ~ vec3(0., 0.5, 0.5)
+        // Purple: rgb(128, 0, 128) = hsl(300, 100%, 25%) ~ vec3(0.5, 0., 0.5)
+        // Original was: colour = n * mix(vec3(0., .5, 1.5)*-1.5, clamp(vec3(1., .5, .25)*2., 0., 1.), n);
+        colour = n * mix(vec3(0.5, 0.1, 0.6)*1.5, clamp(vec3(0., 0.6, 0.6)*2., 0., 1.), n);
+
+        float opacity = 1.;
+        float opacity_sum = 1.;
+
+        for(int i = 1; i <= layers; i++) {
+          colour -= renderLayer(i, layers, uv, opacity, colour, n);
+          opacity_sum += opacity;
+        }
+
+        colour /= opacity_sum;
+
+        gl_FragColor = vec4(clamp(colour * 20., 0., 1.),1.0);
+    }
+  </script>
+
   <script type="module">
     import { GameDB } from './data/database.js';
 
@@ -861,24 +1026,33 @@
     window.updateSelectionUI = updateSelectionUI;
   </script>
 
-  <!-- Starfield & Animation -->
+  <!-- Three.js Background & Orb Animation -->
   <script>
     (function(){
       "use strict";
 
+      // ========================================================================
+      // THREE.JS SHADER SETUP
+      // ========================================================================
+
+      let container, camera, scene, renderer;
+      let uniforms, texture;
+      let threeInitialized = false;
+
+      // Canvas for overlay orbs
       const canvas = document.getElementById('space');
-      const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+      const ctx = canvas.getContext('2d', { alpha: true });
       const blackout = document.getElementById('blackout');
       const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-      let stars = [];
-      let sprites = [];
       let rafId = null;
       let startTime = 0;
-      let specialIdx = [];
-      let specialChosen = false;
+      let W = 0, H = 0;
+
+      // Fake orb system (6 black orbs that will burst to golden)
+      let fakeOrbs = [];
+      let orbsChosen = false;
       let burstTriggered = false;
-      let W = 0, H = 0, DPR = 1;
 
       // Particle systems for bursts
       let particleSystems = [];
@@ -889,18 +1063,19 @@
       const TIMINGS = {
         blackHold: 875,
         bgFade: 525,
-        twinkleRamp: 1750,
-        specialFlicker: 1050,
-        burst: 400,
-        arrange: 2800,
-        syncPulse: 300,          // NEW: Synchronized pulse when settled
-        sweepWave: 400,          // NEW: Selection sweep wave
-        fallenMark: 900,         // NEW: Mark 3 as Fallen (stutter + cracks + dim)
-        positioning: 1200,       // NEW: Living high, Fallen low
-        morphToCards: 1400,      // NEW: Stars morph to cards
-        uiFadeIn: 600,           // NEW: UI elements appear
+        orbsAppear: 1750,        // Black orbs become visible
+        orbsFlicker: 1050,       // Orbs start to flicker
+        burst: 400,              // Golden burst from orbs
+        arrange: 2800,           // Arrange in 2x3 grid
+        syncPulse: 300,          // Synchronized pulse
+        sweepWave: 400,          // Selection sweep wave
+        fallenMark: 900,         // Mark 3 as Fallen
+        positioning: 1200,       // Living high, Fallen low
+        morphToCards: 1400,      // Orbs morph to cards
+        uiFadeIn: 600,           // UI elements appear
       };
 
+      // Utility functions
       function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
       function lerp(a,b,t){ return a + (b-a)*t; }
       function easeInOutCubic(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2; }
@@ -918,7 +1093,10 @@
         };
       }
 
-      // ---- Particle burst system ----
+      // ========================================================================
+      // PARTICLE BURST SYSTEM
+      // ========================================================================
+
       const PARTICLE_OPTS = {
         particles: 50,
         baseSize: 1.5,
@@ -992,198 +1170,123 @@
         }
       }
 
-      function updateAndDrawParticles(specialPositions, intensity){
-        if(particleSystems.length === 0) return;
+      // ========================================================================
+      // THREE.JS INITIALIZATION
+      // ========================================================================
 
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
+      function initThreeJS() {
+        if (threeInitialized) return;
 
-        for(let i = 0; i < Math.min(specialPositions.length, particleSystems.length); i++){
-          const pos = specialPositions[i];
-          if(!pos) continue;
+        const loader = new THREE.TextureLoader();
+        loader.load(
+          './assets/textures/noise.png',
+          function(tex) {
+            texture = tex;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.minFilter = THREE.LinearFilter;
 
-          const system = particleSystems[i];
-
-          for(let j = 0; j < system.particles.length; j++){
-            const p = system.particles[j];
-            if(p.dead) continue;
-
-            p.cx = pos.x;
-            p.cy = pos.y;
-
-            p.step();
-
-            const alpha = p.alpha * intensity;
-            if(alpha > 0.01){
-              ctx.strokeStyle = `hsla(45, 100%, 60%, ${alpha})`;
-              ctx.lineWidth = p.currentSize;
-              ctx.beginPath();
-              ctx.moveTo(p.cx + p.px, p.cy + p.py);
-              ctx.lineTo(p.cx + p.currentX, p.cy + p.currentY);
-              ctx.stroke();
-            }
-
-            p.px = p.currentX;
-            p.py = p.currentY;
+            setupThreeScene();
+            threeInitialized = true;
+          },
+          undefined,
+          function(err) {
+            console.error('Failed to load noise texture:', err);
           }
-        }
-
-        ctx.restore();
+        );
       }
 
-      function resize(){
-        const rect = canvas.getBoundingClientRect();
-        DPR = clamp(window.devicePixelRatio || 1, 1, 2);
-        W = Math.max(1, Math.floor(rect.width));
-        H = Math.max(1, Math.floor(rect.height));
-        canvas.width = Math.floor(W * DPR);
-        canvas.height = Math.floor(H * DPR);
-        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      function setupThreeScene() {
+        camera = new THREE.Camera();
+        camera.position.z = 1;
+
+        scene = new THREE.Scene();
+
+        const geometry = new THREE.PlaneBufferGeometry(2, 2);
+
+        uniforms = {
+          u_time: { type: "f", value: -10000 },
+          u_resolution: { type: "v2", value: new THREE.Vector2() },
+          u_noise: { type: "t", value: texture },
+          u_mouse: { type: "v2", value: new THREE.Vector2() }
+        };
+
+        const material = new THREE.ShaderMaterial({
+          uniforms: uniforms,
+          vertexShader: document.getElementById('vertexShader').textContent,
+          fragmentShader: document.getElementById('fragmentShader').textContent
+        });
+        material.extensions.derivatives = true;
+
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: false });
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        onWindowResize();
       }
 
-      function makeStarSprite(baseR){
-        const pad = Math.ceil(baseR * 6);
-        const size = pad * 2;
-        const c = document.createElement('canvas');
-        c.width = size;
-        c.height = size;
-        const g = c.getContext('2d');
-        const cx = pad, cy = pad;
+      function onWindowResize() {
+        if (!renderer) return;
 
-        let grd = g.createRadialGradient(cx, cy, 0, cx, cy, pad);
-        grd.addColorStop(0.00, 'rgba(255,255,255,0.80)');
-        grd.addColorStop(0.12, 'rgba(255,255,255,0.55)');
-        grd.addColorStop(0.32, 'rgba(200,220,255,0.20)');
-        grd.addColorStop(1.00, 'rgba(0,0,0,0.0)');
-        g.fillStyle = grd;
-        g.fillRect(0,0,size,size);
+        W = window.innerWidth;
+        H = window.innerHeight;
 
-        grd = g.createRadialGradient(cx, cy, 0, cx, cy, baseR * 1.6);
-        grd.addColorStop(0.00, 'rgba(255,255,255,1.00)');
-        grd.addColorStop(0.50, 'rgba(255,255,255,0.75)');
-        grd.addColorStop(1.00, 'rgba(255,255,255,0.00)');
-        g.fillStyle = grd;
-        g.beginPath();
-        g.arc(cx, cy, baseR * 1.6, 0, Math.PI*2);
-        g.fill();
+        renderer.setSize(W, H);
+        uniforms.u_resolution.value.x = renderer.domElement.width;
+        uniforms.u_resolution.value.y = renderer.domElement.height;
 
-        return { canvas:c, baseR, size };
+        // Also update canvas overlay size
+        canvas.width = W;
+        canvas.height = H;
       }
 
-      function buildSprites(){
-        sprites = [
-          makeStarSprite(0.55),
-          makeStarSprite(0.85),
-          makeStarSprite(1.20),
-          makeStarSprite(1.70),
-        ];
-      }
+      // ========================================================================
+      // FAKE ORBS SYSTEM
+      // ========================================================================
 
-      function pickSpriteIdx(r){
-        if (r < 0.7) return 0;
-        if (r < 1.0) return 1;
-        if (r < 1.4) return 2;
-        return 3;
-      }
+      function chooseFakeOrbs() {
+        if (orbsChosen) return;
+        orbsChosen = true;
 
-      function buildStars(count){
-        stars = new Array(count);
-        for (let i=0; i<count; i++){
-          const nx = Math.random();
-          const ny = Math.pow(Math.random(), 0.78);
+        fakeOrbs = [];
 
-          const u = Math.random();
-          const r = (u < 0.86) ? lerp(0.35, 0.95, Math.random()) :
-                    (u < 0.98) ? lerp(0.95, 1.55, Math.random()) :
-                                 lerp(1.55, 2.25, Math.random());
-
-          const a = clamp(lerp(0.10, 0.95, Math.pow(Math.random(), 0.58)), 0.06, 0.98);
-
-          const twAmp = lerp(0.08, 0.38, Math.random());
-          const twSpd = lerp(0.35, 1.85, Math.random());
-          const twPh = Math.random() * Math.PI * 2;
-          const seed = (Math.random() * 1e9) | 0;
-          const spriteIdx = pickSpriteIdx(r);
-
-          stars[i] = { nx, ny, r, a, twAmp, twSpd, twPh, seed, spriteIdx };
-        }
-      }
-
-      function chooseSpecialStars(){
-        if (specialChosen) return;
-        specialChosen = true;
-
-        const picks = new Set();
-        while (picks.size < 6) picks.add((Math.random() * stars.length) | 0);
-        specialIdx = Array.from(picks);
-
-        for (let k=0; k<specialIdx.length; k++){
-          const s = stars[specialIdx[k]];
-          s.special = true;
-          s.sx0 = s.nx;
-          s.sy0 = s.ny;
-          // Don't mark as Fallen yet - all stars start identical
-          s.isFallen = false;
-          s.fallenIndex = k; // Store which ones will become Fallen later
+        // Create 6 orbs at random positions
+        for (let i = 0; i < 6; i++) {
+          const orb = {
+            nx: 0.2 + Math.random() * 0.6,  // Random X position (20%-80%)
+            ny: 0.3 + Math.random() * 0.4,  // Random Y position (30%-70%)
+            isFallen: i >= 3,  // Last 3 are Fallen
+            fallenIndex: i,
+            seed: (Math.random() * 1e9) | 0
+          };
+          fakeOrbs.push(orb);
         }
 
         initParticleSystems();
       }
 
-      function computeTargets(){
+      function computeTargets() {
         const col = [0.30, 0.50, 0.70];
         const rowLiving = 0.42;
         const rowFallen = 0.63;
         const targets = [];
 
         // First 3: Living (top row)
-        for (let c=0; c<3; c++){
+        for (let c = 0; c < 3; c++) {
           targets.push({ nx: col[c], ny: rowLiving, isFallen: false });
         }
 
         // Last 3: Fallen (bottom row)
-        for (let c=0; c<3; c++){
+        for (let c = 0; c < 3; c++) {
           targets.push({ nx: col[c], ny: rowFallen, isFallen: true });
         }
 
         return targets;
       }
 
-      function drawBackground(bgOpacity){
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0,0,W,H);
-
-        if (bgOpacity <= 0) return;
-
-        const gx = W * 0.5;
-        const gy = H * 1.06;
-        const radius = Math.max(W, H) * 1.05;
-        const grd = ctx.createRadialGradient(gx, gy, 0, gx, gy, radius);
-        grd.addColorStop(0.00, `rgba(170, 90, 255, ${0.55 * bgOpacity})`);
-        grd.addColorStop(0.18, `rgba(120, 40, 235, ${0.30 * bgOpacity})`);
-        grd.addColorStop(0.42, `rgba(60, 10, 130, ${0.16 * bgOpacity})`);
-        grd.addColorStop(0.72, `rgba(10, 8, 20, ${0.08 * bgOpacity})`);
-        grd.addColorStop(1.00, `rgba(0, 0, 0, 0)`);
-        ctx.fillStyle = grd;
-        ctx.fillRect(0,0,W,H);
-
-        const v = ctx.createLinearGradient(0,0,0,H);
-        v.addColorStop(0.0, `rgba(0,0,0,${0.75 * (1-bgOpacity)})`);
-        v.addColorStop(0.35, 'rgba(0,0,0,0)');
-        v.addColorStop(1.0, `rgba(0,0,0,0)`);
-        ctx.fillStyle = v;
-        ctx.fillRect(0,0,W,H);
-      }
-
-      function drawStarSprite(x, y, r, alpha, spriteIdx){
-        const spr = sprites[spriteIdx];
-        const scale = r / spr.baseR;
-        const size = spr.size * scale;
-        ctx.globalAlpha = alpha;
-        ctx.drawImage(spr.canvas, x - size/2, y - size/2, size, size);
-      }
-
-      function drawSpecialStar(x, y, r, alpha, energy, tNow, seed, isFallen, fallenMix){
+      function drawOrbOnCanvas(x, y, r, alpha, energy, isFallen, fallenMix, seed) {
         ctx.save();
         ctx.globalAlpha = 1;
 
@@ -1248,13 +1351,67 @@
         ctx.restore();
       }
 
-      function frame(now){
+      function drawParticles(orbPositions, intensity) {
+        if (particleSystems.length === 0) return;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+
+        for (let i = 0; i < Math.min(orbPositions.length, particleSystems.length); i++) {
+          const pos = orbPositions[i];
+          if (!pos) continue;
+
+          const system = particleSystems[i];
+
+          for (let j = 0; j < system.particles.length; j++) {
+            const p = system.particles[j];
+            if (p.dead) continue;
+
+            p.cx = pos.x;
+            p.cy = pos.y;
+
+            p.step();
+
+            const alpha = p.alpha * intensity;
+            if (alpha > 0.01) {
+              ctx.strokeStyle = `hsla(45, 100%, 60%, ${alpha})`;
+              ctx.lineWidth = p.currentSize;
+              ctx.beginPath();
+              ctx.moveTo(p.cx + p.px, p.cy + p.py);
+              ctx.lineTo(p.cx + p.currentX, p.cy + p.currentY);
+              ctx.stroke();
+            }
+
+            p.px = p.currentX;
+            p.py = p.currentY;
+          }
+        }
+
+        ctx.restore();
+      }
+
+      // ========================================================================
+      // ANIMATION LOOP
+      // ========================================================================
+
+      function frame(now) {
         const t = now - startTime;
 
+        // Update Three.js shader time
+        if (uniforms) {
+          uniforms.u_time.value = -10000 + now * 0.0005;
+        }
+
+        // Render Three.js background
+        if (renderer && scene && camera) {
+          renderer.render(scene, camera);
+        }
+
+        // Animation timing calculations
         const tBlackEnd = TIMINGS.blackHold;
         const tBgEnd = tBlackEnd + TIMINGS.bgFade;
-        const tTwinkleEnd = tBgEnd + TIMINGS.twinkleRamp;
-        const tFlickerEnd = tTwinkleEnd + TIMINGS.specialFlicker;
+        const tOrbsEnd = tBgEnd + TIMINGS.orbsAppear;
+        const tFlickerEnd = tOrbsEnd + TIMINGS.orbsFlicker;
         const tBurstEnd = tFlickerEnd + TIMINGS.burst;
         const tArrangeEnd = tBurstEnd + TIMINGS.arrange;
         const tSyncPulseEnd = tArrangeEnd + TIMINGS.syncPulse;
@@ -1264,38 +1421,25 @@
         const tMorphEnd = tPositioningEnd + TIMINGS.morphToCards;
         const tUIFadeEnd = tMorphEnd + TIMINGS.uiFadeIn;
 
-        const bgOpacity = prefersReduced ? 1 : clamp((t - tBlackEnd) / TIMINGS.bgFade, 0, 1);
-        const twinkleMix = prefersReduced ? 1 : clamp((t - tBgEnd) / TIMINGS.twinkleRamp, 0, 1);
+        const orbsMix = prefersReduced ? 1 : clamp((t - tBgEnd) / TIMINGS.orbsAppear, 0, 1);
 
-        if (!specialChosen && (prefersReduced || t >= tTwinkleEnd)) chooseSpecialStars();
+        if (!orbsChosen && (prefersReduced || t >= tOrbsEnd)) chooseFakeOrbs();
 
-        const flickerMix = prefersReduced ? 1 : clamp((t - tTwinkleEnd) / TIMINGS.specialFlicker, 0, 1);
+        const flickerMix = prefersReduced ? 1 : clamp((t - tOrbsEnd) / TIMINGS.orbsFlicker, 0, 1);
         const flickerEase = easeOutCubic(flickerMix);
 
         const burstMix = prefersReduced ? 1 : clamp((t - tFlickerEnd) / TIMINGS.burst, 0, 1);
         const arrangeMix = prefersReduced ? 1 : clamp((t - tBurstEnd) / TIMINGS.arrange, 0, 1);
         const arrangeEase = easeInOutCubic(arrangeMix);
 
-        // NEW animation phases
         const syncPulseMix = prefersReduced ? 1 : clamp((t - tArrangeEnd) / TIMINGS.syncPulse, 0, 1);
         const sweepMix = prefersReduced ? 1 : clamp((t - tSyncPulseEnd) / TIMINGS.sweepWave, 0, 1);
         const fallenMarkMix = prefersReduced ? 1 : clamp((t - tSweepEnd) / TIMINGS.fallenMark, 0, 1);
         const fallenMarkEase = easeOutCubic(fallenMarkMix);
 
-        // Synchronized pulse: all stars bloom at end of arrange
         const pulseAmount = syncPulseMix < 0.5
-          ? easeOutCubic(syncPulseMix * 2) // bloom out
-          : easeInCubic((1 - syncPulseMix) * 2); // return to normal
-
-        // Mark stars as Fallen during the fallenMark phase
-        if (specialChosen && fallenMarkMix > 0 && fallenMarkMix < 1) {
-          for (let k=0; k<specialIdx.length; k++){
-            const s = stars[specialIdx[k]];
-            if (s.fallenIndex >= 3 && !s.isFallen) {
-              s.isFallen = true; // Transition starts
-            }
-          }
-        }
+          ? easeOutCubic(syncPulseMix * 2)
+          : easeInCubic((1 - syncPulseMix) * 2);
 
         const positioningMix = prefersReduced ? 1 : clamp((t - tFallenMarkEnd) / TIMINGS.positioning, 0, 1);
         const positioningEase = easeInOutCubic(positioningMix);
@@ -1330,55 +1474,42 @@
           window.rosterState.animationComplete = true;
         }
 
-        drawBackground(bgOpacity);
+        // Clear canvas overlay for orbs
+        ctx.clearRect(0, 0, W, H);
+
+        if (!orbsChosen) {
+          rafId = requestAnimationFrame(frame);
+          return;
+        }
 
         const minDim = Math.min(W, H);
-        const specialTargetR = minDim * 0.04;
+        const orbTargetR = minDim * 0.04;
         const targets = computeTargets();
 
-        // Compute special star positions with new positioning phase
-        const specialPos = new Map();
-        for (let i=0; i<specialIdx.length; i++){
-          const s = stars[specialIdx[i]];
-          // Determine which target based on fallenIndex
-          const targetIndex = s.fallenIndex;
-          const target = targets[targetIndex];
-          const ox = s.nx * W;
-          const oy = s.ny * H;
+        // Compute orb positions
+        const orbPositions = [];
+        for (let i = 0; i < fakeOrbs.length; i++) {
+          const orb = fakeOrbs[i];
+          const target = targets[orb.fallenIndex];
+          const ox = orb.nx * W;
+          const oy = orb.ny * H;
 
-          // Arrange phase: all 6 move to 2x3 grid (top 3 at row 0.42, bottom 3 at row 0.63)
-          // This creates "two neat rows of three" while all still golden
-          const arrangeTargetY = (s.fallenIndex < 3) ? 0.42 : 0.63;
+          const arrangeTargetY = (orb.fallenIndex < 3) ? 0.42 : 0.63;
           const arrangedX = lerp(ox, target.nx * W, arrangeEase);
           const arrangedY = lerp(oy, arrangeTargetY * H, arrangeEase);
 
-          // Positioning phase: Living move to top row, Fallen move to bottom row
-          // (This rearranges them so Living=top, Fallen=bottom regardless of initial position)
-          const finalTargetY = s.isFallen ? 0.70 : 0.35;
+          const finalTargetY = orb.isFallen ? 0.70 : 0.35;
           const finalY = lerp(arrangedY, finalTargetY * H, positioningEase);
 
           const x = arrangedX;
           const y = finalY;
-          const r = lerp(s.r, specialTargetR, arrangeEase);
+          const r = lerp(minDim * 0.02, orbTargetR, arrangeEase);
 
-          specialPos.set(specialIdx[i], { x, y, r, ox, oy, tx: target.nx * W, ty: target.ny * H });
-        }
-
-        // Draw far stars
-        ctx.globalCompositeOperation = 'source-over';
-        for (let i=0; i<stars.length; i++){
-          const s = stars[i];
-          if (s.special) continue;
-          const x = s.nx * W;
-          const y = s.ny * H;
-          const tw = Math.sin(s.twPh + (now * 0.001) * s.twSpd * 2.0);
-          const a = clamp(s.a * (1 + twinkleMix * s.twAmp * tw), 0.02, 1);
-          const r = s.r * (1 + twinkleMix * 0.08 * tw);
-          drawStarSprite(x, y, r, a, s.spriteIdx);
+          orbPositions.push({ x, y, r, orb });
         }
 
         // Draw particle bursts during burst phase
-        if (specialChosen && t >= tFlickerEnd && t < tBurstEnd) {
+        if (t >= tFlickerEnd && t < tBurstEnd) {
           if (!burstTriggered) {
             burstTriggered = true;
             for (let i = 0; i < particleSystems.length; i++) {
@@ -1388,12 +1519,7 @@
             }
           }
 
-          const specialPositions = [];
-          for (let i=0; i<specialIdx.length; i++){
-            const p = specialPos.get(specialIdx[i]);
-            if (p) specialPositions.push(p);
-          }
-          updateAndDrawParticles(specialPositions, 1.0);
+          drawParticles(orbPositions, 1.0);
         }
 
         // Draw selection burst if active
@@ -1406,7 +1532,7 @@
             const burstIntensity = 1 - burstProgress;
 
             const system = particleSystems[selectionBurstIndex];
-            const pos = specialPos.get(specialIdx[selectionBurstIndex]);
+            const pos = orbPositions[selectionBurstIndex];
 
             if (system && pos) {
               ctx.save();
@@ -1441,87 +1567,53 @@
           }
         }
 
-        // Draw special stars
-        for (let i=0; i<specialIdx.length; i++){
-          const idx = specialIdx[i];
-          const s = stars[idx];
-          const p = specialPos.get(idx);
-          if (!p) continue;
+        // Draw orbs
+        for (let i = 0; i < fakeOrbs.length; i++) {
+          const pos = orbPositions[i];
+          const orb = pos.orb;
 
-          const tw = Math.sin(s.twPh + (now * 0.001) * s.twSpd * 1.6);
-          const baseA = clamp(s.a * (1 + twinkleMix * 0.22 * tw), 0.08, 1);
-
-          const energyOsc = 0.55 + 0.45 * Math.sin((now * 0.001) * (9.5 + (s.seed % 7)) + s.twPh);
+          const energyOsc = 0.55 + 0.45 * Math.sin((now * 0.001) * (9.5 + (orb.seed % 7)));
           const energy = clamp((flickerEase * 0.95 + arrangeEase * 0.75) * energyOsc, 0, 1);
 
-          const breathe = 1 + 0.03 * energy * Math.sin((now * 0.001) * 4.0 + s.twPh);
+          const pulseMult = 1 + pulseAmount * 0.25;
+          const pulseAlpha = 1 + pulseAmount * 0.4;
 
-          // Synchronized pulse effect
-          const pulseMult = 1 + pulseAmount * 0.25; // 25% size increase during pulse
-          const pulseAlpha = 1 + pulseAmount * 0.4; // 40% brightness increase
+          const orbAlpha = orbsMix * pulseAlpha;
+          const orbOpacity = 1 - morphMix * 0.7;
 
-          // Selection sweep effect
-          const sweepProgress = sweepMix;
-          const starXNorm = (p.x / W); // normalized X position
-          const sweepAtStar = clamp((sweepProgress - starXNorm + 0.1) * 10, 0, 1); // wave hits this star
-          const sweepRimTighten = sweepAtStar > 0 && sweepAtStar < 1 ? Math.sin(sweepAtStar * Math.PI) * 0.3 : 0;
+          const rr = pos.r * pulseMult;
 
-          // Stutter effect for Fallen stars during marking
+          // Stutter effect for Fallen during marking
           let stutterX = 0, stutterY = 0;
-          if (s.isFallen && fallenMarkMix < 0.4) {
-            const rand = mulberry32(s.seed + Math.floor(now / 50));
-            stutterX = (rand() - 0.5) * p.r * 0.15;
-            stutterY = (rand() - 0.5) * p.r * 0.15;
+          if (orb.isFallen && fallenMarkMix < 0.4) {
+            const rand = mulberry32(orb.seed + Math.floor(now / 50));
+            stutterX = (rand() - 0.5) * pos.r * 0.15;
+            stutterY = (rand() - 0.5) * pos.r * 0.15;
           }
 
-          const rr = p.r * breathe * pulseMult;
-          const finalX = p.x + stutterX;
-          const finalY = p.y + stutterY;
-          const finalAlpha = baseA * pulseAlpha * (1 + sweepRimTighten);
-
-          // Fade out stars as cards appear
-          const starOpacity = 1 - morphMix * 0.7;
-
-          // Draw falling ash for Fallen stars during marking
-          if (s.isFallen && fallenMarkMix > 0.1 && fallenMarkMix < 0.6) {
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.globalAlpha = (0.6 - fallenMarkMix) * 1.5;
-            const ashCount = 8;
-            const rand = mulberry32(s.seed);
-            for (let a = 0; a < ashCount; a++) {
-              const ashX = finalX + (rand() - 0.5) * p.r * 0.5;
-              const ashY = finalY + p.r * 0.5 + fallenMarkMix * p.r * 3;
-              const ashSize = rand() * 1.5 + 0.5;
-              ctx.fillStyle = `rgba(200, 180, 255, ${rand() * 0.4})`;
-              ctx.fillRect(ashX, ashY, ashSize, ashSize);
-            }
-            ctx.restore();
-          }
-
-          ctx.globalAlpha = starOpacity;
-          drawSpecialStar(finalX, finalY, rr, finalAlpha, energy, now, s.seed, s.isFallen, fallenMarkEase);
-
-          ctx.globalCompositeOperation = 'lighter';
-          drawStarSprite(finalX, finalY, Math.max(1.6, rr * 0.22), clamp(0.55 + 0.45*energy, 0, 1) * starOpacity, 2);
-          ctx.globalCompositeOperation = 'source-over';
+          ctx.globalAlpha = orbOpacity;
+          drawOrbOnCanvas(pos.x + stutterX, pos.y + stutterY, rr, orbAlpha, energy, orb.isFallen, fallenMarkEase, orb.seed);
         }
+
+        ctx.globalAlpha = 1;
 
         rafId = requestAnimationFrame(frame);
       }
 
-      function startRosterSlice(){
+      // ========================================================================
+      // START FUNCTION
+      // ========================================================================
+
+      function startRosterSlice() {
         if (rafId) cancelAnimationFrame(rafId);
 
-        resize();
-        buildSprites();
-        buildStars(3000);
-        specialIdx = [];
-        specialChosen = false;
+        onWindowResize();
+        fakeOrbs = [];
+        orbsChosen = false;
         burstTriggered = false;
         particleSystems = [];
 
-        // Reset UI (only if elements are loaded)
+        // Reset UI
         if (window.rosterElements) {
           window.rosterElements.titlePanel.classList.remove('show');
           window.rosterElements.rerollModule.classList.remove('show');
@@ -1534,7 +1626,7 @@
 
         blackout.getBoundingClientRect();
 
-        if (prefersReduced){
+        if (prefersReduced) {
           blackout.style.opacity = '0';
         } else {
           setTimeout(() => {
@@ -1551,7 +1643,10 @@
         rafId = requestAnimationFrame(frame);
       }
 
-      // Trigger golden burst on selection
+      // ========================================================================
+      // EVENT HANDLERS
+      // ========================================================================
+
       window.triggerGoldenBurst = function(index) {
         if (index < 0 || index >= 3) return;
 
@@ -1559,7 +1654,6 @@
         selectionBurstStartTime = performance.now();
         selectionBurstActive = true;
 
-        // Reset particles for this star
         const system = particleSystems[index];
         if (system) {
           for (let j = 0; j < system.particles.length; j++) {
@@ -1568,12 +1662,7 @@
         }
       };
 
-      // Total reroll is now handled entirely in the module script
-      // No need to restart canvas animation
-
-      window.addEventListener('resize', () => {
-        resize();
-      });
+      window.addEventListener('resize', onWindowResize);
 
       window.addEventListener('keydown', (e) => {
         if (e.key.toLowerCase() === 'r') {
@@ -1581,7 +1670,9 @@
         }
       });
 
-      startRosterSlice();
+      // Initialize Three.js and start animation
+      initThreeJS();
+      setTimeout(startRosterSlice, 100);
     })();
   </script>
 </body>
