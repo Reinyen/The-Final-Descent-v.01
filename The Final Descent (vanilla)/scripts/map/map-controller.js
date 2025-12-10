@@ -188,11 +188,11 @@ export class MapController {
       return;
     }
 
-    // Select node (shows golden crackling + detailed preview)
-    this.uiOverlay.setSelectedNode(node);
+    // Trigger golden energy burst effect
+    this.renderer.triggerNodeBurst(node);
 
-    // Update renderer to show selection effect
-    // (In a more advanced version, we'd update the shader uniform)
+    // Select node (shows detailed preview)
+    this.uiOverlay.setSelectedNode(node);
 
     console.log(`[MapController] Node clicked: ${node.id}`);
   }
@@ -263,7 +263,7 @@ export class MapController {
   }
 
   /**
-   * Reveal nodes connected to the given node (Roguelike logic)
+   * Reveal nodes connected to the given node (Allow all nodes to be completable)
    */
   revealConnectedNodes(nodeId) {
     const currentNode = this.networkData.nodes.find(n => n.id === nodeId);
@@ -271,15 +271,7 @@ export class MapController {
 
     console.log(`[MapController] Revealing connections from ${nodeId}:`, currentNode.connections);
 
-    // First, mark ALL previously available nodes as LOCKED (no backtracking)
-    this.networkData.nodes.forEach(n => {
-      if (n.state === NodeStates.AVAILABLE && n.id !== currentNode.id) {
-        n.state = NodeStates.LOCKED;
-        console.log(`  - Locked ${n.id} (no backtracking)`);
-      }
-    });
-
-    // Now reveal and make AVAILABLE only the direct neighbors of current node
+    // Reveal and make AVAILABLE only the direct neighbors of current node
     currentNode.connections.forEach(connectedId => {
       const connectedNode = this.networkData.nodes.find(n => n.id === connectedId);
 
@@ -306,6 +298,22 @@ export class MapController {
           connection.revealed = true;
         }
       }
+    });
+
+    // Now check ALL completed nodes and make their neighbors available
+    // This allows backtracking to complete all nodes
+    const completedNodes = this.networkData.nodes.filter(n => n.state === NodeStates.COMPLETED);
+
+    completedNodes.forEach(completedNode => {
+      completedNode.connections.forEach(connectedId => {
+        const connectedNode = this.networkData.nodes.find(n => n.id === connectedId);
+
+        if (connectedNode && connectedNode.state === NodeStates.LOCKED) {
+          // Make locked nodes available if connected to completed nodes
+          connectedNode.state = NodeStates.AVAILABLE;
+          console.log(`  - Unlocked ${connectedId} (connected to completed node ${completedNode.id})`);
+        }
+      });
     });
   }
 

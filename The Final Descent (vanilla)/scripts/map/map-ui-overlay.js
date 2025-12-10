@@ -225,13 +225,13 @@ export class MapUIOverlay {
   }
 
   /**
-   * Draw "Enter" button
+   * Draw "Enter" button - 75% smaller (25% of original size)
    */
   drawEnterButton() {
-    const buttonWidth = 200;
-    const buttonHeight = 60;
+    const buttonWidth = 100;
+    const buttonHeight = 35;
     const buttonX = (this.canvas.width - buttonWidth) / 2;
-    const buttonY = this.canvas.height - 80;
+    const buttonY = this.canvas.height - 60;
 
     this.enterButtonBounds = {
       x: buttonX,
@@ -248,9 +248,9 @@ export class MapUIOverlay {
 
     this.ctx.fillStyle = 'rgba(255, 215, 0, 1.0)';
     this.ctx.strokeStyle = 'rgba(255, 215, 0, 1)';
-    this.ctx.lineWidth = 3;
+    this.ctx.lineWidth = 2;
 
-    this.roundRect(buttonX, buttonY, buttonWidth, buttonHeight, 10);
+    this.roundRect(buttonX, buttonY, buttonWidth, buttonHeight, 6);
     this.ctx.fill();
     this.ctx.stroke();
 
@@ -258,14 +258,12 @@ export class MapUIOverlay {
 
     // Text with clear contrast
     this.ctx.fillStyle = '#000000';
-    this.ctx.font = 'bold 20px "Rajdhani", sans-serif';
+    this.ctx.font = 'bold 13px "Rajdhani", sans-serif';
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
-    this.ctx.letterSpacing = '0.1em';
 
-    // Draw text with slight offset for better visibility
     this.ctx.fillText(
-      'ENTER NODE',
+      'ENTER',
       buttonX + buttonWidth / 2,
       buttonY + buttonHeight / 2
     );

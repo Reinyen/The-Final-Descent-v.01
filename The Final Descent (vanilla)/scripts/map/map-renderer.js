@@ -366,6 +366,9 @@ export class MapRenderer {
       duration: MapConfig.visual.energyPulseDuration
     };
 
+    // Node burst particles
+    this.nodeBursts = [];
+
     this.init();
   }
 
@@ -588,8 +591,96 @@ export class MapRenderer {
   }
 
   /**
-   * Start energy pulse animation from one node to another
+   * Trigger golden energy burst when node is clicked
    */
+  triggerNodeBurst(node) {
+    console.log(`[MapRenderer] Golden burst on node: ${node.id}`);
+
+    // Create particle burst
+    const burstParticles = [];
+    const particleCount = 30;
+    const position = node.position;
+
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2;
+      const speed = 3 + Math.random() * 2;
+
+      burstParticles.push({
+        position: new THREE.Vector3(position.x, position.y, position.z),
+        velocity: new THREE.Vector3(
+          Math.cos(angle) * speed,
+          Math.sin(angle) * speed * 0.5,
+          Math.sin(angle * 2) * speed * 0.5
+        ),
+        life: 1.0,
+        size: 0.3 + Math.random() * 0.4
+      });
+    }
+
+    this.nodeBursts.push({
+      particles: burstParticles,
+      createdAt: this.clock.getElapsedTime()
+    });
+  }
+
+  /**
+   * Update and render node bursts
+   */
+  updateNodeBursts(deltaTime) {
+    const currentTime = this.clock.getElapsedTime();
+
+    // Update existing bursts
+    this.nodeBursts = this.nodeBursts.filter(burst => {
+      const age = currentTime - burst.createdAt;
+      if (age > 1.5) return false; // Remove old bursts
+
+      burst.particles.forEach(particle => {
+        // Update position
+        particle.position.add(particle.velocity.clone().multiplyScalar(deltaTime));
+
+        // Update velocity (gravity + drag)
+        particle.velocity.y -= 2 * deltaTime;
+        particle.velocity.multiplyScalar(0.95);
+
+        // Update life
+        particle.life -= deltaTime / 1.5;
+      });
+
+      return true;
+    });
+  }
+
+  /**
+   * Render node bursts
+   */
+  renderNodeBursts() {
+    this.nodeBursts.forEach(burst => {
+      burst.particles.forEach(particle => {
+        if (particle.life <= 0) return;
+
+        // Create sprite for particle
+        const sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            color: 0xFFD700,
+            transparent: true,
+            opacity: particle.life * 0.8,
+            blending: THREE.AdditiveBlending
+          })
+        );
+
+        sprite.position.copy(particle.position);
+        sprite.scale.set(particle.size, particle.size, 1);
+
+        this.scene.add(sprite);
+
+        // Remove sprite after rendering (temporary)
+        requestAnimationFrame(() => {
+          this.scene.remove(sprite);
+          sprite.material.dispose();
+        });
+      });
+    });
+  }
   startEnergyPulse(fromNodeId, toNodeId) {
     const fromNode = this.networkData.nodes.find(n => n.id === fromNodeId);
     const toNode = this.networkData.nodes.find(n => n.id === toNodeId);
@@ -674,6 +765,9 @@ export class MapRenderer {
     // Update controls
     this.controls.update();
 
+    // Update node bursts
+    this.updateNodeBursts(deltaTime);
+
     // Update shader uniforms
     if (this.nodesMesh) {
       this.nodesMesh.material.uniforms.uTime.value = elapsedTime;
@@ -699,6 +793,9 @@ export class MapRenderer {
         this.connectionsMesh.material.uniforms.uEnergyPulseActive.value = 0.0;
       }
     }
+
+    // Render node bursts
+    this.renderNodeBursts();
 
     // Render
     this.composer.render();
