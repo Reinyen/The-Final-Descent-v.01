@@ -169,27 +169,27 @@
 
     /* Hover info box */
     .info-box {
-      position: absolute;
-      top: -10px;
-      left: calc(100% + 12px);
-      width: 280px;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 320px;
       padding: 16px;
-      background: rgba(10,10,16,.95);
+      background: rgba(10,10,16,.98);
       backdrop-filter: blur(16px);
       border: 1px solid var(--stroke);
       border-radius: 10px;
       opacity: 0;
       pointer-events: none;
-      transform: translateX(-8px);
+      transform: translate(-50%, -50%) scale(0.95);
       transition: opacity 0.2s ease, transform 0.2s ease;
-      box-shadow: 0 20px 60px rgba(0,0,0,.8);
-      z-index: 100;
+      box-shadow: 0 20px 60px rgba(0,0,0,.9);
+      z-index: 1000;
     }
 
     .character-card:hover .info-box,
     .fallen-plaque:hover .info-box {
       opacity: 1;
-      transform: translateX(0);
+      transform: translate(-50%, -50%) scale(1);
       pointer-events: all;
     }
 
@@ -382,6 +382,28 @@
       background:radial-gradient(1200px 900px at 50% 55%, rgba(0,0,0,0) 55%, rgba(0,0,0,.62) 100%);
       pointer-events:none;
       z-index: 5;
+    }
+
+    /* Crumble animation */
+    @keyframes crumble {
+      0% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+      50% {
+        opacity: 0.6;
+        transform: translate(-50%, -50%) scale(0.9) rotate(2deg);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.5) translateY(20px);
+      }
+    }
+
+    .character-card.crumbling,
+    .fallen-plaque.crumbling {
+      animation: crumble 1s ease-out forwards;
+      pointer-events: none;
     }
 
     @media (prefers-reduced-motion: reduce){
@@ -708,11 +730,70 @@
 
       state.rerollsRemaining--;
       state.selectedCharacter = null;
+      state.canInteract = false;
 
-      // Trigger crumble animation, then restart from 6-stars phase
-      window.triggerTotalReroll && window.triggerTotalReroll();
+      // Crumble animation (1 second) with ash particles
+      const cards = Array.from(elements.cardsContainer.children);
+      cards.forEach(card => {
+        card.classList.add('crumbling');
+
+        // Create ash particles for each card
+        createAshParticles(card);
+      });
+
+      // After crumble completes, reassign and show new cards
+      setTimeout(() => {
+        // Reassign Living/Fallen randomly
+        assignLivingAndFallen();
+
+        // Recreate cards
+        createCharacterCards();
+
+        // Show new cards after brief delay
+        setTimeout(() => {
+          showCharacterCards();
+          state.canInteract = true;
+          updateSelectionUI();
+        }, 100);
+      }, 1000);
 
       updateRerollPips();
+    }
+
+    function createAshParticles(card) {
+      const rect = card.getBoundingClientRect();
+      const particleCount = 30;
+
+      for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.style.position = 'fixed';
+        particle.style.left = `${rect.left + rect.width * Math.random()}px`;
+        particle.style.top = `${rect.top + rect.height * Math.random()}px`;
+        particle.style.width = `${2 + Math.random() * 3}px`;
+        particle.style.height = `${2 + Math.random() * 3}px`;
+        particle.style.background = card.dataset.type === 'living'
+          ? 'rgba(255, 215, 0, 0.8)'
+          : 'rgba(157, 78, 221, 0.8)';
+        particle.style.borderRadius = '50%';
+        particle.style.pointerEvents = 'none';
+        particle.style.zIndex = '500';
+        particle.style.transition = 'all 1s ease-out';
+
+        document.body.appendChild(particle);
+
+        // Animate particle falling
+        requestAnimationFrame(() => {
+          const angle = Math.random() * Math.PI * 2;
+          const distance = 50 + Math.random() * 100;
+          particle.style.transform = `translate(${Math.cos(angle) * distance}px, ${Math.sin(angle) * distance + 100}px)`;
+          particle.style.opacity = '0';
+        });
+
+        // Remove particle after animation
+        setTimeout(() => {
+          particle.remove();
+        }, 1000);
+      }
     }
 
     function fadeOutAndRecreate() {
@@ -1487,22 +1568,8 @@
         }
       };
 
-      // Trigger total reroll (crumble and restart)
-      window.triggerTotalReroll = function() {
-        // Fade out character cards
-        const cards = Array.from(window.rosterElements.cardsContainer.children);
-        cards.forEach(card => card.classList.remove('show'));
-
-        // Reassign Living/Fallen
-        setTimeout(() => {
-          const shuffled = [...window.rosterState.allCharacters].sort(() => Math.random() - 0.5);
-          window.rosterState.livingCharacters = shuffled.slice(0, 3);
-          window.rosterState.fallenCharacters = shuffled.slice(3, 6);
-
-          // Restart animation from stars phase
-          startRosterSlice();
-        }, 600);
-      };
+      // Total reroll is now handled entirely in the module script
+      // No need to restart canvas animation
 
       window.addEventListener('resize', () => {
         resize();
