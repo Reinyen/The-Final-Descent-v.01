@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neural Network Map - The Final Descent</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Rajdhani', Arial, sans-serif;
+      background: #000000;
+      color: #ffffff;
+    }
+
+    /* Canvas layers */
+    #canvas-renderer,
+    #canvas-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #canvas-renderer {
+      z-index: 1;
+    }
+
+    #canvas-overlay {
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* Ring info panel */
+    #ring-info {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      padding: 15px 20px;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 255, 255, 0.3);
+      border-radius: 10px;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    #ring-info h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #00FFFF;
+      margin-bottom: 5px;
+      letter-spacing: 0.05em;
+    }
+
+    #ring-info p {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+      margin: 0;
+    }
+
+    /* Progress panel */
+    #progress-panel {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 15px 20px;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 215, 0, 0.3);
+      border-radius: 10px;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    #progress-panel h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #FFD700;
+      margin-bottom: 8px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    #progress-bar {
+      width: 200px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 5px;
+    }
+
+    #progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #FFD700, #FFA500);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+      box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    }
+
+    #progress-text {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    /* Controls hint */
+    #controls-hint {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      z-index: 20;
+      pointer-events: none;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+      opacity: 0;
+      animation: fadeIn 0.5s ease 1s forwards;
+    }
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
+    /* Loading screen */
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      background: #000000;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 1;
+      transition: opacity 0.5s ease;
+    }
+
+    #loading-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #loading-screen h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #00FFFF;
+      margin-bottom: 20px;
+      letter-spacing: 0.1em;
+    }
+
+    #loading-screen .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(0, 255, 255, 0.2);
+      border-top-color: #00FFFF;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Debug panel */
+    #debug-panel {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 15px;
+      background: rgba(0, 0, 0, 0.9);
+      border: 1px solid rgba(0, 255, 0, 0.5);
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #00ff00;
+      z-index: 50;
+      pointer-events: none;
+      display: none;
+    }
+
+    #debug-panel.visible {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <!-- Canvases -->
+  <canvas id="canvas-renderer"></canvas>
+  <canvas id="canvas-overlay"></canvas>
+
+  <!-- Ring Info -->
+  <div id="ring-info">
+    <h2 id="ring-name">Loading...</h2>
+    <p id="ring-description">Preparing neural network...</p>
+  </div>
+
+  <!-- Progress Panel -->
+  <div id="progress-panel">
+    <h3>Ring Progress</h3>
+    <div id="progress-bar">
+      <div id="progress-fill" style="width: 0%;"></div>
+    </div>
+    <div id="progress-text">0 / 0 nodes (0% required)</div>
+  </div>
+
+  <!-- Controls Hint -->
+  <div id="controls-hint">
+    Drag to rotate • Scroll to zoom • Hover nodes for preview • Click to select
+  </div>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <h1>INITIALIZING NEURAL NETWORK</h1>
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Debug Panel -->
+  <div id="debug-panel" class="visible">
+    <div id="debug-text">Debug info will appear here</div>
+  </div>
+
+  <!-- Three.js Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.181.2/examples/jsm/"
+      }
+    }
+  </script>
+
+  <!-- Main Application -->
+  <script type="module">
+    import { MapController } from './scripts/map/map-controller.js';
+    import { MapConfig } from './data/map-config.js';
+
+    // DOM elements
+    const canvasRenderer = document.getElementById('canvas-renderer');
+    const canvasOverlay = document.getElementById('canvas-overlay');
+    const loadingScreen = document.getElementById('loading-screen');
+    const ringInfo = document.getElementById('ring-info');
+    const ringName = document.getElementById('ring-name');
+    const ringDescription = document.getElementById('ring-description');
+    const progressPanel = document.getElementById('progress-panel');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    const debugPanel = document.getElementById('debug-panel');
+    const debugText = document.getElementById('debug-text');
+
+    // Create map controller
+    let mapController;
+
+    async function init() {
+      console.log('[Main] Initializing map system...');
+
+      // Create controller
+      mapController = new MapController(canvasRenderer, canvasOverlay);
+
+      // Set up callbacks
+      mapController.onNodeEnter = handleNodeEnter;
+      mapController.onRingComplete = handleRingComplete;
+
+      // Start the game
+      mapController.start();
+
+      // Update UI
+      updateRingInfo();
+      updateProgress();
+
+      // Hide loading screen
+      setTimeout(() => {
+        loadingScreen.classList.add('hidden');
+      }, 1000);
+
+      // Start animation loop
+      mapController.animate();
+
+      console.log('[Main] Map system initialized');
+    }
+
+    function handleNodeEnter(node) {
+      console.log('[Main] Node entered:', node);
+
+      // Update UI
+      updateProgress();
+
+      // TODO: Trigger combat/event/resource screen based on node type
+      // For now, just log
+      console.log(`[Main] Node type: ${node.type}`);
+
+      // Simulate event completion (for testing)
+      // In real game, this would be triggered after combat/event resolves
+      // setTimeout(() => {
+      //   // Node is already marked as completed by controller
+      //   updateProgress();
+      // }, 2000);
+    }
+
+    function handleRingComplete() {
+      console.log('[Main] Ring complete!');
+
+      // Advance to next ring
+      setTimeout(() => {
+        mapController.advanceToNextRing();
+        updateRingInfo();
+        updateProgress();
+      }, 1000);
+    }
+
+    function updateRingInfo() {
+      const ringConfig = MapConfig.rings[mapController.currentRing - 1];
+      ringName.textContent = `Ring ${ringConfig.id}: ${ringConfig.name}`;
+      ringDescription.textContent = ringConfig.description;
+    }
+
+    function updateProgress() {
+      if (!mapController.networkData) return;
+
+      const nodes = mapController.networkData.nodes;
+      const totalNodes = nodes.length;
+      const completedNodes = nodes.filter(n => n.state === 'completed').length;
+      const currentNodes = nodes.filter(n => n.state === 'current').length;
+      const visitedCount = completedNodes + currentNodes;
+
+      const ringConfig = MapConfig.rings[mapController.currentRing - 1];
+      const requiredCompletion = ringConfig.requiredCompletion;
+      const requiredCount = Math.ceil(totalNodes * requiredCompletion);
+
+      const percentage = (visitedCount / totalNodes) * 100;
+      const requiredPercentage = requiredCompletion * 100;
+
+      progressFill.style.width = `${percentage}%`;
+      progressText.textContent = `${visitedCount} / ${totalNodes} nodes (${requiredPercentage}% required)`;
+
+      // Update debug panel
+      debugText.innerHTML = `
+        Ring: ${mapController.currentRing}<br>
+        Current Node: ${mapController.currentNodeId}<br>
+        Visited: ${visitedCount}/${totalNodes}<br>
+        Required: ${requiredCount}<br>
+        Can Interact: ${mapController.canInteract}<br>
+        Animating: ${mapController.isAnimating}
+      `;
+    }
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      // D key: Toggle debug panel
+      if (e.key.toLowerCase() === 'd') {
+        debugPanel.classList.toggle('visible');
+      }
+
+      // R key: Restart (reload page)
+      if (e.key.toLowerCase() === 'r') {
+        location.reload();
+      }
+
+      // N key: Next ring (debug)
+      if (e.key.toLowerCase() === 'n' && e.shiftKey) {
+        mapController.advanceToNextRing();
+        updateRingInfo();
+        updateProgress();
+      }
+    });
+
+    // Periodic progress update
+    setInterval(() => {
+      updateProgress();
+    }, 500);
+
+    // Start
+    init();
+  </script>
+</body>
+</html>
