@@ -228,10 +228,10 @@ export class MapUIOverlay {
    * Draw "Enter" button
    */
   drawEnterButton() {
-    const buttonWidth = 180;
-    const buttonHeight = 50;
+    const buttonWidth = 200;
+    const buttonHeight = 60;
     const buttonX = (this.canvas.width - buttonWidth) / 2;
-    const buttonY = this.canvas.height - 50;
+    const buttonY = this.canvas.height - 80;
 
     this.enterButtonBounds = {
       x: buttonX,
@@ -243,24 +243,27 @@ export class MapUIOverlay {
     this.ctx.save();
 
     // Glowing background
-    this.ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
-    this.ctx.shadowBlur = 15;
+    this.ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
+    this.ctx.shadowBlur = 20;
 
-    this.ctx.fillStyle = 'rgba(255, 215, 0, 0.9)';
+    this.ctx.fillStyle = 'rgba(255, 215, 0, 1.0)';
     this.ctx.strokeStyle = 'rgba(255, 215, 0, 1)';
-    this.ctx.lineWidth = 2;
+    this.ctx.lineWidth = 3;
 
-    this.roundRect(buttonX, buttonY, buttonWidth, buttonHeight, 8);
+    this.roundRect(buttonX, buttonY, buttonWidth, buttonHeight, 10);
     this.ctx.fill();
     this.ctx.stroke();
 
     this.ctx.shadowBlur = 0;
 
-    // Text
+    // Text with clear contrast
     this.ctx.fillStyle = '#000000';
-    this.ctx.font = 'bold 16px "Rajdhani", sans-serif';
+    this.ctx.font = 'bold 20px "Rajdhani", sans-serif';
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
+    this.ctx.letterSpacing = '0.1em';
+
+    // Draw text with slight offset for better visibility
     this.ctx.fillText(
       'ENTER NODE',
       buttonX + buttonWidth / 2,
