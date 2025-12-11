@@ -369,6 +369,13 @@ export class MapRenderer {
     // Node burst particles
     this.nodeBursts = [];
 
+    // Ambient effects
+    this.sparkParticles = null;
+    this.sparkData = [];
+    this.shadowWavePhase = 0;
+    this.blurPhase = 0;
+    this.idleIntensity = 1.0;
+
     this.init();
   }
 
@@ -483,6 +490,101 @@ export class MapRenderer {
 
     this.createNodesMesh();
     this.createConnectionsMesh();
+    this.createSparkParticles();
+  }
+
+  /**
+   * Create ambient spark particles that drift from nodes
+   */
+  createSparkParticles() {
+    // Clean up existing sparks
+    if (this.sparkParticles) {
+      this.scene.remove(this.sparkParticles);
+      this.sparkParticles.geometry.dispose();
+      this.sparkParticles.material.dispose();
+    }
+
+    const sparkCount = 100;
+    const positions = new Float32Array(sparkCount * 3);
+    const velocities = new Float32Array(sparkCount * 3);
+    const lifetimes = new Float32Array(sparkCount);
+
+    // Initialize spark particles
+    this.sparkData = [];
+    for (let i = 0; i < sparkCount; i++) {
+      const node = this.networkData.nodes[Math.floor(Math.random() * this.networkData.nodes.length)];
+
+      positions[i * 3] = node.position.x;
+      positions[i * 3 + 1] = node.position.y;
+      positions[i * 3 + 2] = node.position.z;
+
+      velocities[i * 3] = (Math.random() - 0.5) * 0.3;
+      velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.3;
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+
+      lifetimes[i] = Math.random() * 3;
+
+      this.sparkData.push({
+        sourceNode: node,
+        velocity: new THREE.Vector3(
+          velocities[i * 3],
+          velocities[i * 3 + 1],
+          velocities[i * 3 + 2]
+        ),
+        lifetime: lifetimes[i],
+        maxLifetime: 2 + Math.random() * 2
+      });
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.PointsMaterial({
+      color: 0x00FFFF,
+      size: 0.1,
+      transparent: true,
+      opacity: 0.3,
+      blending: THREE.AdditiveBlending
+    });
+
+    this.sparkParticles = new THREE.Points(geometry, material);
+    this.scene.add(this.sparkParticles);
+  }
+
+  /**
+   * Update ambient spark particles
+   */
+  updateSparkParticles(deltaTime) {
+    if (!this.sparkParticles || !this.networkData) return;
+
+    const positions = this.sparkParticles.geometry.attributes.position.array;
+
+    this.sparkData.forEach((spark, i) => {
+      spark.lifetime += deltaTime;
+
+      if (spark.lifetime >= spark.maxLifetime) {
+        // Reset spark at a random node
+        const node = this.networkData.nodes[Math.floor(Math.random() * this.networkData.nodes.length)];
+        positions[i * 3] = node.position.x;
+        positions[i * 3 + 1] = node.position.y;
+        positions[i * 3 + 2] = node.position.z;
+
+        spark.velocity.set(
+          (Math.random() - 0.5) * 0.3,
+          (Math.random() - 0.5) * 0.3,
+          (Math.random() - 0.5) * 0.3
+        );
+        spark.lifetime = 0;
+        spark.sourceNode = node;
+      } else {
+        // Drift away from source
+        positions[i * 3] += spark.velocity.x * deltaTime;
+        positions[i * 3 + 1] += spark.velocity.y * deltaTime;
+        positions[i * 3 + 2] += spark.velocity.z * deltaTime;
+      }
+    });
+
+    this.sparkParticles.geometry.attributes.position.needsUpdate = true;
   }
 
   createNodesMesh() {
@@ -768,6 +870,10 @@ export class MapRenderer {
     // Update node bursts
     this.updateNodeBursts(deltaTime);
 
+    // Update ambient effects
+    this.updateSparkParticles(deltaTime);
+    this.updateAmbientEffects(elapsedTime);
+
     // Update shader uniforms
     if (this.nodesMesh) {
       this.nodesMesh.material.uniforms.uTime.value = elapsedTime;
@@ -799,6 +905,42 @@ export class MapRenderer {
 
     // Render
     this.composer.render();
+  }
+
+  /**
+   * Update ambient atmospheric effects
+   */
+  updateAmbientEffects(elapsedTime) {
+    // Shadow wave: periodically darken the scene
+    this.shadowWavePhase = (elapsedTime / 4) % 1; // 4 second cycle
+
+    if (this.shadowWavePhase > 0.4 && this.shadowWavePhase < 0.6) {
+      // Darken briefly
+      const darkness = Math.sin((this.shadowWavePhase - 0.4) * Math.PI * 5);
+      this.scene.fog.density = 0.008 + darkness * 0.002;
+    } else {
+      this.scene.fog.density = 0.008;
+    }
+
+    // Blur effect: occasionally the network "glitches"
+    this.blurPhase = (elapsedTime / 7) % 1; // 7 second cycle
+
+    if (this.blurPhase > 0.9 && this.blurPhase < 0.95 && this.nodesMesh) {
+      // Quick blur/split effect
+      const blurAmount = Math.sin((this.blurPhase - 0.9) * Math.PI * 20);
+      this.nodesMesh.position.x = blurAmount * 0.1;
+      this.connectionsMesh.position.x = -blurAmount * 0.1;
+    } else if (this.nodesMesh) {
+      this.nodesMesh.position.x = 0;
+      this.connectionsMesh.position.x = 0;
+    }
+  }
+
+  /**
+   * Set idle intensity from info band
+   */
+  setIdleIntensity(intensity) {
+    this.idleIntensity = intensity;
   }
 
   onWindowResize() {

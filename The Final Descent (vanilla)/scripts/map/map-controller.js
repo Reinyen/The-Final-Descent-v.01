@@ -7,12 +7,14 @@
 import { NeuralNetworkGenerator } from './neural-network-generator.js';
 import { MapRenderer } from './map-renderer.js';
 import { MapUIOverlay } from './map-ui-overlay.js';
+import { MapInfoBand } from './map-info-band.js';
 import { MapConfig, NodeStates } from '../../data/map-config.js';
 
 export class MapController {
-  constructor(canvasRenderer, canvasOverlay) {
+  constructor(canvasRenderer, canvasOverlay, canvasInfoBand) {
     this.renderer = new MapRenderer(canvasRenderer);
     this.uiOverlay = new MapUIOverlay(canvasOverlay);
+    this.infoBand = new MapInfoBand(canvasInfoBand);
 
     this.currentRing = 1;
     this.currentNodeId = null;
@@ -71,9 +73,47 @@ export class MapController {
     this.currentNodeId = this.networkData.startNodeId;
 
     this.renderer.loadNetwork(this.networkData);
+    this.updateInfoBand();
 
     console.log('[MapController] Ring loaded with', this.networkData.nodes.length, 'nodes');
     console.log('[MapController] Network will remain static throughout ring exploration');
+  }
+
+  /**
+   * Update info band with current game state
+   */
+  updateInfoBand() {
+    if (!this.networkData) return;
+
+    const ringConfig = MapConfig.rings[this.currentRing - 1];
+    const totalNodes = this.networkData.nodes.length;
+    const completedNodes = this.networkData.nodes.filter(n => n.state === NodeStates.COMPLETED).length;
+    const currentNodes = this.networkData.nodes.filter(n => n.state === NodeStates.CURRENT).length;
+    const nodesCleared = completedNodes + currentNodes;
+    const requiredNodes = Math.ceil(totalNodes * ringConfig.requiredCompletion);
+
+    const exitNode = this.networkData.nodes.find(n => n.id === this.networkData.exitNodeId);
+    const exitAwakened = exitNode && (exitNode.state === NodeStates.AVAILABLE || exitNode.state === NodeStates.CURRENT);
+
+    this.infoBand.updateState({
+      currentRing: this.currentRing,
+      ringName: ringConfig.name,
+      ringSubtitle: ringConfig.description,
+      nodesCleared,
+      totalNodes,
+      requiredNodes,
+      exitAwakened,
+      // Default values for now (would come from game state)
+      crew: [
+        { id: 'iona', hp: 40, maxHp: 40, mutation: 0, stress: 0 },
+        { id: 'rhea', hp: 25, maxHp: 25, mutation: 0, stress: 0 },
+        { id: 'jonas', hp: 20, maxHp: 20, mutation: 0, stress: 0 }
+      ],
+      dataFragments: 0,
+      tools: 0,
+      archiveSlotsFilled: 0,
+      archiveSlotsTotal: 10
+    });
   }
 
   /**
@@ -250,6 +290,10 @@ export class MapController {
     const newNode = this.networkData.nodes.find(n => n.id === nodeId);
     if (newNode) {
       newNode.state = NodeStates.CURRENT;
+
+      // Add to history
+      const description = this.getNodeHistoryDescription(newNode);
+      this.infoBand.addHistoryEntry(newNode.type, description);
     }
 
     // Reveal connected nodes
@@ -257,9 +301,25 @@ export class MapController {
 
     // Update visualization
     this.renderer.updateNetwork(this.networkData);
+    this.updateInfoBand();
 
     // Check if ring is complete
     this.checkRingCompletion();
+  }
+
+  /**
+   * Get node history description
+   */
+  getNodeHistoryDescription(node) {
+    const descriptions = {
+      combat: 'Hostile encounter survived',
+      resource: 'Resources acquired',
+      event: 'Strange event witnessed',
+      rest: 'Brief respite found',
+      echo: 'Memory confronted',
+      exit: 'Descended to next ring'
+    };
+    return descriptions[node.type] || 'Node explored';
   }
 
   /**
@@ -369,11 +429,17 @@ export class MapController {
 
       const node = this.renderer.getNodeAtPosition(e.clientX, e.clientY);
       this.uiOverlay.setHoveredNode(node, e.clientX, e.clientY);
+
+      // Reset idle timer on mouse move
+      this.infoBand.resetIdleTimer();
     });
 
     // Click for selection
     this.renderer.canvas.addEventListener('click', (e) => {
       if (!this.canInteract || this.isAnimating) return;
+
+      // Reset idle timer on click
+      this.infoBand.resetIdleTimer();
 
       // Check if click is on UI element first
       const clickConsumedByUI = this.uiOverlay.handleClick(e.clientX, e.clientY);
@@ -400,8 +466,13 @@ export class MapController {
   animate() {
     requestAnimationFrame(() => this.animate());
 
+    // Update idle intensity from info band
+    const idleIntensity = this.infoBand.getIdleIntensity();
+    this.renderer.setIdleIntensity(idleIntensity);
+
     this.renderer.animate();
     this.uiOverlay.render();
+    this.infoBand.render(16); // ~16ms per frame at 60fps
   }
 
   /**
@@ -445,5 +516,6 @@ export class MapController {
   dispose() {
     this.renderer.dispose();
     this.uiOverlay.dispose();
+    this.infoBand.dispose();
   }
 }

@@ -23,7 +23,8 @@
 
     /* Canvas layers */
     #canvas-renderer,
-    #canvas-overlay {
+    #canvas-overlay,
+    #canvas-info-band {
       position: fixed;
       top: 0;
       left: 0;
@@ -41,7 +42,12 @@
       pointer-events: none;
     }
 
-    /* Ring info panel */
+    #canvas-info-band {
+      z-index: 15;
+      pointer-events: none;
+    }
+
+    /* Ring info panel - HIDDEN (replaced by info band) */
     #ring-info {
       position: fixed;
       top: 20px;
@@ -53,6 +59,7 @@
       border-radius: 10px;
       z-index: 20;
       pointer-events: none;
+      display: none;
     }
 
     #ring-info h2 {
@@ -203,6 +210,7 @@
   <!-- Canvases -->
   <canvas id="canvas-renderer"></canvas>
   <canvas id="canvas-overlay"></canvas>
+  <canvas id="canvas-info-band"></canvas>
 
   <!-- Ring Info -->
   <div id="ring-info">
@@ -253,6 +261,7 @@
     // DOM elements
     const canvasRenderer = document.getElementById('canvas-renderer');
     const canvasOverlay = document.getElementById('canvas-overlay');
+    const canvasInfoBand = document.getElementById('canvas-info-band');
     const loadingScreen = document.getElementById('loading-screen');
     const ringInfo = document.getElementById('ring-info');
     const ringName = document.getElementById('ring-name');
@@ -270,7 +279,7 @@
       console.log('[Main] Initializing map system...');
 
       // Create controller
-      mapController = new MapController(canvasRenderer, canvasOverlay);
+      mapController = new MapController(canvasRenderer, canvasOverlay, canvasInfoBand);
 
       // Set up callbacks
       mapController.onNodeEnter = handleNodeEnter;
