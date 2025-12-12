@@ -1,7 +1,7 @@
 /**
- * DOM-based Map UI Styles
- * Isometric map with CSS transforms, DOM nodes, and connection lines
- * Based on mockup design
+ * DOM-based Map UI Styles - Progressive Neural Network Revelation
+ * Nodes and connections reveal progressively as the player explores
+ * Energy flows along synaptic paths, illuminating the network
  */
 
 /* Map Container */
@@ -98,7 +98,10 @@
   pointer-events: none;
 }
 
-/* Individual Node */
+/* =================================================================
+   BASE NODE STYLES
+   ================================================================= */
+
 .map-node {
   position: absolute;
   width: 26px;
@@ -106,90 +109,143 @@
   border-radius: 999px;
   transform: translate(-50%, -50%);
   cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition: transform 0.2s ease, opacity 0.3s ease;
   pointer-events: auto;
   z-index: 10;
-}
-
-.map-node::before {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: inherit;
-  border: 1px solid rgba(232, 244, 253, 0.4);
-  opacity: 0.8;
-}
-
-.map-node::after {
-  content: "";
-  position: absolute;
-  inset: -10px;
-  border-radius: inherit;
-  border: 1px solid rgba(232, 244, 253, 0.12);
-  filter: blur(1px);
+  opacity: 0.15; /* Default: very dim, almost invisible */
+  background: radial-gradient(circle at center, #444, #222);
+  box-shadow: 0 0 8px rgba(85, 91, 122, 0.3);
 }
 
 .map-node:hover {
-  transform: translate(-50%, -50%) scale(1.1);
+  transform: translate(-50%, -50%) scale(1.15);
   z-index: 20;
 }
 
-/* Node inner glow/highlight */
+/* Node inner highlight dot */
 .node-dot {
   position: absolute;
-  inset: 2px;
+  inset: 3px;
   border-radius: 999px;
-  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0));
-  opacity: 0.9;
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0));
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 0.3s ease;
 }
 
-/* Node States */
+/* =================================================================
+   NODE STATES - Progressive Revelation System
+   ================================================================= */
 
-/* Current Node - Bright with pulsing orbit */
+/* HIDDEN: Completely dark, network not revealed */
+.map-node.state-hidden {
+  opacity: 0.05;
+  background: radial-gradient(circle at center, #2a2a2a, #1a1a1a);
+  box-shadow: none;
+  pointer-events: none;
+  cursor: default;
+}
+
+.map-node.state-hidden .node-dot {
+  opacity: 0;
+}
+
+/* LOCKED: Visible but inaccessible, waiting for connections */
+.map-node.state-locked {
+  opacity: 0.25;
+  background: radial-gradient(circle at center, #555, #333);
+  box-shadow: 0 0 12px rgba(85, 91, 122, 0.4);
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+
+.map-node.state-locked .node-dot {
+  opacity: 0.2;
+}
+
+/* AVAILABLE: Path revealed, node can be entered - GLOWING */
+.map-node.state-available {
+  opacity: 1;
+  animation: availablePulse 3s ease-in-out infinite;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.map-node.state-available .node-dot {
+  opacity: 0.9;
+  animation: dotShimmer 2s ease-in-out infinite;
+}
+
+@keyframes availablePulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+@keyframes dotShimmer {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* CURRENT: Player's current position - BRIGHT PULSING */
 .map-node.state-current {
   width: 30px;
   height: 30px;
-  background: radial-gradient(circle at center, #fff, #777);
-  box-shadow:
-    0 0 24px rgba(232, 244, 253, 1),
-    0 0 60px rgba(199, 146, 255, 0.8);
-  animation: currentPulse 2.4s ease-in-out infinite;
+  opacity: 1;
+  animation: currentPulse 2s ease-in-out infinite;
+  pointer-events: auto;
 }
 
-.map-node.state-current::before {
-  border-width: 2px;
+.map-node.state-current .node-dot {
+  opacity: 1;
+  animation: dotPulse 2s ease-in-out infinite;
 }
 
 @keyframes currentPulse {
-  0% {
+  0%, 100% {
     box-shadow:
-      0 0 22px rgba(232, 244, 253, 0.9),
-      0 0 60px rgba(156, 163, 255, 0.7);
+      0 0 30px currentColor,
+      0 0 60px currentColor,
+      0 0 90px rgba(232, 244, 253, 0.6);
   }
   50% {
     box-shadow:
-      0 0 40px rgba(232, 244, 253, 1),
-      0 0 100px rgba(199, 146, 255, 0.9);
+      0 0 45px currentColor,
+      0 0 90px currentColor,
+      0 0 120px rgba(232, 244, 253, 0.9);
   }
-  100% {
-    box-shadow:
-      0 0 22px rgba(232, 244, 253, 0.9),
-      0 0 60px rgba(156, 163, 255, 0.7);
+}
+
+@keyframes dotPulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
   }
 }
 
 /* Current node orbit ring */
 .current-orbit {
   position: absolute;
-  width: 40px;
-  height: 40px;
+  width: 45px;
+  height: 45px;
   border-radius: 999px;
-  border: 1px dashed rgba(232, 244, 253, 0.4);
+  border: 1.5px dashed rgba(232, 244, 253, 0.6);
   transform: translate(-50%, -50%);
   animation: orbit 6s linear infinite;
   pointer-events: none;
   z-index: 9;
+  box-shadow: 0 0 20px rgba(232, 244, 253, 0.4);
 }
 
 @keyframes orbit {
@@ -201,195 +257,271 @@
   }
 }
 
-/* Available Node - Bright with softer glow */
-.map-node.state-available {
-  background: radial-gradient(circle at center, #fff, #777);
-  box-shadow:
-    0 0 20px rgba(232, 244, 253, 0.7),
-    0 0 40px rgba(111, 255, 184, 0.4);
+/* COMPLETED: Node was visited - DIMMED but permanently lit */
+.map-node.state-completed {
+  opacity: 0.5;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
-/* Visited/Completed Node - Softer, dimmed */
-.map-node.state-visited {
-  background: radial-gradient(circle at center, #fff, #777);
-  box-shadow:
-    0 0 10px rgba(232, 244, 253, 0.6),
-    0 0 30px rgba(10, 14, 38, 0.6);
-  opacity: 0.9;
+.map-node.state-completed .node-dot {
+  opacity: 0.3;
 }
 
-/* Locked Node - Dimmed */
-.map-node.state-locked {
-  background: radial-gradient(circle at center, #fff, #777);
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* Hidden/Unknown Node - Very dim */
-.map-node.state-hidden {
-  background: radial-gradient(circle at center, #777b8f, #555b7a);
-  box-shadow: 0 0 16px rgba(85, 91, 122, 0.8);
-  opacity: 0.65;
-  pointer-events: none;
-}
-
-/* Node Type Overlays (background and glow) */
+/* =================================================================
+   NODE TYPES - Color-coded based on encounter type
+   ================================================================= */
 
 /* Combat - Red */
 .map-node[data-type="combat"] {
-  background: radial-gradient(circle at center, #ffd0d0, #ff6b6b);
-  box-shadow: 0 0 20px rgba(255, 107, 107, 0.9);
+  background: radial-gradient(circle at center, #ff9999, #ff4444);
+  color: #ff6b6b;
+}
+
+.map-node[data-type="combat"].state-available,
+.map-node[data-type="combat"].state-current {
+  box-shadow:
+    0 0 20px rgba(255, 107, 107, 0.9),
+    0 0 40px rgba(255, 107, 107, 0.6);
 }
 
 /* Resource - Green */
 .map-node[data-type="resource"] {
-  background: radial-gradient(circle at center, #dbffe8, #6fffb8);
-  box-shadow: 0 0 20px rgba(111, 255, 184, 0.9);
+  background: radial-gradient(circle at center, #a0ffd0, #50ff90);
+  color: #6fffb8;
+}
+
+.map-node[data-type="resource"].state-available,
+.map-node[data-type="resource"].state-current {
+  box-shadow:
+    0 0 20px rgba(111, 255, 184, 0.9),
+    0 0 40px rgba(111, 255, 184, 0.6);
 }
 
 /* Event - Purple */
 .map-node[data-type="event"] {
-  background: radial-gradient(circle at center, #f2dcff, #c792ff);
-  box-shadow: 0 0 20px rgba(199, 146, 255, 0.9);
+  background: radial-gradient(circle at center, #e0b0ff, #c070ff);
+  color: #c792ff;
+}
+
+.map-node[data-type="event"].state-available,
+.map-node[data-type="event"].state-current {
+  box-shadow:
+    0 0 20px rgba(199, 146, 255, 0.9),
+    0 0 40px rgba(199, 146, 255, 0.6);
 }
 
 /* Rest - Blue */
 .map-node[data-type="rest"] {
-  background: radial-gradient(circle at center, #e1f3ff, #7cd0ff);
-  box-shadow: 0 0 20px rgba(124, 208, 255, 0.9);
+  background: radial-gradient(circle at center, #b0e0ff, #60c0ff);
+  color: #7cd0ff;
 }
 
-/* Echo - Purple with glitch */
+.map-node[data-type="rest"].state-available,
+.map-node[data-type="rest"].state-current {
+  box-shadow:
+    0 0 20px rgba(124, 208, 255, 0.9),
+    0 0 40px rgba(124, 208, 255, 0.6);
+}
+
+/* Echo - Purple with glitch effect */
 .map-node[data-type="echo"] {
-  background: radial-gradient(circle at center, #f0e4ff, #b07cff);
-  box-shadow: 0 0 24px rgba(176, 124, 255, 1);
-  animation: echoGlitch 2.4s infinite;
+  background: radial-gradient(circle at center, #d0b0ff, #a060ff);
+  color: #b07cff;
+}
+
+.map-node[data-type="echo"].state-available,
+.map-node[data-type="echo"].state-current {
+  box-shadow:
+    0 0 24px rgba(176, 124, 255, 1),
+    0 0 48px rgba(176, 124, 255, 0.7);
+  animation: echoGlitch 3s infinite, availablePulse 3s ease-in-out infinite;
 }
 
 @keyframes echoGlitch {
-  0% {
-    transform: translate(-50%, -50%) scale(1);
+  0%, 90%, 100% {
     filter: none;
   }
-  20% {
-    transform: translate(calc(-50% + 1px), calc(-50% - 1px)) scale(1.05);
-    filter: hue-rotate(20deg);
+  91% {
+    filter: hue-rotate(30deg) brightness(1.2);
   }
-  21% {
-    transform: translate(calc(-50% - 1px), calc(-50% + 1px)) scale(0.98);
-    filter: hue-rotate(-10deg);
+  92% {
+    filter: hue-rotate(-20deg) brightness(0.8);
   }
-  100% {
-    transform: translate(-50%, -50%) scale(1);
-    filter: none;
+  93% {
+    filter: hue-rotate(10deg) brightness(1.1);
   }
 }
 
-/* Unknown type */
-.map-node[data-type="unknown"] {
-  background: radial-gradient(circle at center, #777b8f, #555b7a);
-  box-shadow: 0 0 16px rgba(85, 91, 122, 0.8);
-  opacity: 0.65;
+/* Exit Node - Special behavior */
+.map-node[data-type="exit"] {
+  background: radial-gradient(circle at center, #fff, #e0e0ff);
+  color: #e8f4fd;
 }
 
-/* Connection Lines */
+/* Exit node dormant (before 60% completion) */
+.map-node[data-type="exit"].state-locked {
+  opacity: 0.15;
+  background: radial-gradient(circle at center, #444, #222);
+  box-shadow: 0 0 8px rgba(50, 50, 80, 0.3);
+}
+
+/* Exit node awakened (after 60% completion) */
+.map-node[data-type="exit"].state-available,
+.map-node[data-type="exit"].state-current {
+  box-shadow:
+    0 0 30px rgba(232, 244, 253, 1),
+    0 0 60px rgba(199, 146, 255, 0.9),
+    0 0 90px rgba(111, 255, 184, 0.5);
+  animation: exitAwakened 2.5s ease-in-out infinite;
+}
+
+@keyframes exitAwakened {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow:
+      0 0 30px rgba(232, 244, 253, 1),
+      0 0 60px rgba(199, 146, 255, 0.9);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.1);
+    box-shadow:
+      0 0 45px rgba(232, 244, 253, 1),
+      0 0 90px rgba(199, 146, 255, 1),
+      0 0 120px rgba(111, 255, 184, 0.7);
+  }
+}
+
+/* Start Node - Always visible and pulsing */
+.map-node[data-type="start"] {
+  background: radial-gradient(circle at center, #a0ffd0, #50ff90);
+  color: #6fffb8;
+}
+
+.map-node[data-type="start"].state-current {
+  opacity: 1;
+}
+
+/* =================================================================
+   CONNECTION LINES - Synaptic Energy Flows
+   ================================================================= */
+
 .connection-line {
   position: absolute;
   height: 1.5px;
   background: linear-gradient(90deg,
     rgba(232, 244, 253, 0.05) 0%,
-    rgba(232, 244, 253, 0.7) 50%,
+    rgba(232, 244, 253, 0.3) 50%,
     rgba(232, 244, 253, 0.05) 100%
   );
   transform-origin: center center;
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0.1; /* Default: barely visible */
   z-index: 1;
+  transition: opacity 0.5s ease;
 }
 
-/* Animated pulse effect on connection lines */
+/* Energy pulse effect (synaptic firing) */
 .connection-line::after {
   content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg,
-    transparent,
-    rgba(232, 244, 253, 0.9),
-    transparent
+    transparent 0%,
+    rgba(232, 244, 253, 0) 20%,
+    rgba(232, 244, 253, 0.9) 50%,
+    rgba(232, 244, 253, 0) 80%,
+    transparent 100%
   );
   opacity: 0;
-  transform: translateX(-40%);
-  animation: linkPulse 4s linear infinite;
+  transform: translateX(-100%);
 }
 
-@keyframes linkPulse {
+/* Hidden connection - not visible */
+.connection-line.state-hidden {
+  opacity: 0;
+}
+
+/* Locked connection - dimly visible */
+.connection-line.state-locked {
+  opacity: 0.15;
+}
+
+/* Available connection - Energy flowing */
+.connection-line.state-available {
+  opacity: 0.7;
+  background: linear-gradient(90deg,
+    rgba(232, 244, 253, 0.1) 0%,
+    rgba(232, 244, 253, 0.8) 50%,
+    rgba(232, 244, 253, 0.1) 100%
+  );
+}
+
+.connection-line.state-available::after {
+  opacity: 1;
+  animation: synapticFire 2.5s ease-in-out infinite;
+}
+
+@keyframes synapticFire {
   0% {
-    transform: translateX(-40%);
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
   }
   100% {
-    transform: translateX(40%);
+    transform: translateX(100%);
+    opacity: 0;
   }
 }
 
-/* Discovered connection - More visible */
-.connection-line.discovered {
-  opacity: 0.8;
-}
-
-/* Visited connection - Bright with glow */
-.connection-line.visited {
-  box-shadow: 0 0 20px rgba(232, 244, 253, 0.5);
-  opacity: 1.0;
-}
-
-/* Available connection - Animated pulse visible */
-.connection-line.available::after {
+/* Active connection - To/from current node */
+.connection-line.state-active {
   opacity: 1;
+  background: linear-gradient(90deg,
+    rgba(232, 244, 253, 0.2) 0%,
+    rgba(232, 244, 253, 1) 50%,
+    rgba(232, 244, 253, 0.2) 100%
+  );
+  box-shadow: 0 0 8px rgba(232, 244, 253, 0.6);
 }
 
-/* Special Nodes */
-
-/* Start Node */
-.map-node[data-type="start"] {
-  width: 30px;
-  height: 30px;
-  background: radial-gradient(circle at center, #00ffff, #00aaaa);
-  border: 2px solid rgba(0, 255, 255, 0.6);
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+.connection-line.state-active::after {
+  opacity: 1;
+  animation: synapticFire 1.5s ease-in-out infinite;
 }
 
-/* Exit Node */
-.map-node[data-type="exit"] {
-  width: 30px;
-  height: 30px;
-  background: radial-gradient(circle at center, #ff00ff, #aa00aa);
-  border: 2px solid rgba(255, 0, 255, 0.6);
-  box-shadow:
-    0 0 10px rgba(255, 0, 255, 0.6),
-    0 0 20px rgba(255, 0, 255, 0.3);
-  animation: exitPulse 3s ease-in-out infinite;
+/* Completed connection - Permanently lit but dimmed */
+.connection-line.state-completed {
+  opacity: 0.4;
+  background: linear-gradient(90deg,
+    rgba(232, 244, 253, 0.1) 0%,
+    rgba(232, 244, 253, 0.5) 50%,
+    rgba(232, 244, 253, 0.1) 100%
+  );
 }
 
-@keyframes exitPulse {
-  0%, 100% {
-    box-shadow:
-      0 0 10px rgba(255, 0, 255, 0.6),
-      0 0 20px rgba(255, 0, 255, 0.3);
+/* Energy burst animation (when completing a node) */
+@keyframes energyBurst {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.5);
   }
   50% {
-    box-shadow:
-      0 0 15px rgba(255, 0, 255, 0.9),
-      0 0 30px rgba(255, 0, 255, 0.5);
+    opacity: 1;
+    transform: translateX(0%) scale(1.5);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(50%) scale(0.5);
   }
 }
 
-/* Priority fix for type-based styling over state */
-.map-node[data-type="combat"].state-current,
-.map-node[data-type="resource"].state-current,
-.map-node[data-type="event"].state-current,
-.map-node[data-type="rest"].state-current,
-.map-node[data-type="echo"].state-current {
-  width: 30px;
-  height: 30px;
-  animation: currentPulse 2.4s ease-in-out infinite;
+.connection-line.energy-burst::after {
+  animation: energyBurst 0.8s ease-out forwards;
+  background: radial-gradient(circle, rgba(232, 244, 253, 1), transparent);
 }

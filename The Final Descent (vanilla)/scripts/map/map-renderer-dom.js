@@ -138,28 +138,49 @@ export class MapRendererDOM {
 
   /**
    * Update connection line state/classes
+   * Priority: ACTIVE > AVAILABLE > COMPLETED > LOCKED > HIDDEN
    */
   updateConnectionState(lineElement, conn, fromNode, toNode) {
     // Clear state classes
-    lineElement.classList.remove('discovered', 'visited', 'available');
+    lineElement.classList.remove('state-hidden', 'state-locked', 'state-available', 'state-active', 'state-completed');
 
     const fromState = fromNode.state;
     const toState = toNode.state;
 
-    // Determine connection state
-    const isCurrent = fromState === NodeStates.CURRENT || toState === NodeStates.CURRENT;
-    const isVisited = fromState === NodeStates.COMPLETED || toState === NodeStates.COMPLETED;
-    const isRevealed = conn.revealed;
+    // Determine connection state based on node states (check in priority order)
 
-    if (isCurrent) {
-      lineElement.classList.add('available');
+    // ACTIVE: Connection to/from current node (highest priority - bright energy flow)
+    if (fromState === NodeStates.CURRENT || toState === NodeStates.CURRENT) {
+      lineElement.classList.add('state-active');
+      return;
     }
 
-    if (isVisited && fromState === NodeStates.COMPLETED && toState === NodeStates.COMPLETED) {
-      lineElement.classList.add('visited');
-    } else if (isRevealed || isCurrent) {
-      lineElement.classList.add('discovered');
+    // AVAILABLE: At least one node is available (energy flowing to reachable nodes)
+    if (fromState === NodeStates.AVAILABLE || toState === NodeStates.AVAILABLE) {
+      lineElement.classList.add('state-available');
+      return;
     }
+
+    // COMPLETED: Both nodes completed (path already traveled)
+    if (fromState === NodeStates.COMPLETED && toState === NodeStates.COMPLETED) {
+      lineElement.classList.add('state-completed');
+      return;
+    }
+
+    // LOCKED: One or both nodes locked (dim, waiting to be revealed)
+    if (fromState === NodeStates.LOCKED || toState === NodeStates.LOCKED) {
+      lineElement.classList.add('state-locked');
+      return;
+    }
+
+    // HIDDEN: Both nodes not revealed (completely invisible)
+    if (fromState === NodeStates.HIDDEN && toState === NodeStates.HIDDEN) {
+      lineElement.classList.add('state-hidden');
+      return;
+    }
+
+    // Default: hidden
+    lineElement.classList.add('state-hidden');
   }
 
   /**
@@ -220,7 +241,7 @@ export class MapRendererDOM {
    */
   updateNodeState(nodeElement, nodeData) {
     // Clear state classes
-    nodeElement.classList.remove('state-current', 'state-available', 'state-visited', 'state-locked', 'state-hidden');
+    nodeElement.classList.remove('state-current', 'state-available', 'state-completed', 'state-locked', 'state-hidden');
 
     // Add appropriate state class
     const stateClass = `state-${nodeData.state}`;
@@ -229,9 +250,14 @@ export class MapRendererDOM {
     // Update data attribute for type
     nodeElement.dataset.type = nodeData.type || 'unknown';
 
-    // Handle hidden nodes showing as unknown
+    // Handle hidden nodes - show as unknown type
     if (nodeData.state === NodeStates.HIDDEN) {
       nodeElement.dataset.type = 'unknown';
+    }
+
+    // Handle locked nodes - show dim generic appearance
+    if (nodeData.state === NodeStates.LOCKED) {
+      // Keep the actual type data attribute but CSS will dim it
     }
   }
 
@@ -321,6 +347,64 @@ export class MapRendererDOM {
     const nodeId = element.dataset.id;
     const nodeEntry = this.nodes.get(nodeId);
     return nodeEntry ? nodeEntry.data : null;
+  }
+
+  /**
+   * Trigger energy burst animation from a node
+   * Sends energy pulses along connections to neighboring nodes
+   */
+  triggerNodeBurst(node) {
+    console.log(`[MapRendererDOM] Triggering energy burst from node ${node.id}`);
+
+    // Find all connections from this node
+    const nodeConnections = Array.from(this.connections.values()).filter(connEntry =>
+      connEntry.data.from === node.id || connEntry.data.to === node.id
+    );
+
+    // Trigger burst animation on each connection
+    nodeConnections.forEach((connEntry, index) => {
+      setTimeout(() => {
+        // Add energy-burst class temporarily
+        connEntry.element.classList.add('energy-burst');
+
+        // Remove after animation completes
+        setTimeout(() => {
+          connEntry.element.classList.remove('energy-burst');
+        }, 800); // Match animation duration in CSS
+      }, index * 100); // Stagger bursts slightly
+    });
+
+    // Pulse the node itself
+    const nodeEntry = this.nodes.get(node.id);
+    if (nodeEntry && nodeEntry.element) {
+      nodeEntry.element.style.animation = 'none';
+      // Trigger reflow
+      void nodeEntry.element.offsetWidth;
+      nodeEntry.element.style.animation = '';
+    }
+  }
+
+  /**
+   * Start energy pulse animation from one node to another
+   * Used when traveling between nodes
+   */
+  startEnergyPulse(fromNodeId, toNodeId) {
+    console.log(`[MapRendererDOM] Energy pulse: ${fromNodeId} → ${toNodeId}`);
+
+    // Find the connection between these nodes
+    const connection = Array.from(this.connections.values()).find(connEntry =>
+      (connEntry.data.from === fromNodeId && connEntry.data.to === toNodeId) ||
+      (connEntry.data.from === toNodeId && connEntry.data.to === fromNodeId)
+    );
+
+    if (connection) {
+      // Trigger energy pulse
+      connection.element.classList.add('energy-burst');
+
+      setTimeout(() => {
+        connection.element.classList.remove('energy-burst');
+      }, 800);
+    }
   }
 
   /**

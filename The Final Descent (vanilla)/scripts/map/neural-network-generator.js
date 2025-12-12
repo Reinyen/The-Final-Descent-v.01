@@ -291,7 +291,11 @@ export class NeuralNetworkGenerator {
   }
 
   /**
-   * Initialize node states (start revealed, others hidden)
+   * Initialize node states for progressive revelation
+   * - Start node: CURRENT (bright pulsing)
+   * - Start's neighbors: AVAILABLE (can be entered)
+   * - Exit node: LOCKED (visible but dormant until 60% completion)
+   * - All other nodes: LOCKED (dim and inactive, waiting to be revealed)
    */
   initializeNodeStates() {
     // Start node is current
@@ -315,12 +319,20 @@ export class NeuralNetworkGenerator {
       }
     }
 
-    // All other nodes are hidden
+    // All other nodes are LOCKED (dim but visible, part of inactive network)
+    // Exit node also starts LOCKED (dormant until 60% completion)
     for (let i = 1; i < this.nodes.length; i++) {
       if (this.nodes[i].state === NodeStates.CURRENT) continue;
       if (this.nodes[i].state === NodeStates.AVAILABLE) continue;
-      this.nodes[i].state = NodeStates.HIDDEN;
-      this.nodes[i].revealed = false;
+      this.nodes[i].state = NodeStates.LOCKED;
+      this.nodes[i].revealed = true; // Visible in the network, but locked
+    }
+
+    // Connections not yet revealed stay hidden
+    for (const conn of this.connections) {
+      if (!conn.revealed) {
+        conn.revealed = false;
+      }
     }
   }
 

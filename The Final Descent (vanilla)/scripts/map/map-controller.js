@@ -267,6 +267,7 @@ export class MapController {
 
   /**
    * Progress to a node (update states, reveal connections)
+   * Triggers energy burst animations along synaptic paths
    */
   async progressToNode(nodeId) {
     console.log(`[MapController] Progressing to node: ${nodeId}`);
@@ -275,6 +276,11 @@ export class MapController {
     const oldNode = this.networkData.nodes.find(n => n.id === this.currentNodeId);
     if (oldNode) {
       oldNode.state = NodeStates.COMPLETED;
+
+      // Trigger energy burst from completed node to connected nodes
+      if (this.renderer.triggerNodeBurst) {
+        this.renderer.triggerNodeBurst(oldNode);
+      }
     }
 
     // Set new current node
@@ -290,14 +296,14 @@ export class MapController {
       }
     }
 
-    // Reveal connected nodes
+    // Reveal connected nodes (energy flows to 2-3 neighbors)
     this.revealConnectedNodes(nodeId);
 
     // Update visualization
     this.renderer.updateNetwork(this.networkData);
     this.updateInfoBand();
 
-    // Check if ring is complete
+    // Check if ring is complete (60% threshold for exit awakening)
     this.checkRingCompletion();
   }
 
@@ -388,16 +394,16 @@ export class MapController {
 
     console.log(`[MapController] Progress: ${visitedCount}/${totalNodes} (required: ${requiredCount})`);
 
-    // Unlock exit if requirements met (just change state, don't teleport)
+    // Awaken exit node if 60% completion reached (LOCKED → AVAILABLE with energy burst)
     if (visitedCount >= requiredCount && exitNode) {
       if (exitNode.state === NodeStates.LOCKED || exitNode.state === NodeStates.HIDDEN) {
-        console.log('[MapController] 60% completion reached! Exit node unlocked!');
+        console.log('[MapController] ⚡ 60% completion reached! Exit node awakening! ⚡');
 
-        // Just change the exit state - it's already in the network with real connections
+        // Change exit node state: LOCKED → AVAILABLE (begins pulsing with light)
         exitNode.state = NodeStates.AVAILABLE;
         exitNode.revealed = true;
 
-        // Reveal connections to the exit node
+        // Reveal connections to the exit node (energy flows illuminate paths)
         exitNode.connections.forEach(connectedId => {
           const connection = this.networkData.connections.find(c =>
             (c.from === exitNode.id && c.to === connectedId) ||
@@ -408,7 +414,13 @@ export class MapController {
           }
         });
 
+        // Trigger visual awakening burst from exit node
+        if (this.renderer.triggerNodeBurst) {
+          this.renderer.triggerNodeBurst(exitNode);
+        }
+
         this.renderer.updateNetwork(this.networkData);
+        this.updateInfoBand();
       }
     }
   }
