@@ -6,15 +6,24 @@ import * as THREE from 'three';
  * Matches the visual quality of the Intro UI black hole
  */
 export class MapBackground {
-  constructor(containerElement) {
-    this.container = containerElement;
-    this.scene = null;
-    this.camera = null;
-    this.renderer = null;
+  constructor(starfieldContainer, glassSphereContainer) {
+    this.starfieldContainer = starfieldContainer;
+    this.glassSphereContainer = glassSphereContainer;
+
+    // Starfield scene
+    this.starfieldScene = null;
+    this.starfieldCamera = null;
+    this.starfieldRenderer = null;
     this.starfield = null;
+
+    // Glass sphere scene
+    this.glassScene = null;
+    this.glassCamera = null;
+    this.glassRenderer = null;
     this.glassSphere = null;
     this.reflectionCamera = null;
     this.reflectionTarget = null;
+
     this.animationFrameId = null;
     this.elapsedTime = 0;
     this.clock = new THREE.Clock();
@@ -26,24 +35,40 @@ export class MapBackground {
   }
 
   init() {
-    // Create scene
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x02030a); // Match map background
+    // Create starfield scene
+    this.starfieldScene = new THREE.Scene();
+    this.starfieldScene.background = new THREE.Color(0x02030a); // Match map background
 
-    // Create camera
-    const aspect = this.container.clientWidth / this.container.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
-    this.camera.position.set(0, 0, 50);
-    this.camera.lookAt(0, 0, 0);
+    const starfieldAspect = this.starfieldContainer.clientWidth / this.starfieldContainer.clientHeight;
+    this.starfieldCamera = new THREE.PerspectiveCamera(50, starfieldAspect, 0.1, 1000);
+    this.starfieldCamera.position.set(0, 0, 50);
+    this.starfieldCamera.lookAt(0, 0, 0);
 
-    // Create renderer
-    this.renderer = new THREE.WebGLRenderer({
+    this.starfieldRenderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: false
     });
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.container.appendChild(this.renderer.domElement);
+    this.starfieldRenderer.setSize(this.starfieldContainer.clientWidth, this.starfieldContainer.clientHeight);
+    this.starfieldRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.starfieldContainer.appendChild(this.starfieldRenderer.domElement);
+
+    // Create glass sphere scene
+    this.glassScene = new THREE.Scene();
+    // Transparent background so starfield shows through
+    this.glassScene.background = null;
+
+    const glassAspect = this.glassSphereContainer.clientWidth / this.glassSphereContainer.clientHeight;
+    this.glassCamera = new THREE.PerspectiveCamera(50, glassAspect, 0.1, 1000);
+    this.glassCamera.position.set(0, 0, 50);
+    this.glassCamera.lookAt(0, 0, 0);
+
+    this.glassRenderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true // Transparent background
+    });
+    this.glassRenderer.setSize(this.glassSphereContainer.clientWidth, this.glassSphereContainer.clientHeight);
+    this.glassRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.glassSphereContainer.appendChild(this.glassRenderer.domElement);
 
     // Create starfield
     this.createStarfield();
@@ -57,7 +82,7 @@ export class MapBackground {
     // Start animation
     this.animate();
 
-    console.log('[MapBackground] Initialized with starfield and glass sphere');
+    console.log('[MapBackground] Initialized with starfield and glass sphere in separate layers');
   }
 
   createStarfield() {
@@ -211,7 +236,7 @@ export class MapBackground {
     });
 
     this.starfield = new THREE.Points(geometry, material);
-    this.scene.add(this.starfield);
+    this.starfieldScene.add(this.starfield);
 
     console.log(`[MapBackground] Created starfield with ${this.starCount} stars and ${this.dustCount} dust particles`);
   }
@@ -322,7 +347,7 @@ export class MapBackground {
     group.add(coreMesh);
 
     this.glassSphere = group;
-    this.scene.add(this.glassSphere);
+    this.glassScene.add(this.glassSphere);
 
     console.log('[MapBackground] Created glass sphere with reflection and inner glow');
   }
@@ -355,12 +380,14 @@ export class MapBackground {
       // Update reflection camera
       if (this.reflectionCamera) {
         this.glassSphere.children[0].visible = false; // Hide glass sphere from reflection
-        this.reflectionCamera.update(this.renderer, this.scene);
+        this.reflectionCamera.update(this.glassRenderer, this.glassScene);
         this.glassSphere.children[0].visible = true;
       }
     }
 
-    this.renderer.render(this.scene, this.camera);
+    // Render both scenes
+    this.starfieldRenderer.render(this.starfieldScene, this.starfieldCamera);
+    this.glassRenderer.render(this.glassScene, this.glassCamera);
   }
 
   setupResize() {
@@ -368,15 +395,27 @@ export class MapBackground {
   }
 
   handleResize() {
-    if (!this.container || !this.camera || !this.renderer) return;
+    // Resize starfield
+    if (this.starfieldContainer && this.starfieldCamera && this.starfieldRenderer) {
+      const starWidth = this.starfieldContainer.clientWidth;
+      const starHeight = this.starfieldContainer.clientHeight;
 
-    const width = this.container.clientWidth;
-    const height = this.container.clientHeight;
+      this.starfieldCamera.aspect = starWidth / starHeight;
+      this.starfieldCamera.updateProjectionMatrix();
 
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
+      this.starfieldRenderer.setSize(starWidth, starHeight);
+    }
 
-    this.renderer.setSize(width, height);
+    // Resize glass sphere
+    if (this.glassSphereContainer && this.glassCamera && this.glassRenderer) {
+      const glassWidth = this.glassSphereContainer.clientWidth;
+      const glassHeight = this.glassSphereContainer.clientHeight;
+
+      this.glassCamera.aspect = glassWidth / glassHeight;
+      this.glassCamera.updateProjectionMatrix();
+
+      this.glassRenderer.setSize(glassWidth, glassHeight);
+    }
   }
 
   dispose() {
@@ -400,10 +439,17 @@ export class MapBackground {
       this.reflectionTarget.dispose();
     }
 
-    if (this.renderer) {
-      this.renderer.dispose();
-      if (this.renderer.domElement && this.renderer.domElement.parentNode) {
-        this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+    if (this.starfieldRenderer) {
+      this.starfieldRenderer.dispose();
+      if (this.starfieldRenderer.domElement && this.starfieldRenderer.domElement.parentNode) {
+        this.starfieldRenderer.domElement.parentNode.removeChild(this.starfieldRenderer.domElement);
+      }
+    }
+
+    if (this.glassRenderer) {
+      this.glassRenderer.dispose();
+      if (this.glassRenderer.domElement && this.glassRenderer.domElement.parentNode) {
+        this.glassRenderer.domElement.parentNode.removeChild(this.glassRenderer.domElement);
       }
     }
 
