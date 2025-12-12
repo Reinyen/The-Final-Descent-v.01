@@ -138,6 +138,7 @@ export class MapRendererDOM {
 
   /**
    * Update connection line state/classes
+   * Priority: ACTIVE > AVAILABLE > COMPLETED > LOCKED > HIDDEN
    */
   updateConnectionState(lineElement, conn, fromNode, toNode) {
     // Clear state classes
@@ -146,35 +147,35 @@ export class MapRendererDOM {
     const fromState = fromNode.state;
     const toState = toNode.state;
 
-    // Determine connection state based on node states
-    // HIDDEN: Both nodes not revealed
-    if (fromState === NodeStates.HIDDEN && toState === NodeStates.HIDDEN) {
-      lineElement.classList.add('state-hidden');
-      return;
-    }
+    // Determine connection state based on node states (check in priority order)
 
-    // LOCKED: One or both nodes locked
-    if (fromState === NodeStates.LOCKED || toState === NodeStates.LOCKED) {
-      lineElement.classList.add('state-locked');
-      return;
-    }
-
-    // COMPLETED: Both nodes completed (path traveled)
-    if (fromState === NodeStates.COMPLETED && toState === NodeStates.COMPLETED) {
-      lineElement.classList.add('state-completed');
-      return;
-    }
-
-    // ACTIVE: Connection to/from current node
+    // ACTIVE: Connection to/from current node (highest priority - bright energy flow)
     if (fromState === NodeStates.CURRENT || toState === NodeStates.CURRENT) {
       lineElement.classList.add('state-active');
       return;
     }
 
-    // AVAILABLE: At least one node is available or completed
-    if (fromState === NodeStates.AVAILABLE || toState === NodeStates.AVAILABLE ||
-        fromState === NodeStates.COMPLETED || toState === NodeStates.COMPLETED) {
+    // AVAILABLE: At least one node is available (energy flowing to reachable nodes)
+    if (fromState === NodeStates.AVAILABLE || toState === NodeStates.AVAILABLE) {
       lineElement.classList.add('state-available');
+      return;
+    }
+
+    // COMPLETED: Both nodes completed (path already traveled)
+    if (fromState === NodeStates.COMPLETED && toState === NodeStates.COMPLETED) {
+      lineElement.classList.add('state-completed');
+      return;
+    }
+
+    // LOCKED: One or both nodes locked (dim, waiting to be revealed)
+    if (fromState === NodeStates.LOCKED || toState === NodeStates.LOCKED) {
+      lineElement.classList.add('state-locked');
+      return;
+    }
+
+    // HIDDEN: Both nodes not revealed (completely invisible)
+    if (fromState === NodeStates.HIDDEN && toState === NodeStates.HIDDEN) {
+      lineElement.classList.add('state-hidden');
       return;
     }
 
