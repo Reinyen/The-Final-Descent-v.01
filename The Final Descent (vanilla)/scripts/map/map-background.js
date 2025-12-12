@@ -269,6 +269,15 @@ export class MapBackground {
   createGlassSphere() {
     const group = new THREE.Group();
 
+    // Add ambient light for glass to reflect
+    const ambientLight = new THREE.AmbientLight(0x8a7cff, 0.3);
+    this.glassScene.add(ambientLight);
+
+    // Add point light for highlights
+    const pointLight = new THREE.PointLight(0xe8f4fd, 0.5, 100);
+    pointLight.position.set(10, 10, 30);
+    this.glassScene.add(pointLight);
+
     // Create reflection environment for glass material
     this.reflectionTarget = new THREE.WebGLCubeRenderTarget(256, {
       type: THREE.HalfFloatType,
@@ -278,30 +287,31 @@ export class MapBackground {
     this.reflectionCamera = new THREE.CubeCamera(1, 400, this.reflectionTarget);
     group.add(this.reflectionCamera);
 
-    // Glass sphere - matches intro black hole event horizon
-    const sphereGeometry = new THREE.SphereGeometry(25, 64, 64);
+    // Glass sphere - smaller, more transparent
+    const sphereGeometry = new THREE.SphereGeometry(18, 64, 64);
     const glassMaterial = new THREE.MeshPhysicalMaterial({
-      transmission: 0.9,
+      transmission: 0.95, // Higher transmission for more transparency
       transparent: true,
-      opacity: 0.95,
-      roughness: 0.05,
-      metalness: 0.45,
+      opacity: 0.6, // Lower opacity to see through better
+      roughness: 0.02, // Very smooth for clear glass
+      metalness: 0.1, // Less metallic, more glass-like
       clearcoat: 1.0,
-      clearcoatRoughness: 0.04,
-      thickness: 2.5,
+      clearcoatRoughness: 0.02,
+      thickness: 1.0, // Thinner for lighter appearance
       envMap: this.reflectionTarget.texture,
-      envMapIntensity: 1.6,
-      ior: 1.25,
-      color: new THREE.Color(0x8a7cff), // Purple tint to match map halo
-      side: THREE.FrontSide
+      envMapIntensity: 0.8,
+      ior: 1.45, // Higher IOR for more glass-like refraction
+      color: new THREE.Color(0x9a8cff), // Lighter purple tint
+      side: THREE.FrontSide,
+      depthWrite: false
     });
 
     const glassMesh = new THREE.Mesh(sphereGeometry, glassMaterial);
-    glassMesh.renderOrder = -1;
+    glassMesh.renderOrder = 1;
     group.add(glassMesh);
 
-    // Inner core with subtle glow (visible through glass)
-    const coreGeometry = new THREE.SphereGeometry(24, 32, 32);
+    // Inner core with brighter glow (visible through glass)
+    const coreGeometry = new THREE.SphereGeometry(17, 32, 32);
     const coreMaterial = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       transparent: true,
@@ -326,30 +336,78 @@ export class MapBackground {
         varying vec3 vPosition;
 
         void main() {
-          // Subtle rotating energy patterns
+          // Rotating energy patterns
           float angle = atan(vPosition.y, vPosition.x);
-          float spiral = sin(angle * 5.0 + time * 0.5) * 0.5 + 0.5;
+          float spiral1 = sin(angle * 5.0 + time * 0.5) * 0.5 + 0.5;
+          float spiral2 = sin(angle * 3.0 - time * 0.3) * 0.5 + 0.5;
+
+          // Depth-based intensity
+          float depth = length(vPosition) / 17.0;
 
           // Fresnel-like edge glow
           vec3 viewDirection = normalize(cameraPosition - vPosition);
           float fresnel = 1.0 - abs(dot(viewDirection, vNormal));
-          fresnel = pow(fresnel, 2.0);
+          fresnel = pow(fresnel, 2.5);
 
-          vec3 purpleGlow = vec3(0.54, 0.49, 1.0);
-          float intensity = fresnel * 0.15 + spiral * 0.05;
+          vec3 purpleGlow = vec3(0.6, 0.49, 1.0);
+          float intensity = fresnel * 0.35 + (spiral1 * 0.15) + (spiral2 * 0.1);
 
-          gl_FragColor = vec4(purpleGlow * intensity, intensity * 0.8);
+          gl_FragColor = vec4(purpleGlow * intensity, intensity * 0.9);
         }
       `
     });
 
     const coreMesh = new THREE.Mesh(coreGeometry, coreMaterial);
+    coreMesh.renderOrder = 0;
     group.add(coreMesh);
+
+    // Outer glow ring for visibility
+    const glowGeometry = new THREE.SphereGeometry(19, 32, 32);
+    const glowMaterial = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      uniforms: {
+        time: { value: 0.0 }
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          vViewPosition = -mvPosition.xyz;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+
+        void main() {
+          vec3 viewDir = normalize(vViewPosition);
+          float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 3.0);
+
+          vec3 glowColor = vec3(0.54, 0.49, 1.0);
+          float pulse = sin(time * 0.5) * 0.1 + 0.9;
+          float intensity = fresnel * 0.25 * pulse;
+
+          gl_FragColor = vec4(glowColor * intensity, intensity * 0.7);
+        }
+      `
+    });
+
+    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+    glowMesh.renderOrder = -1;
+    group.add(glowMesh);
 
     this.glassSphere = group;
     this.glassScene.add(this.glassSphere);
 
-    console.log('[MapBackground] Created glass sphere with reflection and inner glow');
+    console.log('[MapBackground] Created glass sphere with reflection, inner glow, and outer aura');
   }
 
   animate() {
@@ -371,17 +429,24 @@ export class MapBackground {
     if (this.glassSphere) {
       this.glassSphere.rotation.z = this.elapsedTime * 0.1;
 
-      // Update inner core time uniform
-      const coreMesh = this.glassSphere.children.find(child => child.material && child.material.uniforms && child.material.uniforms.time);
-      if (coreMesh) {
-        coreMesh.material.uniforms.time.value = this.elapsedTime;
-      }
+      // Update shader time uniforms for all children
+      this.glassSphere.children.forEach(child => {
+        if (child.material && child.material.uniforms && child.material.uniforms.time) {
+          child.material.uniforms.time.value = this.elapsedTime;
+        }
+      });
 
       // Update reflection camera
       if (this.reflectionCamera) {
-        this.glassSphere.children[0].visible = false; // Hide glass sphere from reflection
-        this.reflectionCamera.update(this.glassRenderer, this.glassScene);
-        this.glassSphere.children[0].visible = true;
+        // Hide glass mesh from its own reflection
+        const glassMesh = this.glassSphere.children.find(child =>
+          child.material && child.material.type === 'MeshPhysicalMaterial'
+        );
+        if (glassMesh) {
+          glassMesh.visible = false;
+          this.reflectionCamera.update(this.glassRenderer, this.glassScene);
+          glassMesh.visible = true;
+        }
       }
     }
 
