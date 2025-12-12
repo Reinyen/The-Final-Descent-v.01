@@ -63,6 +63,9 @@ export class Timeline {
     // Update starfield (fade in, twinkling)
     this.scene.updateStarfield(phase, elapsedTime);
 
+    // Update explosion canvas (2D overlay during placeholder_content)
+    this.scene.updateExplosionCanvas(phase, elapsedTime);
+
     // Update camera
     this.scene.updateCamera(phase, elapsedTime);
 
