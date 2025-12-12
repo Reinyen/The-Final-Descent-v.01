@@ -90,10 +90,10 @@ export class MapBackground {
     const twinkleSpeeds = new Float32Array(totalCount);
 
     const bounds = {
-      x: 120,
-      y: 90,
+      x: 300,
+      y: 225,
       zNear: -20,
-      zFar: -100
+      zFar: -250
     };
 
     for (let i = 0; i < totalCount; i++) {
@@ -450,15 +450,51 @@ export class MapBackground {
         varying vec3 vNormal;
         varying vec3 vViewPosition;
 
+        // Simple noise function for electric crackling
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+
+          float a = hash(i);
+          float b = hash(i + vec2(1.0, 0.0));
+          float c = hash(i + vec2(0.0, 1.0));
+          float d = hash(i + vec2(1.0, 1.0));
+
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+
         void main() {
           vec3 viewDir = normalize(vViewPosition);
           float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 3.0);
 
           vec3 glowColor = vec3(0.54, 0.49, 1.0);
           float pulse = sin(time * 0.5) * 0.1 + 0.9;
-          float intensity = fresnel * 0.15 * pulse;
 
-          gl_FragColor = vec4(glowColor * intensity, intensity * 0.4);
+          // Electric crackling effect (every 2-8 seconds)
+          float crackleFreq = 0.15; // Roughly every 6.67 seconds on average
+          float cracklePhase = fract(time * crackleFreq);
+          float crackleTime = time * 5.0;
+
+          // Create bursts of crackling
+          float burstTrigger = smoothstep(0.9, 1.0, cracklePhase) * smoothstep(0.1, 0.0, cracklePhase);
+
+          // Electric arc patterns using noise
+          vec2 noiseCoord = vNormal.xy * 8.0 + vec2(crackleTime * 2.0, crackleTime * 1.5);
+          float crackle = noise(noiseCoord) * noise(noiseCoord * 2.3);
+          crackle = pow(crackle, 3.0); // Sharp electric arcs
+
+          // Combine crackle with burst timing
+          float electricEffect = crackle * burstTrigger * 0.8;
+
+          float intensity = fresnel * 0.15 * pulse + electricEffect;
+          vec3 finalColor = glowColor * (1.0 + electricEffect * 2.0); // Brighten during crackles
+
+          gl_FragColor = vec4(finalColor * intensity, intensity * 0.4);
         }
       `
     });
