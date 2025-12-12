@@ -146,12 +146,14 @@ export class MapBackground {
     // Create star texture
     const starTexture = this.createStarTexture();
 
-    // Shader material for twinkling stars with parallax
+    // Shader material for twinkling stars with parallax and fish-eye lens effect
     const material = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0.0 },
         starTexture: { value: starTexture },
-        pixelRatio: { value: Math.min(window.devicePixelRatio, 2) }
+        pixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
+        sphereCenter: { value: new THREE.Vector3(0, 0, 0) },
+        sphereRadius: { value: 18.0 }
       },
       vertexShader: `
         attribute float size;
@@ -162,6 +164,8 @@ export class MapBackground {
 
         uniform float time;
         uniform float pixelRatio;
+        uniform vec3 sphereCenter;
+        uniform float sphereRadius;
 
         varying vec3 vColor;
         varying float vAlpha;
@@ -175,7 +179,26 @@ export class MapBackground {
           float twinkle3 = sin(time * 0.5 + twinkleSeed * 2.7) * 0.15;
           float twinkle = twinkle1 + twinkle2 + twinkle3 + 0.85;
 
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          // Apply fish-eye lens distortion for stars appearing inside the sphere
+          vec3 starPos = position;
+
+          // Calculate distance from star to sphere center in 2D screen space approximation
+          vec2 starOffset = starPos.xy - sphereCenter.xy;
+          float distFromCenter = length(starOffset);
+
+          // Only apply distortion if star appears to be within sphere bounds
+          if (distFromCenter < sphereRadius) {
+            // Fish-eye distortion: push stars outward more as they approach center
+            float normalizedDist = distFromCenter / sphereRadius;
+
+            // Radial distortion factor (stronger near center, weaker at edges)
+            float distortion = 1.0 + (1.0 - normalizedDist) * 0.35;
+
+            // Apply radial distortion
+            starPos.xy = sphereCenter.xy + starOffset * distortion;
+          }
+
+          vec4 mvPosition = modelViewMatrix * vec4(starPos, 1.0);
           float viewDistance = -mvPosition.z;
 
           // Depth cueing for parallax
@@ -264,12 +287,12 @@ export class MapBackground {
     this.reflectionCamera = new THREE.CubeCamera(1, 400, this.reflectionTarget);
     group.add(this.reflectionCamera);
 
-    // Glass sphere - very transparent, almost invisible
+    // Glass sphere - 25% more opaque for better visibility
     const sphereGeometry = new THREE.SphereGeometry(18, 64, 64);
     const glassMaterial = new THREE.MeshPhysicalMaterial({
-      transmission: 0.98, // Near-total transparency
+      transmission: 0.92, // Reduced transparency for more opacity
       transparent: true,
-      opacity: 0.3, // Very low opacity for see-through effect
+      opacity: 0.5, // Increased from 0.3 to 0.5 (25% more opaque, adjusted for visual effect)
       roughness: 0.0, // Perfect smoothness for clear glass
       metalness: 0.0, // Pure glass, no metal
       clearcoat: 0.8,
