@@ -25,8 +25,8 @@ export class MapBackground {
     this.elapsedTime = 0;
     this.clock = new THREE.Clock();
 
-    this.starCount = 1000;
-    this.dustCount = 500;
+    this.starCount = 2000;
+    this.dustCount = 1000;
 
     // Diagonal axis for planetary rotation (top-right to bottom-left)
     this.sphereRotationAxis = new THREE.Vector3(1, 1, 0).normalize();
@@ -355,10 +355,10 @@ export class MapBackground {
           vec4 envColor = textureCube(envMap, reflected);
 
           // Combine: distorted background + glass glow + reflections
-          vec3 finalColor = background.rgb * 0.85 + glassGlow + envColor.rgb * 0.3;
+          vec3 finalColor = background.rgb * 0.15 + glassGlow + envColor.rgb * 0.3;
 
-          // Glass opacity - more opaque at edges (fresnel)
-          float alpha = 0.75 + fresnel * 0.25;
+          // Glass opacity - 90% base opacity with slight variation
+          float alpha = 0.90 + fresnel * 0.10;
 
           gl_FragColor = vec4(finalColor, alpha);
         }
