@@ -269,91 +269,25 @@
 }
 
 /* =================================================================
-   NODE TYPES - Color-coded based on encounter type
+   UNIFORM GOLDEN ORBS - All nodes same color
    ================================================================= */
 
-/* Combat - Red */
-.map-node[data-type="combat"] {
-  background: radial-gradient(circle at center, #ff9999, #ff4444);
-  color: #ff6b6b;
+/* All nodes (except exit) - Golden glowing orbs */
+.map-node {
+  background: radial-gradient(circle at center, #ffd966, #ffb300);
+  color: #ffcc00;
 }
 
-.map-node[data-type="combat"].state-available,
-.map-node[data-type="combat"].state-current {
+/* Available and Current nodes - Bright golden glow */
+.map-node.state-available,
+.map-node.state-current {
   box-shadow:
-    0 0 20px rgba(255, 107, 107, 0.9),
-    0 0 40px rgba(255, 107, 107, 0.6);
+    0 0 20px rgba(255, 204, 0, 0.9),
+    0 0 40px rgba(255, 179, 0, 0.7),
+    0 0 60px rgba(255, 179, 0, 0.4);
 }
 
-/* Resource - Green */
-.map-node[data-type="resource"] {
-  background: radial-gradient(circle at center, #a0ffd0, #50ff90);
-  color: #6fffb8;
-}
-
-.map-node[data-type="resource"].state-available,
-.map-node[data-type="resource"].state-current {
-  box-shadow:
-    0 0 20px rgba(111, 255, 184, 0.9),
-    0 0 40px rgba(111, 255, 184, 0.6);
-}
-
-/* Event - Purple */
-.map-node[data-type="event"] {
-  background: radial-gradient(circle at center, #e0b0ff, #c070ff);
-  color: #c792ff;
-}
-
-.map-node[data-type="event"].state-available,
-.map-node[data-type="event"].state-current {
-  box-shadow:
-    0 0 20px rgba(199, 146, 255, 0.9),
-    0 0 40px rgba(199, 146, 255, 0.6);
-}
-
-/* Rest - Blue */
-.map-node[data-type="rest"] {
-  background: radial-gradient(circle at center, #b0e0ff, #60c0ff);
-  color: #7cd0ff;
-}
-
-.map-node[data-type="rest"].state-available,
-.map-node[data-type="rest"].state-current {
-  box-shadow:
-    0 0 20px rgba(124, 208, 255, 0.9),
-    0 0 40px rgba(124, 208, 255, 0.6);
-}
-
-/* Echo - Purple with glitch effect */
-.map-node[data-type="echo"] {
-  background: radial-gradient(circle at center, #d0b0ff, #a060ff);
-  color: #b07cff;
-}
-
-.map-node[data-type="echo"].state-available,
-.map-node[data-type="echo"].state-current {
-  box-shadow:
-    0 0 24px rgba(176, 124, 255, 1),
-    0 0 48px rgba(176, 124, 255, 0.7);
-  animation: echoGlitch 3s infinite, availablePulse 3s ease-in-out infinite;
-}
-
-@keyframes echoGlitch {
-  0%, 90%, 100% {
-    filter: none;
-  }
-  91% {
-    filter: hue-rotate(30deg) brightness(1.2);
-  }
-  92% {
-    filter: hue-rotate(-20deg) brightness(0.8);
-  }
-  93% {
-    filter: hue-rotate(10deg) brightness(1.1);
-  }
-}
-
-/* Exit Node - Special behavior */
+/* Exit Node - Special white/cyan glow */
 .map-node[data-type="exit"] {
   background: radial-gradient(circle at center, #fff, #e0e0ff);
   color: #e8f4fd;
@@ -392,12 +326,7 @@
   }
 }
 
-/* Start Node - Always visible and pulsing */
-.map-node[data-type="start"] {
-  background: radial-gradient(circle at center, #a0ffd0, #50ff90);
-  color: #6fffb8;
-}
-
+/* Start Node - Golden like others, always visible and pulsing */
 .map-node[data-type="start"].state-current {
   opacity: 1;
 }
@@ -524,4 +453,66 @@
 .connection-line.energy-burst::after {
   animation: energyBurst 0.8s ease-out forwards;
   background: radial-gradient(circle, rgba(232, 244, 253, 1), transparent);
+}
+
+/* =================================================================
+   NODE HOVER TOOLTIPS
+   ================================================================= */
+
+.node-tooltip {
+  position: fixed;
+  background: radial-gradient(circle at top, rgba(12, 18, 38, 0.98), rgba(3, 6, 18, 0.98));
+  border: 1px solid rgba(232, 244, 253, 0.3);
+  border-radius: 12px;
+  padding: 12px 14px;
+  pointer-events: none;
+  z-index: 1000;
+  box-shadow:
+    0 0 30px rgba(0, 0, 0, 0.9),
+    inset 0 0 20px rgba(232, 244, 253, 0.05);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  max-width: 250px;
+  min-width: 180px;
+}
+
+.node-tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.node-tooltip-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 204, 0, 1);
+  margin-bottom: 6px;
+}
+
+.node-tooltip-type {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(245, 248, 255, 0.5);
+  margin-bottom: 8px;
+}
+
+.node-tooltip-desc {
+  color: rgba(245, 248, 255, 0.85);
+  line-height: 1.5;
+  margin-top: 6px;
+}
+
+.node-tooltip-state {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(232, 244, 253, 0.15);
+  font-size: 10px;
+  color: rgba(245, 248, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
