@@ -100,16 +100,16 @@ export class MapBackground {
       const i3 = i * 3;
       const isDust = i >= this.starCount;
 
-      // Distribute stars evenly in 3D space for continuous rotation visibility
-      // Use spherical distribution within bounds
-      const theta = Math.random() * Math.PI * 2; // Horizontal angle
-      const phi = Math.acos((Math.random() * 2) - 1); // Vertical angle (uniform on sphere)
-      const r = Math.cbrt(Math.random()) * bounds.x * 0.95; // Cubic root for volume distribution
+      // Distribute stars in multiple shells/layers for continuous rotation coverage
+      // Ensure even angular distribution around the sphere
+      const shellRadius = 20 + Math.random() * 100; // Multiple depth layers
+      const angle = Math.random() * Math.PI * 2; // Full 360° coverage
+      const heightVariation = (Math.random() - 0.5) * bounds.y; // Vertical spread
 
-      // Convert spherical to Cartesian with elliptical bounds
-      positions[i3] = r * Math.sin(phi) * Math.cos(theta); // X
-      positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.75; // Y (compressed)
-      positions[i3 + 2] = bounds.zFar + (r * Math.cos(phi) + bounds.x) * ((bounds.zNear - bounds.zFar) / (bounds.x * 2)); // Z (depth)
+      // Distribute in cylindrical pattern for even rotation coverage
+      positions[i3] = Math.cos(angle) * shellRadius; // X
+      positions[i3 + 1] = heightVariation; // Y (vertical variation)
+      positions[i3 + 2] = Math.sin(angle) * shellRadius + (bounds.zFar + bounds.zNear) / 2; // Z (circular distribution)
 
       // Color variation
       const paletteRoll = Math.random();
