@@ -376,6 +376,11 @@ export class MapRenderer {
     this.blurPhase = 0;
     this.idleIntensity = 1.0;
 
+    // Progress arc
+    this.progressArc = null;
+    this.progressArcData = [];
+    this.progressPercent = 0;
+
     this.init();
   }
 
@@ -491,6 +496,7 @@ export class MapRenderer {
     this.createNodesMesh();
     this.createConnectionsMesh();
     this.createSparkParticles();
+    this.createProgressArc();
   }
 
   /**
@@ -585,6 +591,97 @@ export class MapRenderer {
     });
 
     this.sparkParticles.geometry.attributes.position.needsUpdate = true;
+  }
+
+  /**
+   * Create progress arc - ring of dots around the network
+   */
+  createProgressArc() {
+    // Clean up existing arc
+    if (this.progressArc) {
+      this.scene.remove(this.progressArc);
+      this.progressArc.geometry.dispose();
+      this.progressArc.material.dispose();
+    }
+
+    const arcDotCount = 80;
+    const arcRadius = MapConfig.visual.networkRadius * 1.15; // Slightly outside the network
+    const positions = new Float32Array(arcDotCount * 3);
+    const phases = new Float32Array(arcDotCount); // For wave pattern
+
+    // Create ring of dots
+    for (let i = 0; i < arcDotCount; i++) {
+      const angle = (i / arcDotCount) * Math.PI * 2;
+      positions[i * 3] = arcRadius * Math.cos(angle);
+      positions[i * 3 + 1] = 0; // Flat ring
+      positions[i * 3 + 2] = arcRadius * Math.sin(angle);
+
+      phases[i] = i / arcDotCount; // For wave animation
+      this.progressArcData.push({ progress: i / arcDotCount });
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
+
+    // Custom shader for pulsing dots
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uProgressPercent: { value: 0 }
+      },
+      vertexShader: `
+        attribute float phase;
+        uniform float uTime;
+        uniform float uProgressPercent;
+        varying float vBrightness;
+        varying float vProgress;
+
+        void main() {
+          vProgress = phase;
+
+          // Wave animation
+          float wave = sin(phase * 12.0 - uTime * 2.0) * 0.5 + 0.5;
+
+          // Lit up based on progress
+          float lit = step(phase, uProgressPercent);
+
+          vBrightness = mix(0.2 + wave * 0.3, 0.8 + wave * 0.2, lit);
+
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = 3.0 * (1.0 + wave * 0.5);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying float vBrightness;
+        varying float vProgress;
+
+        void main() {
+          vec2 center = gl_PointCoord - vec2(0.5);
+          float dist = length(center);
+          if (dist > 0.5) discard;
+
+          vec3 color = vec3(0.0, 1.0, 1.0); // Cyan
+          gl_FragColor = vec4(color, vBrightness);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending
+    });
+
+    this.progressArc = new THREE.Points(geometry, material);
+    this.scene.add(this.progressArc);
+  }
+
+  /**
+   * Update progress arc percentage
+   */
+  updateProgressArc(progressPercent) {
+    this.progressPercent = progressPercent;
+    if (this.progressArc) {
+      this.progressArc.material.uniforms.uProgressPercent.value = progressPercent;
+    }
   }
 
   createNodesMesh() {
@@ -836,6 +933,12 @@ export class MapRenderer {
 
       revealeds.needsUpdate = true;
     }
+
+    // Update progress arc
+    const totalNodes = networkData.nodes.length;
+    const completedNodes = networkData.nodes.filter(n => n.state === NodeStates.COMPLETED || n.state === NodeStates.CURRENT).length;
+    const progressPercent = completedNodes / totalNodes;
+    this.updateProgressArc(progressPercent);
   }
 
   getStateNumber(state) {
@@ -877,6 +980,10 @@ export class MapRenderer {
     // Update shader uniforms
     if (this.nodesMesh) {
       this.nodesMesh.material.uniforms.uTime.value = elapsedTime;
+    }
+
+    if (this.progressArc) {
+      this.progressArc.material.uniforms.uTime.value = elapsedTime;
     }
 
     if (this.connectionsMesh) {
