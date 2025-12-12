@@ -13,8 +13,8 @@ import { MapConfig, NodeStates } from '../../data/map-config.js';
 export class MapController {
   constructor(mapContainer, canvasOverlay, canvasInfoBand) {
     this.renderer = new MapRendererDOM(mapContainer);
-    this.uiOverlay = new MapUIOverlay(canvasOverlay);
-    this.infoBand = new MapInfoBand(canvasInfoBand);
+    this.uiOverlay = canvasOverlay ? new MapUIOverlay(canvasOverlay) : null;
+    this.infoBand = canvasInfoBand ? new MapInfoBand(canvasInfoBand) : null;
 
     this.currentRing = 1;
     this.currentNodeId = null;
@@ -84,6 +84,7 @@ export class MapController {
    */
   updateInfoBand() {
     if (!this.networkData) return;
+    if (!this.infoBand) return;
 
     const ringConfig = MapConfig.rings[this.currentRing - 1];
     const totalNodes = this.networkData.nodes.length;
@@ -217,7 +218,9 @@ export class MapController {
     }
 
     // Select node (shows detailed preview)
-    this.uiOverlay.setSelectedNode(node);
+    if (this.uiOverlay) {
+      this.uiOverlay.setSelectedNode(node);
+    }
 
     console.log(`[MapController] Node clicked: ${node.id}`);
   }
@@ -249,7 +252,9 @@ export class MapController {
     await this.progressToNode(node.id);
 
     // Clear selection
-    this.uiOverlay.setSelectedNode(null);
+    if (this.uiOverlay) {
+      this.uiOverlay.setSelectedNode(null);
+    }
 
     this.isAnimating = false;
     this.canInteract = true;
@@ -279,8 +284,10 @@ export class MapController {
       newNode.state = NodeStates.CURRENT;
 
       // Add to history
-      const description = this.getNodeHistoryDescription(newNode);
-      this.infoBand.addHistoryEntry(newNode.type, description);
+      if (this.infoBand) {
+        const description = this.getNodeHistoryDescription(newNode);
+        this.infoBand.addHistoryEntry(newNode.type, description);
+      }
     }
 
     // Reveal connected nodes
@@ -418,10 +425,12 @@ export class MapController {
       if (!this.canInteract || this.isAnimating) return;
 
       // Reset idle timer on click
-      this.infoBand.resetIdleTimer();
+      if (this.infoBand) {
+        this.infoBand.resetIdleTimer();
+      }
 
       // Check if click is on UI element first
-      const clickConsumedByUI = this.uiOverlay.handleClick(event.clientX, event.clientY);
+      const clickConsumedByUI = this.uiOverlay ? this.uiOverlay.handleClick(event.clientX, event.clientY) : false;
 
       if (!clickConsumedByUI) {
         this.handleNodeClick(nodeData);
@@ -431,19 +440,28 @@ export class MapController {
     this.renderer.onNodeHover = (nodeData, event) => {
       if (!this.canInteract || this.isAnimating) return;
 
-      this.uiOverlay.setHoveredNode(nodeData, event.clientX, event.clientY);
+      if (this.uiOverlay) {
+        this.uiOverlay.setHoveredNode(nodeData, event.clientX, event.clientY);
+      }
 
       // Reset idle timer on mouse move
-      this.infoBand.resetIdleTimer();
+      if (this.infoBand) {
+        this.infoBand.resetIdleTimer();
+      }
     };
 
     this.renderer.onNodeLeave = (nodeData, event) => {
-      this.uiOverlay.setHoveredNode(null);
+      if (this.uiOverlay) {
+        this.uiOverlay.setHoveredNode(null);
+      }
     };
+
     // UI overlay enter callback
-    this.uiOverlay.onEnterNode = (node) => {
-      this.enterNode(node);
-    };
+    if (this.uiOverlay) {
+      this.uiOverlay.onEnterNode = (node) => {
+        this.enterNode(node);
+      };
+    }
   }
 
   /**
@@ -453,12 +471,20 @@ export class MapController {
     requestAnimationFrame(() => this.animate());
 
     // Update idle intensity from info band
-    const idleIntensity = this.infoBand.getIdleIntensity();
-    this.renderer.setIdleIntensity(idleIntensity);
+    if (this.infoBand) {
+      const idleIntensity = this.infoBand.getIdleIntensity();
+      this.renderer.setIdleIntensity(idleIntensity);
+    }
 
     this.renderer.animate();
-    this.uiOverlay.render();
-    this.infoBand.render(16); // ~16ms per frame at 60fps
+
+    if (this.uiOverlay) {
+      this.uiOverlay.render();
+    }
+
+    if (this.infoBand) {
+      this.infoBand.render(16); // ~16ms per frame at 60fps
+    }
   }
 
   /**
@@ -501,7 +527,13 @@ export class MapController {
    */
   dispose() {
     this.renderer.dispose();
-    this.uiOverlay.dispose();
-    this.infoBand.dispose();
+
+    if (this.uiOverlay) {
+      this.uiOverlay.dispose();
+    }
+
+    if (this.infoBand) {
+      this.infoBand.dispose();
+    }
   }
 }
