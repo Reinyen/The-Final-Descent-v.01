@@ -5,14 +5,14 @@
  */
 
 import { NeuralNetworkGenerator } from './neural-network-generator.js';
-import { MapRenderer } from './map-renderer.js';
+import { MapRendererDOM } from './map-renderer-dom.js';
 import { MapUIOverlay } from './map-ui-overlay.js';
 import { MapInfoBand } from './map-info-band.js';
 import { MapConfig, NodeStates } from '../../data/map-config.js';
 
 export class MapController {
-  constructor(canvasRenderer, canvasOverlay, canvasInfoBand) {
-    this.renderer = new MapRenderer(canvasRenderer);
+  constructor(mapContainer, canvasOverlay, canvasInfoBand) {
+    this.renderer = new MapRendererDOM(mapContainer);
     this.uiOverlay = new MapUIOverlay(canvasOverlay);
     this.infoBand = new MapInfoBand(canvasInfoBand);
 
@@ -141,75 +141,58 @@ export class MapController {
   }
 
   /**
-   * Animate network collapse
+   * Animate network collapse (DOM version)
    */
   animateNetworkCollapse() {
     return new Promise(resolve => {
       const duration = MapConfig.visual.collapseDuration;
-      const startTime = Date.now();
+      const mapScene = this.renderer.mapScene;
 
-      const animate = () => {
-        const elapsed = (Date.now() - startTime) / 1000;
-        const progress = Math.min(elapsed / duration, 1);
+      if (!mapScene) {
+        resolve();
+        return;
+      }
 
-        // Scale and fade nodes
-        if (this.renderer.nodesMesh) {
-          const scale = 1 - progress;
-          this.renderer.nodesMesh.scale.set(scale, scale, scale);
-          this.renderer.nodesMesh.material.opacity = 1 - progress;
-        }
+      mapScene.style.transition = `opacity ${duration}s cubic-bezier(0.33, 1, 0.68, 1), transform ${duration}s cubic-bezier(0.33, 1, 0.68, 1)`;
+      mapScene.style.opacity = '0';
+      mapScene.style.transform = 'rotateX(24deg) rotateZ(-16deg) scale(0.3)';
 
-        if (this.renderer.connectionsMesh) {
-          const scale = 1 - progress;
-          this.renderer.connectionsMesh.scale.set(scale, scale, scale);
-          this.renderer.connectionsMesh.material.opacity = 1 - progress;
-        }
-
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          resolve();
-        }
-      };
-
-      animate();
+      setTimeout(() => {
+        mapScene.style.transition = '';
+        resolve();
+      }, duration * 1000);
     });
   }
 
   /**
-   * Animate network grow
+   * Animate network grow (DOM version)
    */
   animateNetworkGrow() {
     return new Promise(resolve => {
       const duration = MapConfig.visual.growDuration;
-      const startTime = Date.now();
+      const mapScene = this.renderer.mapScene;
 
-      const animate = () => {
-        const elapsed = (Date.now() - startTime) / 1000;
-        const progress = Math.min(elapsed / duration, 1);
+      if (!mapScene) {
+        resolve();
+        return;
+      }
 
-        // Ease out cubic
-        const easeProgress = 1 - Math.pow(1 - progress, 3);
+      // Set initial state
+      mapScene.style.opacity = '0';
+      mapScene.style.transform = 'rotateX(24deg) rotateZ(-16deg) scale(0.3)';
 
-        // Scale and fade nodes
-        if (this.renderer.nodesMesh) {
-          this.renderer.nodesMesh.scale.set(easeProgress, easeProgress, easeProgress);
-          this.renderer.nodesMesh.material.opacity = easeProgress;
-        }
+      // Trigger reflow
+      void mapScene.offsetWidth;
 
-        if (this.renderer.connectionsMesh) {
-          this.renderer.connectionsMesh.scale.set(easeProgress, easeProgress, easeProgress);
-          this.renderer.connectionsMesh.material.opacity = easeProgress;
-        }
+      // Animate to normal
+      mapScene.style.transition = `opacity ${duration}s cubic-bezier(0.32, 0, 0.67, 0), transform ${duration}s cubic-bezier(0.32, 0, 0.67, 0)`;
+      mapScene.style.opacity = '1';
+      mapScene.style.transform = 'rotateX(24deg) rotateZ(-16deg) scale(1)';
 
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          resolve();
-        }
-      };
-
-      animate();
+      setTimeout(() => {
+        mapScene.style.transition = '';
+        resolve();
+      }, duration * 1000);
     });
   }
 
@@ -228,8 +211,10 @@ export class MapController {
       return;
     }
 
-    // Trigger golden energy burst effect
-    this.renderer.triggerNodeBurst(node);
+    // Trigger golden energy burst effect (if renderer supports it)
+    if (this.renderer.triggerNodeBurst) {
+      this.renderer.triggerNodeBurst(node);
+    }
 
     // Select node (shows detailed preview)
     this.uiOverlay.setSelectedNode(node);
@@ -252,10 +237,12 @@ export class MapController {
     const currentNode = this.networkData.nodes.find(n => n.id === this.currentNodeId);
 
     if (currentNode) {
-      this.renderer.startEnergyPulse(currentNode.id, node.id);
-
-      // Wait for pulse animation to complete
-      await this.waitForDuration(MapConfig.visual.energyPulseDuration);
+      // Trigger energy pulse animation (if renderer supports it)
+      if (this.renderer.startEnergyPulse) {
+        this.renderer.startEnergyPulse(currentNode.id, node.id);
+        // Wait for pulse animation to complete
+        await this.waitForDuration(MapConfig.visual.energyPulseDuration);
+      }
     }
 
     // Update game state

@@ -1,0 +1,353 @@
+/**
+ * DOM-based Map Renderer
+ * Replaces Three.js with DOM elements, CSS transforms, and animations
+ * Based on mockup design
+ */
+
+import { MapConfig, NodeStates, NodeTypes } from '../../data/map-config.js';
+
+export class MapRendererDOM {
+  constructor(containerElement) {
+    this.container = containerElement;
+    this.networkData = null;
+    this.nodes = new Map(); // nodeId -> {data, element, orbitElement}
+    this.connections = new Map(); // connectionId -> {data, element}
+
+    // DOM containers
+    this.mapContainer = null;
+    this.mapScene = null;
+    this.mapHalo = null;
+    this.connectionsContainer = null;
+    this.nodesContainer = null;
+
+    // Callbacks
+    this.onNodeClick = null;
+    this.onNodeHover = null;
+    this.onNodeLeave = null;
+
+    this.init();
+  }
+
+  init() {
+    // Create main map structure
+    this.mapContainer = document.createElement('div');
+    this.mapContainer.id = 'map-container';
+
+    this.mapScene = document.createElement('div');
+    this.mapScene.id = 'map-scene';
+
+    this.mapHalo = document.createElement('div');
+    this.mapHalo.id = 'map-halo';
+
+    this.connectionsContainer = document.createElement('div');
+    this.connectionsContainer.id = 'connections-container';
+
+    this.nodesContainer = document.createElement('div');
+    this.nodesContainer.id = 'nodes-container';
+
+    // Build hierarchy
+    this.mapScene.appendChild(this.mapHalo);
+    this.mapScene.appendChild(this.connectionsContainer);
+    this.mapScene.appendChild(this.nodesContainer);
+    this.mapContainer.appendChild(this.mapScene);
+    this.container.appendChild(this.mapContainer);
+
+    console.log('[MapRendererDOM] Initialized DOM-based renderer');
+  }
+
+  /**
+   * Load network data and create DOM elements
+   */
+  loadNetwork(networkData) {
+    console.log('[MapRendererDOM] Loading network:', networkData);
+
+    // Clear existing elements
+    this.clearNetwork();
+
+    this.networkData = networkData;
+
+    // Create connection lines first (so they appear below nodes)
+    this.createConnections();
+
+    // Create nodes
+    this.createNodes();
+
+    console.log(`[MapRendererDOM] Created ${this.nodes.size} nodes and ${this.connections.size} connections`);
+  }
+
+  /**
+   * Clear all network elements
+   */
+  clearNetwork() {
+    this.nodes.clear();
+    this.connections.clear();
+    this.connectionsContainer.innerHTML = '';
+    this.nodesContainer.innerHTML = '';
+  }
+
+  /**
+   * Create connection line DOM elements
+   */
+  createConnections() {
+    const connections = this.networkData.connections;
+    const nodes = this.networkData.nodes;
+
+    connections.forEach((conn, index) => {
+      const fromNode = nodes.find(n => n.id === conn.from);
+      const toNode = nodes.find(n => n.id === conn.to);
+
+      if (!fromNode || !toNode) return;
+
+      // Calculate position and rotation
+      const x1 = fromNode.displayX || 50;
+      const y1 = fromNode.displayY || 50;
+      const x2 = toNode.displayX || 50;
+      const y2 = toNode.displayY || 50;
+
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const length = Math.sqrt(dx * dx + dy * dy);
+
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+      // Create line element
+      const line = document.createElement('div');
+      line.className = 'connection-line';
+      line.dataset.from = conn.from;
+      line.dataset.to = conn.to;
+      line.style.width = length + '%';
+      line.style.left = midX + '%';
+      line.style.top = midY + '%';
+      line.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+
+      // Apply state classes
+      this.updateConnectionState(line, conn, fromNode, toNode);
+
+      this.connectionsContainer.appendChild(line);
+      this.connections.set(`${conn.from}-${conn.to}`, {
+        data: conn,
+        element: line,
+        from: fromNode,
+        to: toNode
+      });
+    });
+  }
+
+  /**
+   * Update connection line state/classes
+   */
+  updateConnectionState(lineElement, conn, fromNode, toNode) {
+    // Clear state classes
+    lineElement.classList.remove('discovered', 'visited', 'available');
+
+    const fromState = fromNode.state;
+    const toState = toNode.state;
+
+    // Determine connection state
+    const isCurrent = fromState === NodeStates.CURRENT || toState === NodeStates.CURRENT;
+    const isVisited = fromState === NodeStates.COMPLETED || toState === NodeStates.COMPLETED;
+    const isRevealed = conn.revealed;
+
+    if (isCurrent) {
+      lineElement.classList.add('available');
+    }
+
+    if (isVisited && fromState === NodeStates.COMPLETED && toState === NodeStates.COMPLETED) {
+      lineElement.classList.add('visited');
+    } else if (isRevealed || isCurrent) {
+      lineElement.classList.add('discovered');
+    }
+  }
+
+  /**
+   * Create node DOM elements
+   */
+  createNodes() {
+    const nodes = this.networkData.nodes;
+
+    nodes.forEach(nodeData => {
+      // Create node element
+      const node = document.createElement('div');
+      node.className = 'map-node';
+      node.dataset.id = nodeData.id;
+      node.dataset.type = nodeData.type || 'unknown';
+
+      // Position (use displayX/displayY if available, otherwise position)
+      const x = nodeData.displayX !== undefined ? nodeData.displayX : 50;
+      const y = nodeData.displayY !== undefined ? nodeData.displayY : 50;
+      node.style.left = x + '%';
+      node.style.top = y + '%';
+
+      // Add state class
+      this.updateNodeState(node, nodeData);
+
+      // Create inner dot highlight
+      const dot = document.createElement('div');
+      dot.className = 'node-dot';
+      node.appendChild(dot);
+
+      // Event listeners
+      node.addEventListener('click', (e) => this.handleNodeClick(e, nodeData));
+      node.addEventListener('mouseenter', (e) => this.handleNodeHover(e, nodeData));
+      node.addEventListener('mousemove', (e) => this.handleNodeMove(e, nodeData));
+      node.addEventListener('mouseleave', (e) => this.handleNodeLeave(e, nodeData));
+
+      this.nodesContainer.appendChild(node);
+
+      // Create orbit ring for current node
+      let orbitElement = null;
+      if (nodeData.state === NodeStates.CURRENT) {
+        orbitElement = document.createElement('div');
+        orbitElement.className = 'current-orbit';
+        orbitElement.style.left = x + '%';
+        orbitElement.style.top = y + '%';
+        this.nodesContainer.appendChild(orbitElement);
+      }
+
+      this.nodes.set(nodeData.id, {
+        data: nodeData,
+        element: node,
+        orbitElement: orbitElement
+      });
+    });
+  }
+
+  /**
+   * Update node state and classes
+   */
+  updateNodeState(nodeElement, nodeData) {
+    // Clear state classes
+    nodeElement.classList.remove('state-current', 'state-available', 'state-visited', 'state-locked', 'state-hidden');
+
+    // Add appropriate state class
+    const stateClass = `state-${nodeData.state}`;
+    nodeElement.classList.add(stateClass);
+
+    // Update data attribute for type
+    nodeElement.dataset.type = nodeData.type || 'unknown';
+
+    // Handle hidden nodes showing as unknown
+    if (nodeData.state === NodeStates.HIDDEN) {
+      nodeElement.dataset.type = 'unknown';
+    }
+  }
+
+  /**
+   * Update network visualization
+   */
+  updateNetwork(networkData) {
+    this.networkData = networkData;
+
+    // Update nodes
+    networkData.nodes.forEach(nodeData => {
+      const nodeEntry = this.nodes.get(nodeData.id);
+      if (!nodeEntry) return;
+
+      // Update state
+      this.updateNodeState(nodeEntry.element, nodeData);
+
+      // Update/create orbit for current node
+      if (nodeData.state === NodeStates.CURRENT && !nodeEntry.orbitElement) {
+        const x = nodeData.displayX !== undefined ? nodeData.displayX : 50;
+        const y = nodeData.displayY !== undefined ? nodeData.displayY : 50;
+        const orbitElement = document.createElement('div');
+        orbitElement.className = 'current-orbit';
+        orbitElement.style.left = x + '%';
+        orbitElement.style.top = y + '%';
+        this.nodesContainer.appendChild(orbitElement);
+        nodeEntry.orbitElement = orbitElement;
+      } else if (nodeData.state !== NodeStates.CURRENT && nodeEntry.orbitElement) {
+        // Remove orbit if no longer current
+        nodeEntry.orbitElement.remove();
+        nodeEntry.orbitElement = null;
+      }
+    });
+
+    // Update connections
+    this.connections.forEach((connEntry, key) => {
+      const conn = networkData.connections.find(c =>
+        (c.from === connEntry.data.from && c.to === connEntry.data.to) ||
+        (c.from === connEntry.data.to && c.to === connEntry.data.from)
+      );
+
+      if (conn) {
+        connEntry.data = conn;
+        const fromNode = networkData.nodes.find(n => n.id === conn.from);
+        const toNode = networkData.nodes.find(n => n.id === conn.to);
+        if (fromNode && toNode) {
+          this.updateConnectionState(connEntry.element, conn, fromNode, toNode);
+        }
+      }
+    });
+  }
+
+  /**
+   * Event handlers
+   */
+  handleNodeClick(event, nodeData) {
+    if (this.onNodeClick) {
+      this.onNodeClick(nodeData, event);
+    }
+  }
+
+  handleNodeHover(event, nodeData) {
+    if (this.onNodeHover) {
+      this.onNodeHover(nodeData, event);
+    }
+  }
+
+  handleNodeMove(event, nodeData) {
+    // Can be used for tooltip positioning
+  }
+
+  handleNodeLeave(event, nodeData) {
+    if (this.onNodeLeave) {
+      this.onNodeLeave(nodeData, event);
+    }
+  }
+
+  /**
+   * Get node at screen position (for compatibility with old API)
+   */
+  getNodeAtPosition(screenX, screenY) {
+    const element = document.elementFromPoint(screenX, screenY);
+    if (!element || !element.classList.contains('map-node')) {
+      return null;
+    }
+
+    const nodeId = element.dataset.id;
+    const nodeEntry = this.nodes.get(nodeId);
+    return nodeEntry ? nodeEntry.data : null;
+  }
+
+  /**
+   * Animate (called from animation loop, but DOM animations are CSS-based)
+   */
+  animate() {
+    // DOM animations are handled by CSS
+    // This method exists for API compatibility
+  }
+
+  /**
+   * Cleanup
+   */
+  dispose() {
+    this.clearNetwork();
+    if (this.mapContainer && this.mapContainer.parentNode) {
+      this.mapContainer.parentNode.removeChild(this.mapContainer);
+    }
+    this.nodes.clear();
+    this.connections.clear();
+  }
+
+  /**
+   * Resize handler (if needed)
+   */
+  onWindowResize() {
+    // DOM elements automatically resize with CSS
+    // This method exists for API compatibility
+  }
+}
