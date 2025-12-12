@@ -5,155 +5,328 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Neural Network Map - The Final Descent</title>
 
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
   <!-- DOM Map Styles -->
   <link rel="stylesheet" href="styles/map-dom.css">
 
   <style>
+    :root {
+      --bg: #02030a;
+      --bg2: #050814;
+      --accent: #e8f4fd;
+      --accent-soft: rgba(232, 244, 253, 0.5);
+      --text: rgba(245, 248, 255, 0.92);
+      --muted: rgba(245, 248, 255, 0.64);
+      --faint: rgba(245, 248, 255, 0.28);
+
+      --combat: #ff6b6b;
+      --resource: #6fffb8;
+      --event: #c792ff;
+      --rest: #7cd0ff;
+      --echo: #b07cff;
+      --unknown: #555b7a;
+
+      --danger: #ff6b6b;
+      --good: #6fffb8;
+
+      --panel-radius: 18px;
+      --node-radius: 999px;
+    }
+
     * {
-      margin: 0;
-      padding: 0;
       box-sizing: border-box;
     }
 
-    body {
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      font-family: 'Rajdhani', Arial, sans-serif;
-      background: #000000;
-      color: #ffffff;
-    }
-
-    /* Canvas layers and map container */
-    #map-renderer,
-    #canvas-overlay,
-    #canvas-info-band {
-      position: fixed;
-      top: 0;
-      left: 0;
+    html, body {
+      margin: 0;
+      padding: 0;
       width: 100%;
       height: 100%;
-      display: block;
-    }
-
-    #map-renderer {
-      z-index: 1;
-      pointer-events: none;
-    }
-
-    #canvas-overlay {
-      z-index: 10;
-      pointer-events: none;
-    }
-
-    #canvas-info-band {
-      z-index: 15;
-      pointer-events: none;
-    }
-
-    /* Ring info panel - HIDDEN (replaced by info band) */
-    #ring-info {
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      padding: 15px 20px;
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(0, 255, 255, 0.3);
-      border-radius: 10px;
-      z-index: 20;
-      pointer-events: none;
-      display: none;
-    }
-
-    #ring-info h2 {
-      font-size: 18px;
-      font-weight: 700;
-      color: #00FFFF;
-      margin-bottom: 5px;
-      letter-spacing: 0.05em;
-    }
-
-    #ring-info p {
-      font-size: 13px;
-      color: rgba(255, 255, 255, 0.7);
-      margin: 0;
-    }
-
-    /* Progress panel */
-    #progress-panel {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      padding: 15px 20px;
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 215, 0, 0.3);
-      border-radius: 10px;
-      z-index: 20;
-      pointer-events: none;
-    }
-
-    #progress-panel h3 {
-      font-size: 14px;
-      font-weight: 600;
-      color: #FFD700;
-      margin-bottom: 8px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-    }
-
-    #progress-bar {
-      width: 200px;
-      height: 8px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 4px;
+      background: radial-gradient(circle at top, #050716 0%, #02030a 40%, #000 100%);
+      color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overflow: hidden;
-      margin-bottom: 5px;
     }
 
-    #progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #FFD700, #FFA500);
-      border-radius: 4px;
-      transition: width 0.5s ease;
-      box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-    }
-
-    #progress-text {
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.7);
-    }
-
-    /* Controls hint */
-    #controls-hint {
+    body::before {
+      content: "";
       position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 10px 20px;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 8px;
-      z-index: 20;
+      inset: 0;
+      background:
+        radial-gradient(circle at 10% -10%, rgba(232, 244, 253, 0.06), transparent 60%),
+        radial-gradient(circle at 90% 110%, rgba(199, 146, 255, 0.09), transparent 60%);
+      mix-blend-mode: screen;
+      opacity: 0.9;
       pointer-events: none;
+      z-index: -1;
+    }
+
+    #root {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 18px 20px;
+      gap: 12px;
+    }
+
+    /* Top band */
+    .topband {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 100;
+    }
+
+    .titleBlock {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .titleMain {
+      font-family: "Cinzel", serif;
+      font-size: 18px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+
+    .titleSub {
       font-size: 12px;
-      color: rgba(255, 255, 255, 0.6);
-      opacity: 0;
-      animation: fadeIn 0.5s ease 1s forwards;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
     }
 
-    @keyframes fadeIn {
-      to { opacity: 1; }
+    .topStats {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
-    /* Loading screen */
+    .chip {
+      min-width: 130px;
+      padding: 8px 11px;
+      border-radius: 999px;
+      background: radial-gradient(circle at top, rgba(18, 24, 40, 0.9), rgba(5, 8, 20, 0.9));
+      box-shadow:
+        0 0 0 1px rgba(232, 244, 253, 0.18),
+        0 14px 40px rgba(0, 0, 0, 0.75);
+      font-size: 11px;
+    }
+
+    .chipLabel {
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+
+    .chipValue {
+      margin-top: 4px;
+      font-size: 15px;
+    }
+
+    .chipRow {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* Main region */
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      gap: 12px;
+      min-height: 0;
+      position: relative;
+    }
+
+    .panel {
+      border-radius: var(--panel-radius);
+      background:
+        radial-gradient(circle at top, rgba(20, 25, 46, 0.9), rgba(3, 6, 18, 0.95));
+      box-shadow:
+        inset 0 0 0 1px rgba(232, 244, 253, 0.14),
+        0 22px 60px rgba(0, 0, 0, 0.9);
+      position: relative;
+      padding: 12px 14px;
+      overflow: hidden;
+    }
+
+    #mapPanel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .mapOuter {
+      flex: 1;
+      min-height: 260px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: visible;
+    }
+
+    /* Bottom band */
+    .bottomband {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr);
+      gap: 10px;
+      font-size: 11px;
+      z-index: 100;
+    }
+
+    .crewStrip {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .crewMini {
+      flex: 1;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: radial-gradient(circle at top, rgba(12, 18, 38, 0.95), rgba(3, 6, 18, 0.96));
+      border: 1px solid rgba(232, 244, 253, 0.18);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+    }
+
+    .crewGlyph {
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      background: radial-gradient(circle at top, rgba(232, 244, 253, 0.9), rgba(156, 163, 255, 0.9));
+      box-shadow: 0 0 18px rgba(156, 163, 255, 0.9);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .crewGlyph::before,
+    .crewGlyph::after {
+      content: "";
+      position: absolute;
+      border-radius: 2px;
+      background: rgba(0, 0, 0, 0.7);
+    }
+
+    .crewGlyph::before {
+      width: 140%;
+      height: 2px;
+      top: 50%;
+      left: -20%;
+      transform: rotate(24deg);
+    }
+
+    .crewGlyph::after {
+      width: 2px;
+      height: 140%;
+      left: 50%;
+      top: -20%;
+      transform: rotate(-18deg);
+    }
+
+    .crewMeta {
+      flex: 1;
+    }
+
+    .crewName {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .crewRole {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .crewBars {
+      margin-top: 5px;
+      display: flex;
+      gap: 4px;
+    }
+
+    .barThin {
+      flex: 1;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(245, 248, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .barFill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(111, 255, 184, 0.9), rgba(232, 244, 253, 0.9));
+    }
+
+    .barFill.mutation {
+      background: linear-gradient(90deg, rgba(199, 146, 255, 0.9), rgba(255, 107, 107, 0.9));
+    }
+
+    .barFill.stress {
+      background: linear-gradient(90deg, rgba(255, 196, 120, 0.9), rgba(255, 107, 107, 0.9));
+    }
+
+    .infoStrip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+      color: var(--muted);
+    }
+
+    .infoChip {
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(232, 244, 253, 0.16);
+    }
+
+    .primaryCall {
+      padding: 7px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(232, 244, 253, 0.7);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 18px rgba(232, 244, 253, 0.6);
+    }
+
+    .primaryCall.disabled {
+      opacity: 0.4;
+      box-shadow: none;
+      border-style: dashed;
+      cursor: default;
+    }
+
+    /* Loading overlay */
     #loading-screen {
       position: fixed;
       inset: 0;
       background: #000000;
-      z-index: 100;
+      z-index: 10000;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -187,64 +360,96 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
-
-    /* Debug panel */
-    #debug-panel {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      padding: 10px 15px;
-      background: rgba(0, 0, 0, 0.9);
-      border: 1px solid rgba(0, 255, 0, 0.5);
-      border-radius: 6px;
-      font-family: 'Courier New', monospace;
-      font-size: 11px;
-      color: #00ff00;
-      z-index: 50;
-      pointer-events: none;
-      display: none;
-    }
-
-    #debug-panel.visible {
-      display: block;
-    }
   </style>
 </head>
 <body>
-  <!-- Map container and canvases -->
-  <div id="map-renderer"></div>
-  <canvas id="canvas-overlay"></canvas>
-  <canvas id="canvas-info-band"></canvas>
+  <div id="root">
+    <header class="topband">
+      <div class="titleBlock">
+        <div class="titleMain">NEURAL DESCENT MAP</div>
+        <div class="titleSub" id="ring-subtitle">Ring 1 — Upper Gardens / Botanical Decay</div>
+      </div>
+      <div class="topStats">
+        <div class="chip">
+          <div class="chipLabel">Ring Progress</div>
+          <div class="chipValue"><span id="nodesCleared">0</span> / <span id="nodesTotal">7</span> nodes</div>
+          <div class="chipRow">
+            <span>Required for exit:</span> <span id="nodesRequired">5</span>
+          </div>
+        </div>
+        <div class="chip">
+          <div class="chipLabel">Exit Node</div>
+          <div class="chipValue" id="exitStatus">Dormant</div>
+        </div>
+        <div class="chip">
+          <div class="chipLabel">Data Fragments</div>
+          <div class="chipValue"><span id="fragCount">0</span> collected</div>
+        </div>
+      </div>
+    </header>
 
-  <!-- Ring Info -->
-  <div id="ring-info">
-    <h2 id="ring-name">Loading...</h2>
-    <p id="ring-description">Preparing neural network...</p>
-  </div>
+    <main class="main">
+      <section class="panel" id="mapPanel">
+        <div class="mapOuter">
+          <div id="map-renderer"></div>
+        </div>
+      </section>
+    </main>
 
-  <!-- Progress Panel (Hidden) -->
-  <div id="progress-panel" style="display: none;">
-    <h3>Ring Progress</h3>
-    <div id="progress-bar">
-      <div id="progress-fill" style="width: 0%;"></div>
-    </div>
-    <div id="progress-text">0 / 0 nodes (0% required)</div>
-  </div>
-
-  <!-- Controls Hint -->
-  <div id="controls-hint">
-    Drag to rotate • Scroll to zoom • Hover nodes for preview • Click to select
+    <footer class="bottomband">
+      <div class="crewStrip">
+        <div class="crewMini">
+          <div class="crewGlyph"></div>
+          <div class="crewMeta">
+            <div class="crewName">IONA KADE</div>
+            <div class="crewRole">Security Chief</div>
+            <div class="crewBars">
+              <div class="barThin"><div class="barFill" style="width:80%"></div></div>
+              <div class="barThin"><div class="barFill mutation" style="width:20%"></div></div>
+              <div class="barThin"><div class="barFill stress" style="width:30%"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="crewMini">
+          <div class="crewGlyph"></div>
+          <div class="crewMeta">
+            <div class="crewName">DR. RHEA MYLES</div>
+            <div class="crewRole">Botanist</div>
+            <div class="crewBars">
+              <div class="barThin"><div class="barFill" style="width:60%"></div></div>
+              <div class="barThin"><div class="barFill mutation" style="width:10%"></div></div>
+              <div class="barThin"><div class="barFill stress" style="width:40%"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="crewMini">
+          <div class="crewGlyph"></div>
+          <div class="crewMeta">
+            <div class="crewName">JONAS REEVE</div>
+            <div class="crewRole">Technician</div>
+            <div class="crewBars">
+              <div class="barThin"><div class="barFill" style="width:50%"></div></div>
+              <div class="barThin"><div class="barFill mutation" style="width:15%"></div></div>
+              <div class="barThin"><div class="barFill stress" style="width:20%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="infoStrip">
+        <div class="infoChip">
+          <span class="muted">Hover nodes to preview. Click to select.</span>
+        </div>
+        <div class="primaryCall disabled" id="engageCall">
+          Awaiting Node Selection
+        </div>
+      </div>
+    </footer>
   </div>
 
   <!-- Loading Screen -->
   <div id="loading-screen">
     <h1>INITIALIZING NEURAL NETWORK</h1>
     <div class="spinner"></div>
-  </div>
-
-  <!-- Debug Panel -->
-  <div id="debug-panel" class="visible">
-    <div id="debug-text">Debug info will appear here</div>
   </div>
 
   <!-- Main Application -->
@@ -254,17 +459,14 @@
 
     // DOM elements
     const mapRenderer = document.getElementById('map-renderer');
-    const canvasOverlay = document.getElementById('canvas-overlay');
-    const canvasInfoBand = document.getElementById('canvas-info-band');
     const loadingScreen = document.getElementById('loading-screen');
-    const ringInfo = document.getElementById('ring-info');
-    const ringName = document.getElementById('ring-name');
-    const ringDescription = document.getElementById('ring-description');
-    const progressPanel = document.getElementById('progress-panel');
-    const progressFill = document.getElementById('progress-fill');
-    const progressText = document.getElementById('progress-text');
-    const debugPanel = document.getElementById('debug-panel');
-    const debugText = document.getElementById('debug-text');
+    const ringSubtitle = document.getElementById('ring-subtitle');
+    const nodesCleared = document.getElementById('nodesCleared');
+    const nodesTotal = document.getElementById('nodesTotal');
+    const nodesRequired = document.getElementById('nodesRequired');
+    const exitStatus = document.getElementById('exitStatus');
+    const fragCount = document.getElementById('fragCount');
+    const engageCall = document.getElementById('engageCall');
 
     // Create map controller
     let mapController;
@@ -272,8 +474,8 @@
     async function init() {
       console.log('[Main] Initializing map system...');
 
-      // Create controller
-      mapController = new MapController(mapRenderer, canvasOverlay, canvasInfoBand);
+      // Create controller (no canvas overlays for now)
+      mapController = new MapController(mapRenderer, null, null);
 
       // Set up callbacks
       mapController.onNodeEnter = handleNodeEnter;
@@ -291,33 +493,16 @@
         loadingScreen.classList.add('hidden');
       }, 1000);
 
-      // Note: DOM renderer uses CSS animations, no animation loop needed
-
       console.log('[Main] Map system initialized');
     }
 
     function handleNodeEnter(node) {
       console.log('[Main] Node entered:', node);
-
-      // Update UI
       updateProgress();
-
-      // TODO: Trigger combat/event/resource screen based on node type
-      // For now, just log
-      console.log(`[Main] Node type: ${node.type}`);
-
-      // Simulate event completion (for testing)
-      // In real game, this would be triggered after combat/event resolves
-      // setTimeout(() => {
-      //   // Node is already marked as completed by controller
-      //   updateProgress();
-      // }, 2000);
     }
 
     function handleRingComplete() {
       console.log('[Main] Ring complete!');
-
-      // Advance to next ring
       setTimeout(() => {
         mapController.advanceToNextRing();
         updateRingInfo();
@@ -327,8 +512,7 @@
 
     function updateRingInfo() {
       const ringConfig = MapConfig.rings[mapController.currentRing - 1];
-      ringName.textContent = `Ring ${ringConfig.id}: ${ringConfig.name}`;
-      ringDescription.textContent = ringConfig.description;
+      ringSubtitle.textContent = `Ring ${ringConfig.id} — ${ringConfig.name} / ${ringConfig.description}`;
     }
 
     function updateProgress() {
@@ -344,47 +528,17 @@
       const requiredCompletion = ringConfig.requiredCompletion;
       const requiredCount = Math.ceil(totalNodes * requiredCompletion);
 
-      const percentage = (visitedCount / totalNodes) * 100;
-      const requiredPercentage = requiredCompletion * 100;
+      nodesCleared.textContent = visitedCount;
+      nodesTotal.textContent = totalNodes;
+      nodesRequired.textContent = requiredCount;
 
-      progressFill.style.width = `${percentage}%`;
-      progressText.textContent = `${visitedCount} / ${totalNodes} nodes (${requiredPercentage}% required)`;
-
-      // Update debug panel
-      debugText.innerHTML = `
-        Ring: ${mapController.currentRing}<br>
-        Current Node: ${mapController.currentNodeId}<br>
-        Visited: ${visitedCount}/${totalNodes}<br>
-        Required: ${requiredCount}<br>
-        Can Interact: ${mapController.canInteract}<br>
-        Animating: ${mapController.isAnimating}
-      `;
+      const exitNode = mapController.networkData.nodes.find(n => n.id === mapController.networkData.exitNodeId);
+      if (exitNode && (exitNode.state === 'available' || exitNode.state === 'current')) {
+        exitStatus.textContent = 'Awakened';
+      } else {
+        exitStatus.textContent = 'Dormant';
+      }
     }
-
-    // Keyboard shortcuts
-    window.addEventListener('keydown', (e) => {
-      // D key: Toggle debug panel
-      if (e.key.toLowerCase() === 'd') {
-        debugPanel.classList.toggle('visible');
-      }
-
-      // R key: Restart (reload page)
-      if (e.key.toLowerCase() === 'r') {
-        location.reload();
-      }
-
-      // N key: Next ring (debug)
-      if (e.key.toLowerCase() === 'n' && e.shiftKey) {
-        mapController.advanceToNextRing();
-        updateRingInfo();
-        updateProgress();
-      }
-    });
-
-    // Periodic progress update
-    setInterval(() => {
-      updateProgress();
-    }, 500);
 
     // Start
     init();
