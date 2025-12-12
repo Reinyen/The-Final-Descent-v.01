@@ -6,20 +6,14 @@ import * as THREE from 'three';
  * Matches the visual quality of the Intro UI black hole
  */
 export class MapBackground {
-  constructor(starfieldContainer, glassSphereContainer) {
-    this.starfieldContainer = starfieldContainer;
-    this.glassSphereContainer = glassSphereContainer;
+  constructor(container) {
+    this.container = container;
 
-    // Starfield scene
-    this.starfieldScene = null;
-    this.starfieldCamera = null;
-    this.starfieldRenderer = null;
+    // Single scene with both starfield and glass sphere
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
     this.starfield = null;
-
-    // Glass sphere scene
-    this.glassScene = null;
-    this.glassCamera = null;
-    this.glassRenderer = null;
     this.glassSphere = null;
     this.reflectionCamera = null;
     this.reflectionTarget = null;
@@ -35,45 +29,27 @@ export class MapBackground {
   }
 
   init() {
-    // Create starfield scene
-    this.starfieldScene = new THREE.Scene();
-    this.starfieldScene.background = new THREE.Color(0x02030a); // Match map background
+    // Create single scene for both starfield and glass sphere (positioned in map area only)
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x02030a); // Dark background, matches page
 
-    const starfieldAspect = this.starfieldContainer.clientWidth / this.starfieldContainer.clientHeight;
-    this.starfieldCamera = new THREE.PerspectiveCamera(50, starfieldAspect, 0.1, 1000);
-    this.starfieldCamera.position.set(0, 0, 50);
-    this.starfieldCamera.lookAt(0, 0, 0);
+    const aspect = this.container.clientWidth / this.container.clientHeight;
+    this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+    this.camera.position.set(0, 0, 50);
+    this.camera.lookAt(0, 0, 0);
 
-    this.starfieldRenderer = new THREE.WebGLRenderer({
+    this.renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: false
+      alpha: false // Opaque background to match dark theme
     });
-    this.starfieldRenderer.setSize(this.starfieldContainer.clientWidth, this.starfieldContainer.clientHeight);
-    this.starfieldRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.starfieldContainer.appendChild(this.starfieldRenderer.domElement);
+    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.container.appendChild(this.renderer.domElement);
 
-    // Create glass sphere scene
-    this.glassScene = new THREE.Scene();
-    // Transparent background so starfield shows through
-    this.glassScene.background = null;
-
-    const glassAspect = this.glassSphereContainer.clientWidth / this.glassSphereContainer.clientHeight;
-    this.glassCamera = new THREE.PerspectiveCamera(50, glassAspect, 0.1, 1000);
-    this.glassCamera.position.set(0, 0, 50);
-    this.glassCamera.lookAt(0, 0, 0);
-
-    this.glassRenderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true // Transparent background
-    });
-    this.glassRenderer.setSize(this.glassSphereContainer.clientWidth, this.glassSphereContainer.clientHeight);
-    this.glassRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.glassSphereContainer.appendChild(this.glassRenderer.domElement);
-
-    // Create starfield
+    // Create starfield (will be behind glass sphere in same scene)
     this.createStarfield();
 
-    // Create glass sphere
+    // Create glass sphere (will be in front of starfield in same scene)
     this.createGlassSphere();
 
     // Setup window resize
@@ -82,7 +58,7 @@ export class MapBackground {
     // Start animation
     this.animate();
 
-    console.log('[MapBackground] Initialized with starfield and glass sphere in separate layers');
+    console.log('[MapBackground] Initialized with starfield and glass sphere in map area');
   }
 
   createStarfield() {
@@ -120,34 +96,34 @@ export class MapBackground {
 
       if (isDust) {
         // Dust: cool tones with low brightness
-        color = new THREE.Color().setHSL(0.58 + Math.random() * 0.05, 0.2 + Math.random() * 0.3, 0.15 + Math.random() * 0.25);
-        sizes[i] = 0.1 + Math.random() * 0.25;
+        color = new THREE.Color().setHSL(0.58 + Math.random() * 0.05, 0.3 + Math.random() * 0.4, 0.25 + Math.random() * 0.35);
+        sizes[i] = 0.3 + Math.random() * 0.4;
         twinkleSpeeds[i] = 0.25 + Math.random() * 0.35;
-        intensities[i] = 0.35 + Math.random() * 0.35;
+        intensities[i] = 0.5 + Math.random() * 0.5;
       } else {
-        // Stars: blue-white, warm amber, or magenta
+        // Stars: blue-white, warm amber, or magenta - BRIGHTER
         if (paletteRoll < 0.55) {
-          color = new THREE.Color().setHSL(0.6 + Math.random() * 0.04, 0.35 + Math.random() * 0.25, 0.6 + Math.random() * 0.35);
+          color = new THREE.Color().setHSL(0.6 + Math.random() * 0.04, 0.4 + Math.random() * 0.3, 0.75 + Math.random() * 0.25);
         } else if (paletteRoll < 0.8) {
-          color = new THREE.Color().setHSL(0.1 + Math.random() * 0.03, 0.6 + Math.random() * 0.25, 0.65 + Math.random() * 0.25);
+          color = new THREE.Color().setHSL(0.1 + Math.random() * 0.03, 0.7 + Math.random() * 0.2, 0.75 + Math.random() * 0.2);
         } else {
-          color = new THREE.Color().setHSL(0.8 + Math.random() * 0.03, 0.4 + Math.random() * 0.2, 0.55 + Math.random() * 0.3);
+          color = new THREE.Color().setHSL(0.8 + Math.random() * 0.03, 0.5 + Math.random() * 0.2, 0.7 + Math.random() * 0.25);
         }
 
-        // Varying sizes for depth
+        // Varying sizes for depth - LARGER
         const sizeRand = Math.random();
         if (sizeRand < 0.5) {
-          sizes[i] = 0.2 + Math.random() * 0.5;
-          intensities[i] = 0.65 + Math.random() * 0.4;
+          sizes[i] = 0.4 + Math.random() * 0.6;
+          intensities[i] = 0.8 + Math.random() * 0.5;
         } else if (sizeRand < 0.82) {
-          sizes[i] = 0.7 + Math.random() * 0.7;
-          intensities[i] = 0.9 + Math.random() * 0.5;
+          sizes[i] = 1.0 + Math.random() * 0.8;
+          intensities[i] = 1.1 + Math.random() * 0.6;
         } else if (sizeRand < 0.95) {
-          sizes[i] = 1.4 + Math.random() * 0.8;
-          intensities[i] = 1.1 + Math.random() * 0.35;
+          sizes[i] = 1.8 + Math.random() * 1.0;
+          intensities[i] = 1.3 + Math.random() * 0.5;
         } else {
-          sizes[i] = 2.2 + Math.random() * 1.0;
-          intensities[i] = 1.2 + Math.random() * 0.45;
+          sizes[i] = 2.8 + Math.random() * 1.5;
+          intensities[i] = 1.5 + Math.random() * 0.6;
         }
 
         twinkleSpeeds[i] = 0.75 + Math.random() * 1.4;
@@ -191,13 +167,13 @@ export class MapBackground {
         varying float vAlpha;
 
         void main() {
-          vColor = color * mix(0.85, 1.4, intensity * 0.6);
+          vColor = color * mix(1.2, 1.8, intensity * 0.6);
 
           // Twinkling animation
-          float twinkle1 = sin(time * twinkleSpeed * 1.5 + twinkleSeed) * 0.25;
-          float twinkle2 = sin(time * twinkleSpeed * 2.3 + twinkleSeed * 1.7) * 0.15;
-          float twinkle3 = sin(time * 0.5 + twinkleSeed * 2.7) * 0.12;
-          float twinkle = twinkle1 + twinkle2 + twinkle3 + 0.75;
+          float twinkle1 = sin(time * twinkleSpeed * 1.5 + twinkleSeed) * 0.3;
+          float twinkle2 = sin(time * twinkleSpeed * 2.3 + twinkleSeed * 1.7) * 0.2;
+          float twinkle3 = sin(time * 0.5 + twinkleSeed * 2.7) * 0.15;
+          float twinkle = twinkle1 + twinkle2 + twinkle3 + 0.85;
 
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           float viewDistance = -mvPosition.z;
@@ -206,8 +182,9 @@ export class MapBackground {
           float depthFactor = 1.0 - (viewDistance - 20.0) / 80.0;
           depthFactor = clamp(depthFactor, 0.6, 1.0);
 
-          gl_PointSize = size * twinkle * depthFactor * pixelRatio * 3.0;
-          vAlpha = clamp(intensity * twinkle * depthFactor, 0.0, 1.0);
+          // Much larger stars for visibility
+          gl_PointSize = size * twinkle * depthFactor * pixelRatio * 8.0;
+          vAlpha = clamp(intensity * twinkle * depthFactor * 1.5, 0.0, 1.0);
 
           gl_Position = projectionMatrix * mvPosition;
         }
@@ -236,7 +213,7 @@ export class MapBackground {
     });
 
     this.starfield = new THREE.Points(geometry, material);
-    this.starfieldScene.add(this.starfield);
+    this.scene.add(this.starfield);
 
     console.log(`[MapBackground] Created starfield with ${this.starCount} stars and ${this.dustCount} dust particles`);
   }
@@ -271,12 +248,12 @@ export class MapBackground {
 
     // Add ambient light for glass to reflect
     const ambientLight = new THREE.AmbientLight(0x8a7cff, 0.3);
-    this.glassScene.add(ambientLight);
+    this.scene.add(ambientLight);
 
     // Add point light for highlights
     const pointLight = new THREE.PointLight(0xe8f4fd, 0.5, 100);
     pointLight.position.set(10, 10, 30);
-    this.glassScene.add(pointLight);
+    this.scene.add(pointLight);
 
     // Create reflection environment for glass material
     this.reflectionTarget = new THREE.WebGLCubeRenderTarget(256, {
@@ -287,21 +264,21 @@ export class MapBackground {
     this.reflectionCamera = new THREE.CubeCamera(1, 400, this.reflectionTarget);
     group.add(this.reflectionCamera);
 
-    // Glass sphere - smaller, more transparent
+    // Glass sphere - very transparent, almost invisible
     const sphereGeometry = new THREE.SphereGeometry(18, 64, 64);
     const glassMaterial = new THREE.MeshPhysicalMaterial({
-      transmission: 0.95, // Higher transmission for more transparency
+      transmission: 0.98, // Near-total transparency
       transparent: true,
-      opacity: 0.6, // Lower opacity to see through better
-      roughness: 0.02, // Very smooth for clear glass
-      metalness: 0.1, // Less metallic, more glass-like
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.02,
-      thickness: 1.0, // Thinner for lighter appearance
+      opacity: 0.3, // Very low opacity for see-through effect
+      roughness: 0.0, // Perfect smoothness for clear glass
+      metalness: 0.0, // Pure glass, no metal
+      clearcoat: 0.8,
+      clearcoatRoughness: 0.0,
+      thickness: 0.5, // Very thin for minimal light blocking
       envMap: this.reflectionTarget.texture,
-      envMapIntensity: 0.8,
-      ior: 1.45, // Higher IOR for more glass-like refraction
-      color: new THREE.Color(0x9a8cff), // Lighter purple tint
+      envMapIntensity: 0.5,
+      ior: 1.5, // Glass IOR
+      color: new THREE.Color(0xb8b0ff), // Very light purple tint
       side: THREE.FrontSide,
       depthWrite: false
     });
@@ -350,9 +327,9 @@ export class MapBackground {
           fresnel = pow(fresnel, 2.5);
 
           vec3 purpleGlow = vec3(0.6, 0.49, 1.0);
-          float intensity = fresnel * 0.35 + (spiral1 * 0.15) + (spiral2 * 0.1);
+          float intensity = fresnel * 0.2 + (spiral1 * 0.08) + (spiral2 * 0.05);
 
-          gl_FragColor = vec4(purpleGlow * intensity, intensity * 0.9);
+          gl_FragColor = vec4(purpleGlow * intensity, intensity * 0.6);
         }
       `
     });
@@ -393,9 +370,9 @@ export class MapBackground {
 
           vec3 glowColor = vec3(0.54, 0.49, 1.0);
           float pulse = sin(time * 0.5) * 0.1 + 0.9;
-          float intensity = fresnel * 0.25 * pulse;
+          float intensity = fresnel * 0.15 * pulse;
 
-          gl_FragColor = vec4(glowColor * intensity, intensity * 0.7);
+          gl_FragColor = vec4(glowColor * intensity, intensity * 0.4);
         }
       `
     });
@@ -405,7 +382,7 @@ export class MapBackground {
     group.add(glowMesh);
 
     this.glassSphere = group;
-    this.glassScene.add(this.glassSphere);
+    this.scene.add(this.glassSphere);
 
     console.log('[MapBackground] Created glass sphere with reflection, inner glow, and outer aura');
   }
@@ -444,15 +421,14 @@ export class MapBackground {
         );
         if (glassMesh) {
           glassMesh.visible = false;
-          this.reflectionCamera.update(this.glassRenderer, this.glassScene);
+          this.reflectionCamera.update(this.renderer, this.scene);
           glassMesh.visible = true;
         }
       }
     }
 
-    // Render both scenes
-    this.starfieldRenderer.render(this.starfieldScene, this.starfieldCamera);
-    this.glassRenderer.render(this.glassScene, this.glassCamera);
+    // Render the scene
+    this.renderer.render(this.scene, this.camera);
   }
 
   setupResize() {
@@ -460,27 +436,15 @@ export class MapBackground {
   }
 
   handleResize() {
-    // Resize starfield
-    if (this.starfieldContainer && this.starfieldCamera && this.starfieldRenderer) {
-      const starWidth = this.starfieldContainer.clientWidth;
-      const starHeight = this.starfieldContainer.clientHeight;
+    if (!this.container || !this.camera || !this.renderer) return;
 
-      this.starfieldCamera.aspect = starWidth / starHeight;
-      this.starfieldCamera.updateProjectionMatrix();
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
 
-      this.starfieldRenderer.setSize(starWidth, starHeight);
-    }
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
 
-    // Resize glass sphere
-    if (this.glassSphereContainer && this.glassCamera && this.glassRenderer) {
-      const glassWidth = this.glassSphereContainer.clientWidth;
-      const glassHeight = this.glassSphereContainer.clientHeight;
-
-      this.glassCamera.aspect = glassWidth / glassHeight;
-      this.glassCamera.updateProjectionMatrix();
-
-      this.glassRenderer.setSize(glassWidth, glassHeight);
-    }
+    this.renderer.setSize(width, height);
   }
 
   dispose() {
@@ -504,17 +468,10 @@ export class MapBackground {
       this.reflectionTarget.dispose();
     }
 
-    if (this.starfieldRenderer) {
-      this.starfieldRenderer.dispose();
-      if (this.starfieldRenderer.domElement && this.starfieldRenderer.domElement.parentNode) {
-        this.starfieldRenderer.domElement.parentNode.removeChild(this.starfieldRenderer.domElement);
-      }
-    }
-
-    if (this.glassRenderer) {
-      this.glassRenderer.dispose();
-      if (this.glassRenderer.domElement && this.glassRenderer.domElement.parentNode) {
-        this.glassRenderer.domElement.parentNode.removeChild(this.glassRenderer.domElement);
+    if (this.renderer) {
+      this.renderer.dispose();
+      if (this.renderer.domElement && this.renderer.domElement.parentNode) {
+        this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
       }
     }
 
