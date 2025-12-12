@@ -45,6 +45,17 @@ export class MapRendererDOM {
     this.nodesContainer = document.createElement('div');
     this.nodesContainer.id = 'nodes-container';
 
+    // Create tooltip
+    this.tooltip = document.createElement('div');
+    this.tooltip.className = 'node-tooltip';
+    this.tooltip.innerHTML = `
+      <div class="node-tooltip-title"></div>
+      <div class="node-tooltip-type"></div>
+      <div class="node-tooltip-desc"></div>
+      <div class="node-tooltip-state"></div>
+    `;
+    document.body.appendChild(this.tooltip);
+
     // Build hierarchy
     this.mapScene.appendChild(this.mapHalo);
     this.mapScene.appendChild(this.connectionsContainer);
@@ -326,19 +337,83 @@ export class MapRendererDOM {
   }
 
   handleNodeHover(event, nodeData) {
+    // Show tooltip
+    this.showTooltip(event, nodeData);
+
     if (this.onNodeHover) {
       this.onNodeHover(nodeData, event);
     }
   }
 
   handleNodeMove(event, nodeData) {
-    // Can be used for tooltip positioning
+    // Update tooltip position
+    this.updateTooltipPosition(event);
   }
 
   handleNodeLeave(event, nodeData) {
+    // Hide tooltip
+    this.hideTooltip();
+
     if (this.onNodeLeave) {
       this.onNodeLeave(nodeData, event);
     }
+  }
+
+  /**
+   * Show tooltip with node information
+   */
+  showTooltip(event, nodeData) {
+    const titleEl = this.tooltip.querySelector('.node-tooltip-title');
+    const typeEl = this.tooltip.querySelector('.node-tooltip-type');
+    const descEl = this.tooltip.querySelector('.node-tooltip-desc');
+    const stateEl = this.tooltip.querySelector('.node-tooltip-state');
+
+    // Get node description based on type
+    const typeDescriptions = {
+      combat: 'Combat Encounter - Face station hostiles',
+      resource: 'Resource Cache - Gather supplies and data',
+      event: 'Unknown Event - Investigate the anomaly',
+      rest: 'Safe Room - Restore and prepare',
+      echo: 'Echo Manifestation - A memory made hostile',
+      exit: 'Ring Exit - Descend deeper',
+      start: 'Entry Point'
+    };
+
+    const stateLabels = {
+      hidden: 'Not Revealed',
+      locked: 'Path Not Available',
+      available: 'Ready to Enter',
+      current: 'Current Position',
+      completed: 'Already Cleared'
+    };
+
+    // Set content
+    const nodeName = `Node ${nodeData.id.replace('node_', '')}`;
+    titleEl.textContent = nodeData.type === 'exit' ? 'EXIT NODE' : nodeData.type === 'start' ? 'START' : nodeName;
+    typeEl.textContent = nodeData.type ? nodeData.type.toUpperCase() : 'UNKNOWN';
+    descEl.textContent = typeDescriptions[nodeData.type] || 'Neural network node';
+    stateEl.textContent = stateLabels[nodeData.state] || nodeData.state.toUpperCase();
+
+    // Position and show
+    this.updateTooltipPosition(event);
+    this.tooltip.classList.add('visible');
+  }
+
+  /**
+   * Update tooltip position
+   */
+  updateTooltipPosition(event) {
+    const offsetX = 15;
+    const offsetY = 15;
+    this.tooltip.style.left = (event.clientX + offsetX) + 'px';
+    this.tooltip.style.top = (event.clientY + offsetY) + 'px';
+  }
+
+  /**
+   * Hide tooltip
+   */
+  hideTooltip() {
+    this.tooltip.classList.remove('visible');
   }
 
   /**
