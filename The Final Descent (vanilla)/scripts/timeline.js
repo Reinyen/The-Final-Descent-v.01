@@ -18,51 +18,34 @@ export class Timeline {
 
   getPhaseInfo(elapsed) {
     const clamped = Math.max(0, elapsed);
+    const totalDuration = 4.72; // 1s fade_in + 2.52s placeholder + 1.2s UI reveals
 
     if (clamped < 1.0) {
       return {
         name: 'fade_in',
         phaseT: clamped / 1.0,
-        globalT: clamped / 6.5,
+        globalT: clamped / totalDuration,
         elapsed: clamped,
         phaseStart: 0.0,
         phaseEnd: 1.0
       };
-    } else if (clamped < 4.0) {
+    } else if (clamped < 3.52) {
       return {
-        name: 'comet_approach',
-        phaseT: (clamped - 1.0) / 3.0,
-        globalT: clamped / 6.5,
+        name: 'placeholder_content',
+        phaseT: (clamped - 1.0) / 2.52,
+        globalT: clamped / totalDuration,
         elapsed: clamped,
         phaseStart: 1.0,
-        phaseEnd: 4.0
+        phaseEnd: 3.52
       };
-    } else if (clamped < 4.5) {
+    } else if (clamped < 4.72) {
       return {
-        name: 'impact',
-        phaseT: (clamped - 4.0) / 0.5,
-        globalT: clamped / 6.5,
+        name: 'ui_reveal',
+        phaseT: (clamped - 3.52) / 1.2,
+        globalT: clamped / totalDuration,
         elapsed: clamped,
-        phaseStart: 4.0,
-        phaseEnd: 4.5
-      };
-    } else if (clamped < 5.5) {
-      return {
-        name: 'crater_settle',
-        phaseT: (clamped - 4.5) / 1.0,
-        globalT: clamped / 6.5,
-        elapsed: clamped,
-        phaseStart: 4.5,
-        phaseEnd: 5.5
-      };
-    } else if (clamped < 6.5) {
-      return {
-        name: 'button_reveal',
-        phaseT: (clamped - 5.5) / 1.0,
-        globalT: clamped / 6.5,
-        elapsed: clamped,
-        phaseStart: 5.5,
-        phaseEnd: 6.5
+        phaseStart: 3.52,
+        phaseEnd: 4.72
       };
     } else {
       return {
@@ -70,7 +53,7 @@ export class Timeline {
         phaseT: 1.0,
         globalT: 1.0,
         elapsed: clamped,
-        phaseStart: 6.5,
+        phaseStart: 4.72,
         phaseEnd: Infinity
       };
     }
@@ -80,13 +63,7 @@ export class Timeline {
     // Update starfield (fade in, twinkling)
     this.scene.updateStarfield(phase, elapsedTime);
 
-    // Update comet (position, heat)
-    this.scene.updateComet(phase, elapsedTime, deltaTime);
-
-    // Update explosion (explosion, implosion, shockwave)
-    this.scene.updateExplosion(phase, elapsedTime, deltaTime);
-
-    // Update camera (shake during impact)
+    // Update camera
     this.scene.updateCamera(phase, elapsedTime);
 
     // Update particles (debris, glass)

@@ -39,15 +39,14 @@ export class UIController {
   }
 
   update(phase, elapsedTime) {
-    // Show title at 40% through crater_settle (5.3s global)
-    if ((phase.name === 'crater_settle' && phase.phaseT >= 0.4) ||
-        phase.name === 'button_reveal' ||
+    // Show title early in ui_reveal phase (~3.64s global)
+    if ((phase.name === 'ui_reveal' && phase.phaseT >= 0.1) ||
         phase.name === 'complete') {
       this.showTitle();
     }
 
-    // Show button at 20% through button_reveal (5.7s global)
-    if ((phase.name === 'button_reveal' && phase.phaseT >= 0.2) ||
+    // Show button slightly later in ui_reveal phase (~3.88s global)
+    if ((phase.name === 'ui_reveal' && phase.phaseT >= 0.3) ||
         phase.name === 'complete') {
       this.showButton();
     }

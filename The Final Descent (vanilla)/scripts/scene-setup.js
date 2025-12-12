@@ -1,11 +1,9 @@
 import * as THREE from 'three';
 import { PostProcessing } from './post-processing.js';
 import { Starfield } from './starfield.js';
-import { Comet } from './comet.js';
 import { BlackHole } from './black-hole.js';
 import { ParticleSystem } from './particles.js';
 import { StarPhysics } from './physics.js';
-import { Explosion } from './explosion.js';
 
 const QUALITY_CONFIGS = {
   high: {
@@ -35,15 +33,12 @@ export class IntroScene {
 
     this.postProcessing = null;
     this.starfield = null;
-    this.comet = null;
     this.blackHole = null;
     this.particleSystem = null;
     this.starPhysics = null;
-    this.explosion = null;
 
     this.cameraBasePosition = new THREE.Vector3(0, 0, 30);
     this.prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.explosionTriggered = false;
   }
 
   async init() {
@@ -108,12 +103,6 @@ export class IntroScene {
     const starfieldMesh = this.starfield.getMesh();
     this.scene.add(starfieldMesh);
 
-    // Initialize comet (default layer 0)
-    this.comet = new Comet();
-    this.scene.add(this.comet.getMesh());
-    this.scene.add(this.comet.getTrail()); // Add trail particles
-    this.scene.add(this.comet.getDebrisParticles()); // Add debris particles
-
     // Initialize black hole (default layer 0 - not affected by lensing)
     this.blackHole = new BlackHole(this.renderer, this.scene);
     this.scene.add(this.blackHole.getGroup());
@@ -133,14 +122,6 @@ export class IntroScene {
       this.scene
     );
 
-    // Initialize explosion system
-    this.explosion = new Explosion();
-    this.scene.add(this.explosion.getExplosionMesh());
-    this.scene.add(this.explosion.getImpactFlash());
-    this.scene.add(this.explosion.getEjectaParticles());
-    this.scene.add(this.explosion.getFireballParticles());
-    this.scene.add(this.explosion.getShockwave());
-
     console.log('[IntroScene] Initialization complete');
   }
 
@@ -148,62 +129,9 @@ export class IntroScene {
     this.starfield.update(phase, elapsedTime);
   }
 
-  updateComet(phase, elapsedTime, deltaTime = 0.016) {
-    this.comet.update(phase, elapsedTime, deltaTime);
-
-    // Add sonic boom waves to scene dynamically
-    const sonicBoomWaves = this.comet.getSonicBoomWaves();
-    sonicBoomWaves.forEach(wave => {
-      if (!wave.parent) {
-        this.scene.add(wave);
-      }
-    });
-
-    // Trigger explosion at the end of comet approach
-    if (phase.name === 'impact' && !this.explosionTriggered) {
-      this.explosion.trigger();
-      this.explosionTriggered = true;
-      // Hide comet once explosion starts
-      this.comet.getMesh().visible = false;
-      this.comet.getTrail().visible = false;
-      this.comet.getDebrisParticles().visible = false;
-    }
-  }
-
-  updateExplosion(phase, elapsedTime, deltaTime) {
-    this.explosion.update(deltaTime, elapsedTime);
-  }
-
   updateCamera(phase, elapsedTime) {
-    // Camera shake during impact
-    if (phase.name === 'impact' && !this.prefersReducedMotion) {
-      const timeSinceImpact = elapsedTime - phase.phaseStart;
-      const shake = this.getCameraShake(timeSinceImpact);
-
-      this.camera.position.set(
-        this.cameraBasePosition.x + shake.x,
-        this.cameraBasePosition.y + shake.y,
-        this.cameraBasePosition.z
-      );
-    } else {
-      this.camera.position.copy(this.cameraBasePosition);
-    }
-  }
-
-  getCameraShake(timeSinceImpact) {
-    if (timeSinceImpact < 0 || timeSinceImpact > 0.5) {
-      return { x: 0, y: 0 };
-    }
-
-    const amplitude = 0.8 * Math.exp(-timeSinceImpact * 10);
-    const shake1 = Math.sin(timeSinceImpact * 17.3);
-    const shake2 = Math.sin(timeSinceImpact * 23.7);
-    const shake3 = Math.sin(timeSinceImpact * 31.1);
-
-    return {
-      x: amplitude * (shake1 * 0.5 + shake2 * 0.3 + shake3 * 0.2),
-      y: amplitude * (shake2 * 0.5 + shake1 * 0.3 + shake3 * 0.2) * 0.625
-    };
+    // Keep camera at base position (custom camera logic can be added during placeholder_content phase)
+    this.camera.position.copy(this.cameraBasePosition);
   }
 
   updateParticles(phase, elapsedTime, deltaTime) {
@@ -211,8 +139,8 @@ export class IntroScene {
   }
 
   updateBlackHole(phase, elapsedTime) {
-    // Only show black hole after explosion is complete
-    if (this.explosion.isComplete()) {
+    // Show black hole after placeholder content completes
+    if (phase.name === 'ui_reveal' || phase.name === 'complete') {
       this.blackHole.getGroup().visible = true;
     } else {
       this.blackHole.getGroup().visible = false;
@@ -261,10 +189,8 @@ export class IntroScene {
     console.log('[IntroScene] Destroying...');
 
     if (this.starfield) this.starfield.destroy();
-    if (this.comet) this.comet.destroy();
     if (this.blackHole) this.blackHole.destroy();
     if (this.particleSystem) this.particleSystem.destroy();
-    if (this.explosion) this.explosion.destroy();
     if (this.postProcessing) this.postProcessing.destroy();
 
     if (this.renderer) {
