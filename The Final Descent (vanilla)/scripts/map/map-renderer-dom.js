@@ -144,6 +144,12 @@ export class MapRendererDOM {
     // Clear state classes
     lineElement.classList.remove('state-hidden', 'state-locked', 'state-available', 'state-active', 'state-completed');
 
+    // CRITICAL: Hide unrevealed connections completely
+    if (!conn.revealed) {
+      lineElement.classList.add('state-hidden');
+      return;
+    }
+
     const fromState = fromNode.state;
     const toState = toNode.state;
 
@@ -173,7 +179,7 @@ export class MapRendererDOM {
       return;
     }
 
-    // HIDDEN: Both nodes not revealed (completely invisible)
+    // HIDDEN: Both nodes hidden
     if (fromState === NodeStates.HIDDEN && toState === NodeStates.HIDDEN) {
       lineElement.classList.add('state-hidden');
       return;
