@@ -410,37 +410,41 @@ export class MapController {
    * Setup event listeners
    */
   setupEventListeners() {
-    // Mouse move for hover
-    this.renderer.canvas.addEventListener('mousemove', (e) => {
-      if (!this.canInteract || this.isAnimating) return;
+  /**
+   * Setup event listeners
+   */
+  setupEventListeners() {
+    // For DOM renderer, we set up callbacks on the renderer
+    // The renderer handles node-level events directly
 
-      const node = this.renderer.getNodeAtPosition(e.clientX, e.clientY);
-      this.uiOverlay.setHoveredNode(node, e.clientX, e.clientY);
-
-      // Reset idle timer on mouse move
-      this.infoBand.resetIdleTimer();
-    });
-
-    // Click for selection
-    this.renderer.canvas.addEventListener('click', (e) => {
+    // Set up renderer callbacks
+    this.renderer.onNodeClick = (nodeData, event) => {
       if (!this.canInteract || this.isAnimating) return;
 
       // Reset idle timer on click
       this.infoBand.resetIdleTimer();
 
       // Check if click is on UI element first
-      const clickConsumedByUI = this.uiOverlay.handleClick(e.clientX, e.clientY);
+      const clickConsumedByUI = this.uiOverlay.handleClick(event.clientX, event.clientY);
 
       if (!clickConsumedByUI) {
-        // Check if clicked on node
-        const node = this.renderer.getNodeAtPosition(e.clientX, e.clientY);
-
-        if (node) {
-          this.handleNodeClick(node);
-        }
+        this.handleNodeClick(nodeData);
       }
-    });
+    };
 
+    this.renderer.onNodeHover = (nodeData, event) => {
+      if (!this.canInteract || this.isAnimating) return;
+
+      this.uiOverlay.setHoveredNode(nodeData, event.clientX, event.clientY);
+
+      // Reset idle timer on mouse move
+      this.infoBand.resetIdleTimer();
+    };
+
+    this.renderer.onNodeLeave = (nodeData, event) => {
+      this.uiOverlay.setHoveredNode(null);
+    };
+  }
     // UI overlay enter callback
     this.uiOverlay.onEnterNode = (node) => {
       this.enterNode(node);
