@@ -487,9 +487,14 @@ export class MapBackground {
 
     // Update glass sphere rotation (planetary rotation with tilted axis)
     if (this.glassSphere) {
-      // Tilt the rotation axis from top-right to bottom-left (45-degree diagonal)
-      this.glassSphere.rotation.z = Math.PI / 4; // Static tilt for diagonal axis
-      // Rotate on Y-axis like a planet spinning
+      // Set rotation order so tilts are applied before spin
+      this.glassSphere.rotation.order = 'YXZ';
+
+      // Tilt on both X and Z axes for diagonal top-right to bottom-left orientation
+      this.glassSphere.rotation.x = -Math.PI / 6; // Tilt forward (30 degrees)
+      this.glassSphere.rotation.z = Math.PI / 4;  // Tilt diagonal (45 degrees)
+
+      // Continuous Y-axis rotation like a planet spinning on its tilted axis
       this.glassSphere.rotation.y = this.elapsedTime * 0.1;
 
       // Update shader time uniforms for all children
