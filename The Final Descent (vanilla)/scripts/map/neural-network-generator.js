@@ -80,70 +80,78 @@ export class NeuralNetworkGenerator {
   }
 
   /**
-   * Create nodes distributed in 3D space (neural network style)
+   * Create nodes distributed in circular/spiral ring layout
+   * Start at outer edge, exit at center (descending into the black hole)
    */
   createNodes() {
     const count = this.ringConfig.nodeCount;
-    const radius = MapConfig.visual.networkRadius;
-    const minDist = MapConfig.visual.minNodeDistance;
+    const outerRadius = MapConfig.visual.networkRadius;
+    const innerRadius = MapConfig.visual.networkRadius * 0.2;
 
-    // First node: Start (always at origin, slightly offset)
+    // First node: Start (at outer edge, top position)
+    const startAngle = -Math.PI / 2; // Top of circle
     this.nodes.push({
       id: 'node_0',
       position: {
-        x: this.random.range(-2, 2),
-        y: this.random.range(-2, 2),
-        z: this.random.range(-2, 2)
+        x: outerRadius * Math.cos(startAngle),
+        y: 0,
+        z: outerRadius * Math.sin(startAngle)
       },
       type: NodeTypes.START,
       state: NodeStates.CURRENT,
       connections: [],
       revealed: true,
-      layer: 0
+      layer: 0,
+      ringProgress: 0
     });
 
-    // Generate remaining nodes in layers (like neural network)
-    const layers = Math.ceil(count / 3);
+    // Generate remaining nodes in spiral pattern, descending toward center
     let nodeIndex = 1;
+    const spiralTurns = 1.5; // How many times the spiral wraps around
 
-    for (let layer = 1; layer < layers && nodeIndex < count; layer++) {
-      const nodesInLayer = Math.min(3, count - nodeIndex);
-      const layerRadius = (layer / layers) * radius;
+    for (let i = 1; i < count; i++) {
+      const progress = i / (count - 1); // 0 to 1
+      const isExit = i === count - 1;
 
-      for (let i = 0; i < nodesInLayer && nodeIndex < count; i++) {
-        let position;
-        let attempts = 0;
-        const maxAttempts = 50;
+      // Spiral: radius decreases as we progress, angle increases
+      const radius = outerRadius - (outerRadius - innerRadius) * progress;
 
-        // Try to place node with minimum distance from others
-        do {
-          const phi = Math.acos(2 * this.random.next() - 1);
-          const theta = 2 * Math.PI * this.random.next();
+      // Add spiral rotation + some randomness
+      const baseAngle = startAngle + (spiralTurns * 2 * Math.PI * progress);
+      const angleVariation = this.random.range(-0.3, 0.3);
+      const angle = baseAngle + angleVariation;
 
-          position = {
-            x: layerRadius * Math.sin(phi) * Math.cos(theta),
-            y: layerRadius * Math.sin(phi) * Math.sin(theta),
-            z: layerRadius * Math.cos(phi)
-          };
+      // Radius variation for organic feel
+      const radiusVariation = this.random.range(-1.5, 1.5);
+      const finalRadius = radius + radiusVariation;
 
-          attempts++;
-        } while (attempts < maxAttempts && !this.isValidPosition(position, minDist));
+      // Slight y-axis variation for depth
+      const y = this.random.range(-0.5, 0.5);
 
-        const isExit = nodeIndex === count - 1;
+      const position = {
+        x: finalRadius * Math.cos(angle),
+        y: y,
+        z: finalRadius * Math.sin(angle)
+      };
 
-        this.nodes.push({
-          id: `node_${nodeIndex}`,
-          position: position,
-          type: isExit ? NodeTypes.EXIT : null, // Assigned later
-          state: NodeStates.HIDDEN,
-          connections: [],
-          revealed: false,
-          layer: layer
-        });
+      // Layer based on progress (for pathfinding)
+      const layer = Math.floor(progress * 3) + 1;
 
-        nodeIndex++;
-      }
+      this.nodes.push({
+        id: `node_${nodeIndex}`,
+        position: position,
+        type: isExit ? NodeTypes.EXIT : null, // Assigned later
+        state: NodeStates.HIDDEN,
+        connections: [],
+        revealed: false,
+        layer: layer,
+        ringProgress: progress
+      });
+
+      nodeIndex++;
     }
+
+    console.log('[NetworkGen] Created ring layout with', this.nodes.length, 'nodes');
   }
 
   /**
