@@ -4,6 +4,7 @@ import { Starfield } from './starfield.js';
 import { BlackHole } from './black-hole.js';
 import { ParticleSystem } from './particles.js';
 import { StarPhysics } from './physics.js';
+import { ExplosionCanvas } from './explosion-canvas.js';
 
 const QUALITY_CONFIGS = {
   high: {
@@ -36,9 +37,11 @@ export class IntroScene {
     this.blackHole = null;
     this.particleSystem = null;
     this.starPhysics = null;
+    this.explosionCanvas = null;
 
     this.cameraBasePosition = new THREE.Vector3(0, 0, 30);
     this.prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.explosionStarted = false;
   }
 
   async init() {
@@ -122,11 +125,33 @@ export class IntroScene {
       this.scene
     );
 
+    // Initialize explosion canvas (2D overlay)
+    this.explosionCanvas = new ExplosionCanvas();
+    this.explosionCanvas.init();
+
     console.log('[IntroScene] Initialization complete');
   }
 
   updateStarfield(phase, elapsedTime) {
     this.starfield.update(phase, elapsedTime);
+  }
+
+  updateExplosionCanvas(phase, elapsedTime) {
+    // Start explosion at beginning of placeholder_content phase
+    if (phase.name === 'placeholder_content' && !this.explosionStarted) {
+      this.explosionCanvas.start();
+      this.explosionStarted = true;
+    }
+
+    // Update explosion during placeholder_content phase
+    if (phase.name === 'placeholder_content' && this.explosionCanvas.isActive) {
+      this.explosionCanvas.update();
+    }
+
+    // Stop explosion when transitioning to ui_reveal
+    if (phase.name === 'ui_reveal' && this.explosionStarted) {
+      this.explosionCanvas.stop();
+    }
   }
 
   updateCamera(phase, elapsedTime) {
@@ -191,6 +216,7 @@ export class IntroScene {
     if (this.starfield) this.starfield.destroy();
     if (this.blackHole) this.blackHole.destroy();
     if (this.particleSystem) this.particleSystem.destroy();
+    if (this.explosionCanvas) this.explosionCanvas.destroy();
     if (this.postProcessing) this.postProcessing.destroy();
 
     if (this.renderer) {
