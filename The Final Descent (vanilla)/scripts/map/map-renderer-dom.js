@@ -332,6 +332,14 @@ export class MapRendererDOM {
   }
 
   /**
+   * Set idle intensity (for API compatibility with Three.js renderer)
+   */
+  setIdleIntensity(intensity) {
+    // DOM version doesn't use idle intensity
+    // This method exists for API compatibility
+  }
+
+  /**
    * Cleanup
    */
   dispose() {
