@@ -371,7 +371,7 @@
       to { transform: rotate(360deg); }
     }
 
-    /* Three.js background canvas */
+    /* Three.js background canvas - fullscreen starfield */
     #map-background-canvas {
       position: fixed;
       top: 0;
@@ -381,11 +381,26 @@
       z-index: 0;
       pointer-events: none;
     }
+
+    /* Glass sphere canvas - positioned in map area */
+    #glass-sphere-canvas {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: min(520px, 80vw);
+      aspect-ratio: 1 / 1;
+      transform: translate(-50%, -50%);
+      z-index: 3;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
-  <!-- Three.js Background (starfield + glass sphere) -->
+  <!-- Three.js Background (starfield) -->
   <div id="map-background-canvas"></div>
+
+  <!-- Glass sphere canvas (positioned in map area) -->
+  <div id="glass-sphere-canvas"></div>
 
   <div id="root">
     <header class="topband">
@@ -484,6 +499,7 @@
 
     // DOM elements
     const mapBackgroundCanvas = document.getElementById('map-background-canvas');
+    const glassSphereCanvas = document.getElementById('glass-sphere-canvas');
     const mapRenderer = document.getElementById('map-renderer');
     const loadingScreen = document.getElementById('loading-screen');
     const ringSubtitle = document.getElementById('ring-subtitle');
@@ -501,8 +517,8 @@
     async function init() {
       console.log('[Main] Initializing map system...');
 
-      // Create Three.js background (starfield + glass sphere)
-      mapBackground = new MapBackground(mapBackgroundCanvas);
+      // Create Three.js background (starfield in background, glass sphere in map area)
+      mapBackground = new MapBackground(mapBackgroundCanvas, glassSphereCanvas);
 
       // Create controller (no canvas overlays for now)
       mapController = new MapController(mapRenderer, null, null);
