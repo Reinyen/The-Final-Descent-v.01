@@ -90,22 +90,26 @@ export class MapBackground {
     const twinkleSpeeds = new Float32Array(totalCount);
 
     const bounds = {
-      x: 300,
-      y: 225,
+      x: 180,
+      y: 135,
       zNear: -20,
-      zFar: -250
+      zFar: -150
     };
 
     for (let i = 0; i < totalCount; i++) {
       const i3 = i * 3;
       const isDust = i >= this.starCount;
 
-      // Position with parallax depth
-      const angle = Math.random() * Math.PI * 2;
-      const radius = Math.sqrt(Math.random()) * bounds.x * 0.95;
-      positions[i3] = Math.cos(angle) * radius;
-      positions[i3 + 1] = (Math.sin(angle) * radius * 0.75) + (Math.random() - 0.5) * 15;
-      positions[i3 + 2] = bounds.zFar + Math.random() * (bounds.zNear - bounds.zFar);
+      // Distribute stars evenly in 3D space for continuous rotation visibility
+      // Use spherical distribution within bounds
+      const theta = Math.random() * Math.PI * 2; // Horizontal angle
+      const phi = Math.acos((Math.random() * 2) - 1); // Vertical angle (uniform on sphere)
+      const r = Math.cbrt(Math.random()) * bounds.x * 0.95; // Cubic root for volume distribution
+
+      // Convert spherical to Cartesian with elliptical bounds
+      positions[i3] = r * Math.sin(phi) * Math.cos(theta); // X
+      positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.75; // Y (compressed)
+      positions[i3 + 2] = bounds.zFar + (r * Math.cos(phi) + bounds.x) * ((bounds.zNear - bounds.zFar) / (bounds.x * 2)); // Z (depth)
 
       // Color variation
       const paletteRoll = Math.random();
@@ -481,18 +485,18 @@ export class MapBackground {
           float crackleTime = time * 5.0;
 
           // Create bursts of crackling
-          float burstTrigger = smoothstep(0.9, 1.0, cracklePhase) * smoothstep(0.1, 0.0, cracklePhase);
+          float burstTrigger = smoothstep(0.85, 1.0, cracklePhase) * smoothstep(0.15, 0.0, cracklePhase);
 
           // Electric arc patterns using noise
-          vec2 noiseCoord = vNormal.xy * 8.0 + vec2(crackleTime * 2.0, crackleTime * 1.5);
+          vec2 noiseCoord = vNormal.xy * 10.0 + vec2(crackleTime * 2.5, crackleTime * 2.0);
           float crackle = noise(noiseCoord) * noise(noiseCoord * 2.3);
-          crackle = pow(crackle, 3.0); // Sharp electric arcs
+          crackle = pow(crackle, 2.5); // Sharp electric arcs
 
-          // Combine crackle with burst timing
-          float electricEffect = crackle * burstTrigger * 0.8;
+          // Combine crackle with burst timing - INCREASED intensity
+          float electricEffect = crackle * burstTrigger * 1.5;
 
           float intensity = fresnel * 0.15 * pulse + electricEffect;
-          vec3 finalColor = glowColor * (1.0 + electricEffect * 2.0); // Brighten during crackles
+          vec3 finalColor = glowColor * (1.0 + electricEffect * 4.0); // Brighten more during crackles
 
           gl_FragColor = vec4(finalColor * intensity, intensity * 0.4);
         }
@@ -526,8 +530,11 @@ export class MapBackground {
 
     // Update glass sphere rotation (planetary rotation with tilted axis)
     if (this.glassSphere) {
-      // Rotate around diagonal axis (top-right to bottom-left) like a planet
-      this.glassSphere.rotateOnAxis(this.sphereRotationAxis, delta * 0.1);
+      // Rotate around fixed world-space diagonal axis (top-right to bottom-left) like a planet
+      // Using quaternion for world-space axis rotation
+      const rotationQuaternion = new THREE.Quaternion();
+      rotationQuaternion.setFromAxisAngle(this.sphereRotationAxis, delta * 0.1);
+      this.glassSphere.quaternion.multiplyQuaternions(rotationQuaternion, this.glassSphere.quaternion);
 
       // Update shader time uniforms for all children
       this.glassSphere.children.forEach(child => {
