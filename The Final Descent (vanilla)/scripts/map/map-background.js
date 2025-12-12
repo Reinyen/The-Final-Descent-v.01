@@ -18,6 +18,9 @@ export class MapBackground {
     this.reflectionCamera = null;
     this.reflectionTarget = null;
 
+    // Render target for fish-eye distortion
+    this.backgroundRenderTarget = null;
+
     this.animationFrameId = null;
     this.elapsedTime = 0;
     this.clock = new THREE.Clock();
@@ -45,6 +48,17 @@ export class MapBackground {
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.container.appendChild(this.renderer.domElement);
+
+    // Create render target for background (for fish-eye distortion)
+    this.backgroundRenderTarget = new THREE.WebGLRenderTarget(
+      this.container.clientWidth,
+      this.container.clientHeight,
+      {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat
+      }
+    );
 
     // Create starfield (will be behind glass sphere in same scene)
     this.createStarfield();
@@ -264,27 +278,92 @@ export class MapBackground {
     this.reflectionCamera = new THREE.CubeCamera(1, 400, this.reflectionTarget);
     group.add(this.reflectionCamera);
 
-    // Glass sphere - MUCH more opaque and visible with proper refraction
+    // Glass sphere with custom fish-eye distortion shader
     const sphereGeometry = new THREE.SphereGeometry(18, 64, 64);
-    const glassMaterial = new THREE.MeshPhysicalMaterial({
-      transmission: 0.75, // Higher transmission for visible refraction
+    const glassMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0.0 },
+        backgroundTexture: { value: this.backgroundRenderTarget.texture },
+        envMap: { value: this.reflectionTarget.texture },
+        resolution: { value: new THREE.Vector2(this.container.clientWidth, this.container.clientHeight) },
+        sphereCenter: { value: new THREE.Vector3(0, 0, 0) }
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+        varying vec2 vUv;
+        varying vec4 vScreenPos;
+
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = position;
+          vUv = uv;
+
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
+
+          // Screen space position for texture sampling
+          vScreenPos = gl_Position;
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        uniform sampler2D backgroundTexture;
+        uniform samplerCube envMap;
+        uniform vec2 resolution;
+        uniform vec3 sphereCenter;
+
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+        varying vec2 vUv;
+        varying vec4 vScreenPos;
+
+        void main() {
+          // Convert screen position to UV coordinates
+          vec2 screenUV = (vScreenPos.xy / vScreenPos.w) * 0.5 + 0.5;
+
+          // Calculate distance from sphere center for fish-eye effect
+          vec2 center = vec2(0.5, 0.5);
+          vec2 offset = screenUV - center;
+          float dist = length(offset);
+
+          // Fish-eye distortion - radial warping that gets stronger toward edges
+          float distortion = 0.6; // Distortion strength
+          float fisheye = 1.0 + distortion * dist * dist;
+          vec2 distortedUV = center + offset * fisheye;
+
+          // Sample background with fish-eye distortion
+          vec4 background = texture2D(backgroundTexture, distortedUV);
+
+          // Fresnel effect for glass edges
+          vec3 viewDirection = normalize(cameraPosition - vPosition);
+          float fresnel = pow(1.0 - abs(dot(viewDirection, vNormal)), 2.5);
+
+          // Purple tint and glow
+          vec3 glassColor = vec3(0.75, 0.72, 1.0);
+          vec3 glassGlow = glassColor * fresnel * 0.4;
+
+          // Environment reflection
+          vec3 reflected = reflect(-viewDirection, vNormal);
+          vec4 envColor = textureCube(envMap, reflected);
+
+          // Combine: distorted background + glass glow + reflections
+          vec3 finalColor = background.rgb * 0.85 + glassGlow + envColor.rgb * 0.3;
+
+          // Glass opacity - more opaque at edges (fresnel)
+          float alpha = 0.75 + fresnel * 0.25;
+
+          gl_FragColor = vec4(finalColor, alpha);
+        }
+      `,
       transparent: true,
-      opacity: 0.85, // MUCH more opaque - actually visible now
-      roughness: 0.05, // Slight roughness for visual interest
-      metalness: 0.0, // Pure glass, no metal
-      clearcoat: 1.0, // Maximum clearcoat for glossy surface
-      clearcoatRoughness: 0.0,
-      thickness: 2.0, // Thicker glass for stronger refraction effect
-      envMap: this.reflectionTarget.texture,
-      envMapIntensity: 1.2, // Stronger reflections
-      ior: 1.5, // Glass IOR - creates the lens/refraction effect
-      color: new THREE.Color(0xc0b8ff), // More visible purple tint
       side: THREE.FrontSide,
       depthWrite: false
     });
 
     const glassMesh = new THREE.Mesh(sphereGeometry, glassMaterial);
     glassMesh.renderOrder = 1;
+    this.glassMaterial = glassMaterial; // Store reference for updates
     group.add(glassMesh);
 
     // Inner core with brighter glow (visible through glass)
@@ -417,7 +496,7 @@ export class MapBackground {
       if (this.reflectionCamera) {
         // Hide glass mesh from its own reflection
         const glassMesh = this.glassSphere.children.find(child =>
-          child.material && child.material.type === 'MeshPhysicalMaterial'
+          child.material && child.material.uniforms && child.material.uniforms.backgroundTexture
         );
         if (glassMesh) {
           glassMesh.visible = false;
@@ -425,9 +504,27 @@ export class MapBackground {
           glassMesh.visible = true;
         }
       }
+
+      // Render background to texture for fish-eye distortion
+      if (this.backgroundRenderTarget && this.glassMaterial) {
+        // Hide glass sphere temporarily
+        this.glassSphere.visible = false;
+
+        // Render just the starfield to the background texture
+        this.renderer.setRenderTarget(this.backgroundRenderTarget);
+        this.renderer.render(this.scene, this.camera);
+        this.renderer.setRenderTarget(null);
+
+        // Show glass sphere again
+        this.glassSphere.visible = true;
+
+        // Update the glass material's background texture
+        this.glassMaterial.uniforms.backgroundTexture.value = this.backgroundRenderTarget.texture;
+        this.glassMaterial.uniforms.time.value = this.elapsedTime;
+      }
     }
 
-    // Render the scene
+    // Render the final scene
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -445,6 +542,16 @@ export class MapBackground {
     this.camera.updateProjectionMatrix();
 
     this.renderer.setSize(width, height);
+
+    // Update background render target size
+    if (this.backgroundRenderTarget) {
+      this.backgroundRenderTarget.setSize(width, height);
+    }
+
+    // Update resolution uniform
+    if (this.glassMaterial && this.glassMaterial.uniforms.resolution) {
+      this.glassMaterial.uniforms.resolution.value.set(width, height);
+    }
   }
 
   dispose() {
@@ -466,6 +573,10 @@ export class MapBackground {
 
     if (this.reflectionTarget) {
       this.reflectionTarget.dispose();
+    }
+
+    if (this.backgroundRenderTarget) {
+      this.backgroundRenderTarget.dispose();
     }
 
     if (this.renderer) {
