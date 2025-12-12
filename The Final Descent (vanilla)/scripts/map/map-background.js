@@ -327,8 +327,8 @@ export class MapBackground {
           vec2 offset = screenUV - center;
           float dist = length(offset);
 
-          // Fish-eye distortion - radial warping that gets stronger toward edges
-          float distortion = 0.6; // Distortion strength
+          // Fish-eye distortion - MAXIMUM radial warping
+          float distortion = 2.5; // Maximum distortion strength
           float fisheye = 1.0 + distortion * dist * dist;
           vec2 distortedUV = center + offset * fisheye;
 
