@@ -503,7 +503,7 @@
     let mapController;
 
     async function init() {
-      console.log('[Main] Initializing map system...');
+      console.log('[Main] Initializing map system - neural network disabled, awaiting rebuild...');
 
       // Create Three.js background (starfield + glass sphere in map area only)
       mapBackground = new MapBackground(mapBackgroundCanvas);
@@ -511,67 +511,29 @@
       // Create controller (no canvas overlays for now)
       mapController = new MapController(mapRenderer, null, null);
 
-      // Set up callbacks
-      mapController.onNodeEnter = handleNodeEnter;
-      mapController.onRingComplete = handleRingComplete;
+      // Neural network start disabled
+      // mapController.start();
 
-      // Start the game
-      mapController.start();
-
-      // Update UI
+      // Update UI with placeholder values
       updateRingInfo();
-      updateProgress();
+
+      // Set placeholder values
+      nodesCleared.textContent = '0';
+      nodesTotal.textContent = '0';
+      nodesRequired.textContent = '0';
+      exitStatus.textContent = 'System Offline';
 
       // Hide loading screen
       setTimeout(() => {
         loadingScreen.classList.add('hidden');
       }, 1000);
 
-      console.log('[Main] Map system initialized');
-    }
-
-    function handleNodeEnter(node) {
-      console.log('[Main] Node entered:', node);
-      updateProgress();
-    }
-
-    function handleRingComplete() {
-      console.log('[Main] Ring complete!');
-      setTimeout(() => {
-        mapController.advanceToNextRing();
-        updateRingInfo();
-        updateProgress();
-      }, 1000);
+      console.log('[Main] Map UI shell initialized - neural network ready to rebuild');
     }
 
     function updateRingInfo() {
       const ringConfig = MapConfig.rings[mapController.currentRing - 1];
       ringSubtitle.textContent = `Ring ${ringConfig.id} — ${ringConfig.name} / ${ringConfig.description}`;
-    }
-
-    function updateProgress() {
-      if (!mapController.networkData) return;
-
-      const nodes = mapController.networkData.nodes;
-      const totalNodes = nodes.length;
-      const completedNodes = nodes.filter(n => n.state === 'completed').length;
-      const currentNodes = nodes.filter(n => n.state === 'current').length;
-      const visitedCount = completedNodes + currentNodes;
-
-      const ringConfig = MapConfig.rings[mapController.currentRing - 1];
-      const requiredCompletion = ringConfig.requiredCompletion;
-      const requiredCount = Math.ceil(totalNodes * requiredCompletion);
-
-      nodesCleared.textContent = visitedCount;
-      nodesTotal.textContent = totalNodes;
-      nodesRequired.textContent = requiredCount;
-
-      const exitNode = mapController.networkData.nodes.find(n => n.id === mapController.networkData.exitNodeId);
-      if (exitNode && (exitNode.state === 'available' || exitNode.state === 'current')) {
-        exitStatus.textContent = 'Awakened';
-      } else {
-        exitStatus.textContent = 'Dormant';
-      }
     }
 
     // Start
