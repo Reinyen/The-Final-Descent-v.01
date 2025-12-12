@@ -28,6 +28,9 @@ export class MapBackground {
     this.starCount = 1000;
     this.dustCount = 500;
 
+    // Diagonal axis for planetary rotation (top-right to bottom-left)
+    this.sphereRotationAxis = new THREE.Vector3(1, 1, 0).normalize();
+
     this.init();
   }
 
@@ -487,15 +490,8 @@ export class MapBackground {
 
     // Update glass sphere rotation (planetary rotation with tilted axis)
     if (this.glassSphere) {
-      // Set rotation order so tilts are applied before spin
-      this.glassSphere.rotation.order = 'YXZ';
-
-      // Tilt on both X and Z axes for diagonal top-right to bottom-left orientation
-      this.glassSphere.rotation.x = -Math.PI / 6; // Tilt forward (30 degrees)
-      this.glassSphere.rotation.z = Math.PI / 4;  // Tilt diagonal (45 degrees)
-
-      // Continuous Y-axis rotation like a planet spinning on its tilted axis
-      this.glassSphere.rotation.y = this.elapsedTime * 0.1;
+      // Rotate around diagonal axis (top-right to bottom-left) like a planet
+      this.glassSphere.rotateOnAxis(this.sphereRotationAxis, delta * 0.1);
 
       // Update shader time uniforms for all children
       this.glassSphere.children.forEach(child => {
