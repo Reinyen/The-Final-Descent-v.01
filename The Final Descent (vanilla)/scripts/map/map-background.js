@@ -327,10 +327,14 @@ export class MapBackground {
           vec2 offset = screenUV - center;
           float dist = length(offset);
 
-          // Fish-eye distortion - MAXIMUM radial warping
-          float distortion = 2.5; // Maximum distortion strength
-          float fisheye = 1.0 + distortion * dist * dist;
-          vec2 distortedUV = center + offset * fisheye;
+          // Barrel distortion - EXTREME bulge at center for 3D spherical look
+          float k1 = 0.8; // Radial distortion coefficient
+          float k2 = 0.4; // Quadratic distortion coefficient
+          float r2 = dist * dist;
+          float distortionFactor = 1.0 + k1 * r2 + k2 * r2 * r2;
+
+          // Inward distortion (magnification at center, like looking through a sphere)
+          vec2 distortedUV = center + offset / distortionFactor;
 
           // Sample background with fish-eye distortion
           vec4 background = texture2D(backgroundTexture, distortedUV);
@@ -481,9 +485,9 @@ export class MapBackground {
       this.starfield.rotation.y += 0.000075;
     }
 
-    // Update glass sphere rotation (like black hole)
+    // Update glass sphere rotation (right to left)
     if (this.glassSphere) {
-      this.glassSphere.rotation.z = this.elapsedTime * 0.1;
+      this.glassSphere.rotation.z = -this.elapsedTime * 0.1; // Negative for right-to-left rotation
 
       // Update shader time uniforms for all children
       this.glassSphere.children.forEach(child => {
