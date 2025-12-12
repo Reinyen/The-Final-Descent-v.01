@@ -410,10 +410,6 @@ export class MapController {
    * Setup event listeners
    */
   setupEventListeners() {
-  /**
-   * Setup event listeners
-   */
-  setupEventListeners() {
     // For DOM renderer, we set up callbacks on the renderer
     // The renderer handles node-level events directly
 
@@ -444,7 +440,6 @@ export class MapController {
     this.renderer.onNodeLeave = (nodeData, event) => {
       this.uiOverlay.setHoveredNode(null);
     };
-  }
     // UI overlay enter callback
     this.uiOverlay.onEnterNode = (node) => {
       this.enterNode(node);
