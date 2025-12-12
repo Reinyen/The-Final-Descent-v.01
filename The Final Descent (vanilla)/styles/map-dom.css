@@ -1,0 +1,395 @@
+/**
+ * DOM-based Map UI Styles
+ * Isometric map with CSS transforms, DOM nodes, and connection lines
+ * Based on mockup design
+ */
+
+/* Map Container */
+#map-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(520px, 80vw);
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Map Scene - Isometric Transform */
+#map-scene {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotateX(24deg) rotateZ(-16deg);
+  animation: mapFloat 24s ease-in-out infinite alternate;
+  filter: drop-shadow(0 40px 80px rgba(0, 0, 0, 0.9));
+}
+
+@keyframes mapFloat {
+  0% {
+    transform: rotateX(24deg) rotateZ(-16deg) translateY(0);
+  }
+  50% {
+    transform: rotateX(20deg) rotateZ(-10deg) translateY(3px);
+  }
+  100% {
+    transform: rotateX(26deg) rotateZ(-19deg) translateY(-3px);
+  }
+}
+
+/* Radial Gradient Halo Background */
+#map-halo {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(232, 244, 253, 0.03) 0%,
+    transparent 55%
+  );
+  box-shadow:
+    0 0 80px rgba(199, 146, 255, 0.22),
+    0 0 220px rgba(10, 14, 38, 1);
+  pointer-events: none;
+}
+
+#map-halo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed rgba(232, 244, 253, 0.18);
+  opacity: 0.5;
+  animation: haloPulse 14s linear infinite;
+}
+
+@keyframes haloPulse {
+  0% {
+    transform: scale(0.96);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(0.96);
+    opacity: 0.4;
+  }
+}
+
+/* Nodes Container */
+#nodes-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+
+/* Connection Lines Container */
+#connections-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Individual Node */
+.map-node {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.map-node::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 1px solid rgba(232, 244, 253, 0.4);
+  opacity: 0.8;
+}
+
+.map-node::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: inherit;
+  border: 1px solid rgba(232, 244, 253, 0.12);
+  filter: blur(1px);
+}
+
+.map-node:hover {
+  transform: translate(-50%, -50%) scale(1.1);
+  z-index: 20;
+}
+
+/* Node inner glow/highlight */
+.node-dot {
+  position: absolute;
+  inset: 2px;
+  border-radius: 999px;
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0));
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+/* Node States */
+
+/* Current Node - Bright with pulsing orbit */
+.map-node.state-current {
+  width: 30px;
+  height: 30px;
+  background: radial-gradient(circle at center, #fff, #777);
+  box-shadow:
+    0 0 24px rgba(232, 244, 253, 1),
+    0 0 60px rgba(199, 146, 255, 0.8);
+  animation: currentPulse 2.4s ease-in-out infinite;
+}
+
+.map-node.state-current::before {
+  border-width: 2px;
+}
+
+@keyframes currentPulse {
+  0% {
+    box-shadow:
+      0 0 22px rgba(232, 244, 253, 0.9),
+      0 0 60px rgba(156, 163, 255, 0.7);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(232, 244, 253, 1),
+      0 0 100px rgba(199, 146, 255, 0.9);
+  }
+  100% {
+    box-shadow:
+      0 0 22px rgba(232, 244, 253, 0.9),
+      0 0 60px rgba(156, 163, 255, 0.7);
+  }
+}
+
+/* Current node orbit ring */
+.current-orbit {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px dashed rgba(232, 244, 253, 0.4);
+  transform: translate(-50%, -50%);
+  animation: orbit 6s linear infinite;
+  pointer-events: none;
+  z-index: 9;
+}
+
+@keyframes orbit {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+/* Available Node - Bright with softer glow */
+.map-node.state-available {
+  background: radial-gradient(circle at center, #fff, #777);
+  box-shadow:
+    0 0 20px rgba(232, 244, 253, 0.7),
+    0 0 40px rgba(111, 255, 184, 0.4);
+}
+
+/* Visited/Completed Node - Softer, dimmed */
+.map-node.state-visited {
+  background: radial-gradient(circle at center, #fff, #777);
+  box-shadow:
+    0 0 10px rgba(232, 244, 253, 0.6),
+    0 0 30px rgba(10, 14, 38, 0.6);
+  opacity: 0.9;
+}
+
+/* Locked Node - Dimmed */
+.map-node.state-locked {
+  background: radial-gradient(circle at center, #fff, #777);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Hidden/Unknown Node - Very dim */
+.map-node.state-hidden {
+  background: radial-gradient(circle at center, #777b8f, #555b7a);
+  box-shadow: 0 0 16px rgba(85, 91, 122, 0.8);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* Node Type Overlays (background and glow) */
+
+/* Combat - Red */
+.map-node[data-type="combat"] {
+  background: radial-gradient(circle at center, #ffd0d0, #ff6b6b);
+  box-shadow: 0 0 20px rgba(255, 107, 107, 0.9);
+}
+
+/* Resource - Green */
+.map-node[data-type="resource"] {
+  background: radial-gradient(circle at center, #dbffe8, #6fffb8);
+  box-shadow: 0 0 20px rgba(111, 255, 184, 0.9);
+}
+
+/* Event - Purple */
+.map-node[data-type="event"] {
+  background: radial-gradient(circle at center, #f2dcff, #c792ff);
+  box-shadow: 0 0 20px rgba(199, 146, 255, 0.9);
+}
+
+/* Rest - Blue */
+.map-node[data-type="rest"] {
+  background: radial-gradient(circle at center, #e1f3ff, #7cd0ff);
+  box-shadow: 0 0 20px rgba(124, 208, 255, 0.9);
+}
+
+/* Echo - Purple with glitch */
+.map-node[data-type="echo"] {
+  background: radial-gradient(circle at center, #f0e4ff, #b07cff);
+  box-shadow: 0 0 24px rgba(176, 124, 255, 1);
+  animation: echoGlitch 2.4s infinite;
+}
+
+@keyframes echoGlitch {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    filter: none;
+  }
+  20% {
+    transform: translate(calc(-50% + 1px), calc(-50% - 1px)) scale(1.05);
+    filter: hue-rotate(20deg);
+  }
+  21% {
+    transform: translate(calc(-50% - 1px), calc(-50% + 1px)) scale(0.98);
+    filter: hue-rotate(-10deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    filter: none;
+  }
+}
+
+/* Unknown type */
+.map-node[data-type="unknown"] {
+  background: radial-gradient(circle at center, #777b8f, #555b7a);
+  box-shadow: 0 0 16px rgba(85, 91, 122, 0.8);
+  opacity: 0.65;
+}
+
+/* Connection Lines */
+.connection-line {
+  position: absolute;
+  height: 1.5px;
+  background: linear-gradient(90deg,
+    rgba(232, 244, 253, 0.05) 0%,
+    rgba(232, 244, 253, 0.7) 50%,
+    rgba(232, 244, 253, 0.05) 100%
+  );
+  transform-origin: center center;
+  pointer-events: none;
+  opacity: 0.5;
+  z-index: 1;
+}
+
+/* Animated pulse effect on connection lines */
+.connection-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(232, 244, 253, 0.9),
+    transparent
+  );
+  opacity: 0;
+  transform: translateX(-40%);
+  animation: linkPulse 4s linear infinite;
+}
+
+@keyframes linkPulse {
+  0% {
+    transform: translateX(-40%);
+  }
+  100% {
+    transform: translateX(40%);
+  }
+}
+
+/* Discovered connection - More visible */
+.connection-line.discovered {
+  opacity: 0.8;
+}
+
+/* Visited connection - Bright with glow */
+.connection-line.visited {
+  box-shadow: 0 0 20px rgba(232, 244, 253, 0.5);
+  opacity: 1.0;
+}
+
+/* Available connection - Animated pulse visible */
+.connection-line.available::after {
+  opacity: 1;
+}
+
+/* Special Nodes */
+
+/* Start Node */
+.map-node[data-type="start"] {
+  width: 30px;
+  height: 30px;
+  background: radial-gradient(circle at center, #00ffff, #00aaaa);
+  border: 2px solid rgba(0, 255, 255, 0.6);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+}
+
+/* Exit Node */
+.map-node[data-type="exit"] {
+  width: 30px;
+  height: 30px;
+  background: radial-gradient(circle at center, #ff00ff, #aa00aa);
+  border: 2px solid rgba(255, 0, 255, 0.6);
+  box-shadow:
+    0 0 10px rgba(255, 0, 255, 0.6),
+    0 0 20px rgba(255, 0, 255, 0.3);
+  animation: exitPulse 3s ease-in-out infinite;
+}
+
+@keyframes exitPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 10px rgba(255, 0, 255, 0.6),
+      0 0 20px rgba(255, 0, 255, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 15px rgba(255, 0, 255, 0.9),
+      0 0 30px rgba(255, 0, 255, 0.5);
+  }
+}
+
+/* Priority fix for type-based styling over state */
+.map-node[data-type="combat"].state-current,
+.map-node[data-type="resource"].state-current,
+.map-node[data-type="event"].state-current,
+.map-node[data-type="rest"].state-current,
+.map-node[data-type="echo"].state-current {
+  width: 30px;
+  height: 30px;
+  animation: currentPulse 2.4s ease-in-out infinite;
+}

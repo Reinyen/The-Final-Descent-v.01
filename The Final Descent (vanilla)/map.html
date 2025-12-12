@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Neural Network Map - The Final Descent</title>
 
+  <!-- DOM Map Styles -->
+  <link rel="stylesheet" href="styles/map-dom.css">
+
   <style>
     * {
       margin: 0;
@@ -21,8 +24,8 @@
       color: #ffffff;
     }
 
-    /* Canvas layers */
-    #canvas-renderer,
+    /* Canvas layers and map container */
+    #map-renderer,
     #canvas-overlay,
     #canvas-info-band {
       position: fixed;
@@ -33,8 +36,9 @@
       display: block;
     }
 
-    #canvas-renderer {
+    #map-renderer {
       z-index: 1;
+      pointer-events: none;
     }
 
     #canvas-overlay {
@@ -207,8 +211,8 @@
   </style>
 </head>
 <body>
-  <!-- Canvases -->
-  <canvas id="canvas-renderer"></canvas>
+  <!-- Map container and canvases -->
+  <div id="map-renderer"></div>
   <canvas id="canvas-overlay"></canvas>
   <canvas id="canvas-info-band"></canvas>
 
@@ -243,23 +247,13 @@
     <div id="debug-text">Debug info will appear here</div>
   </div>
 
-  <!-- Three.js Import Map -->
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
-      }
-    }
-  </script>
-
   <!-- Main Application -->
   <script type="module">
     import { MapController } from './scripts/map/map-controller.js';
     import { MapConfig } from './data/map-config.js';
 
     // DOM elements
-    const canvasRenderer = document.getElementById('canvas-renderer');
+    const mapRenderer = document.getElementById('map-renderer');
     const canvasOverlay = document.getElementById('canvas-overlay');
     const canvasInfoBand = document.getElementById('canvas-info-band');
     const loadingScreen = document.getElementById('loading-screen');
@@ -279,7 +273,7 @@
       console.log('[Main] Initializing map system...');
 
       // Create controller
-      mapController = new MapController(canvasRenderer, canvasOverlay, canvasInfoBand);
+      mapController = new MapController(mapRenderer, canvasOverlay, canvasInfoBand);
 
       // Set up callbacks
       mapController.onNodeEnter = handleNodeEnter;
@@ -297,8 +291,7 @@
         loadingScreen.classList.add('hidden');
       }, 1000);
 
-      // Start animation loop
-      mapController.animate();
+      // Note: DOM renderer uses CSS animations, no animation loop needed
 
       console.log('[Main] Map system initialized');
     }

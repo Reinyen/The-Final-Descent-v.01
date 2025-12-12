@@ -81,22 +81,32 @@ export class NeuralNetworkGenerator {
 
   /**
    * Create nodes distributed in circular/spiral ring layout
+   * Now outputs 2D percentage-based coordinates for DOM rendering
    * Start at outer edge, exit at center (descending into the black hole)
    */
   createNodes() {
     const count = this.ringConfig.nodeCount;
-    const outerRadius = MapConfig.visual.networkRadius;
-    const innerRadius = MapConfig.visual.networkRadius * 0.2;
+
+    // Work in percentage space (0-100%)
+    const centerX = 50; // Center of container
+    const centerY = 50; // Center of container
+    const outerRadiusPercent = 35; // 35% from center
+    const innerRadiusPercent = 8;  // 8% from center
 
     // First node: Start (at outer edge, top position)
     const startAngle = -Math.PI / 2; // Top of circle
+    const startX = centerX + outerRadiusPercent * Math.cos(startAngle);
+    const startY = centerY + outerRadiusPercent * Math.sin(startAngle);
+
     this.nodes.push({
       id: 'node_0',
       position: {
-        x: outerRadius * Math.cos(startAngle),
-        y: 0,
-        z: outerRadius * Math.sin(startAngle)
+        x: startX,
+        y: startY,
+        z: 0
       },
+      displayX: startX,
+      displayY: startY,
       type: NodeTypes.START,
       state: NodeStates.CURRENT,
       connections: [],
@@ -114,24 +124,25 @@ export class NeuralNetworkGenerator {
       const isExit = i === count - 1;
 
       // Spiral: radius decreases as we progress, angle increases
-      const radius = outerRadius - (outerRadius - innerRadius) * progress;
+      const radiusPercent = outerRadiusPercent - (outerRadiusPercent - innerRadiusPercent) * progress;
 
       // Add spiral rotation + some randomness
       const baseAngle = startAngle + (spiralTurns * 2 * Math.PI * progress);
       const angleVariation = this.random.range(-0.3, 0.3);
       const angle = baseAngle + angleVariation;
 
-      // Radius variation for organic feel
-      const radiusVariation = this.random.range(-1.5, 1.5);
-      const finalRadius = radius + radiusVariation;
+      // Radius variation for organic feel (in percentage)
+      const radiusVariation = this.random.range(-3, 3);
+      const finalRadius = radiusPercent + radiusVariation;
 
-      // Slight y-axis variation for depth
-      const y = this.random.range(-0.5, 0.5);
+      // Calculate 2D position in percentage space
+      const x = centerX + finalRadius * Math.cos(angle);
+      const y = centerY + finalRadius * Math.sin(angle);
 
       const position = {
-        x: finalRadius * Math.cos(angle),
+        x: x,
         y: y,
-        z: finalRadius * Math.sin(angle)
+        z: 0
       };
 
       // Layer based on progress (for pathfinding)
@@ -140,6 +151,8 @@ export class NeuralNetworkGenerator {
       this.nodes.push({
         id: `node_${nodeIndex}`,
         position: position,
+        displayX: x,
+        displayY: y,
         type: isExit ? NodeTypes.EXIT : null, // Assigned later
         state: NodeStates.HIDDEN,
         connections: [],
@@ -151,18 +164,18 @@ export class NeuralNetworkGenerator {
       nodeIndex++;
     }
 
-    console.log('[NetworkGen] Created ring layout with', this.nodes.length, 'nodes');
+    console.log('[NetworkGen] Created ring layout with', this.nodes.length, 'nodes (2D percentage-based)');
   }
 
   /**
    * Check if position is valid (minimum distance from other nodes)
+   * Now works with 2D percentage coordinates
    */
   isValidPosition(position, minDist) {
     for (const node of this.nodes) {
       const dx = position.x - node.position.x;
       const dy = position.y - node.position.y;
-      const dz = position.z - node.position.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist < minDist) {
         return false;
@@ -352,7 +365,9 @@ export class NeuralNetworkGenerator {
       nodes: [
         {
           id: 'node_final',
-          position: { x: 0, y: 0, z: 0 },
+          position: { x: 50, y: 50, z: 0 },
+          displayX: 50,
+          displayY: 50,
           type: NodeTypes.COMBAT,
           state: NodeStates.CURRENT,
           connections: [],
@@ -397,12 +412,11 @@ export class NeuralNetworkGenerator {
   }
 
   /**
-   * Helper: Get distance between two positions
+   * Helper: Get distance between two positions (2D)
    */
   getDistance(pos1, pos2) {
     const dx = pos1.x - pos2.x;
     const dy = pos1.y - pos2.y;
-    const dz = pos1.z - pos2.z;
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    return Math.sqrt(dx * dx + dy * dy);
   }
 }
