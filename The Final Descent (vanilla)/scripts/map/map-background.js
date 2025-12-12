@@ -485,9 +485,12 @@ export class MapBackground {
       this.starfield.rotation.y += 0.000075;
     }
 
-    // Update glass sphere rotation (right to left)
+    // Update glass sphere rotation (planetary rotation with tilted axis)
     if (this.glassSphere) {
-      this.glassSphere.rotation.z = -this.elapsedTime * 0.1; // Negative for right-to-left rotation
+      // Tilt the rotation axis from top-right to bottom-left (45-degree diagonal)
+      this.glassSphere.rotation.z = Math.PI / 4; // Static tilt for diagonal axis
+      // Rotate on Y-axis like a planet spinning
+      this.glassSphere.rotation.y = this.elapsedTime * 0.1;
 
       // Update shader time uniforms for all children
       this.glassSphere.children.forEach(child => {
