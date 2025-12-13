@@ -164,9 +164,9 @@ export class IntroScene {
   }
 
   updateBlackHole(phase, elapsedTime) {
-    // Fade in black hole starting at 2.4s (during explosion collapse)
-    const fadeStartTime = 2.4;
-    const fadeDuration = 0.8;
+    // Fade in black hole starting at 2.0s (during singularity phase)
+    const fadeStartTime = 2.0;
+    const fadeDuration = 0.5;
     const fadeEndTime = fadeStartTime + fadeDuration;
 
     if (elapsedTime >= fadeStartTime) {
