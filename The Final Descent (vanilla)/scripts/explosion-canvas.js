@@ -269,12 +269,9 @@ export class ExplosionCanvas {
     const now = performance.now();
     const t = (now - this.startTime) / 1000;
 
-    if (t >= this.DURATION) {
-      this.stop();
-      return;
-    }
-
-    this.render(t, now);
+    // Keep rendering past DURATION to allow seamless fade transition
+    // Scene controller will handle stopping at appropriate time
+    this.render(Math.min(t, this.DURATION), now);
   }
 
   clear() {
