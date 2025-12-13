@@ -150,7 +150,7 @@ export class IntroScene {
 
     // Fade out canvas independently of isActive to ensure seamless transition to black hole
     if (phase.name === 'placeholder_content') {
-      const fadeOutStart = 2.4;
+      const fadeOutStart = 2.0;
       const fadeOutEnd = 3.0;
       if (elapsedTime >= fadeOutStart && elapsedTime <= fadeOutEnd) {
         const t = (elapsedTime - fadeOutStart) / (fadeOutEnd - fadeOutStart);
@@ -178,8 +178,8 @@ export class IntroScene {
 
   updateBlackHole(phase, elapsedTime) {
     // Fade in black hole during particle collapse for seamless transition
-    const fadeStartTime = 2.2;
-    const fadeDuration = 0.8;
+    const fadeStartTime = 1.5;
+    const fadeDuration = 1.5;
     const fadeEndTime = fadeStartTime + fadeDuration;
 
     if (elapsedTime >= fadeStartTime) {
