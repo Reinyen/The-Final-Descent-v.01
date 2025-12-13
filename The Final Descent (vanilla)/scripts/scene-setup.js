@@ -148,10 +148,10 @@ export class IntroScene {
       this.explosionCanvas.update();
     }
 
-    // Fade out canvas independently of isActive to ensure it happens
+    // Fade out canvas independently of isActive to ensure seamless transition to black hole
     if (phase.name === 'placeholder_content') {
-      const fadeOutStart = 2.5;
-      const fadeOutEnd = 2.8;
+      const fadeOutStart = 2.1;
+      const fadeOutEnd = 2.7;
       if (elapsedTime >= fadeOutStart && elapsedTime <= fadeOutEnd) {
         const t = (elapsedTime - fadeOutStart) / (fadeOutEnd - fadeOutStart);
         this.explosionCanvas.canvas.style.opacity = (1 - t).toString();
@@ -177,9 +177,9 @@ export class IntroScene {
   }
 
   updateBlackHole(phase, elapsedTime) {
-    // Fade in black hole well before explosion ends
-    const fadeStartTime = 2.3;
-    const fadeDuration = 0.3;
+    // Fade in black hole during particle collapse for seamless transition
+    const fadeStartTime = 1.8;
+    const fadeDuration = 0.9;
     const fadeEndTime = fadeStartTime + fadeDuration;
 
     if (elapsedTime >= fadeStartTime) {
