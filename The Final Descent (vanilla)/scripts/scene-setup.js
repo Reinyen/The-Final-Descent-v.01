@@ -164,11 +164,11 @@ export class IntroScene {
   }
 
   updateBlackHole(phase, elapsedTime) {
-    // Fade in black hole so it's FULLY VISIBLE when explosion ends at 3.52s
-    const explosionEndTime = 3.52;
+    // Fade in black hole well before explosion ends to account for timing drift
+    // Explosion nominally ends at 3.52s but uses different clock
+    const fadeStartTime = 2.8;
     const fadeDuration = 0.3;
-    const fadeStartTime = explosionEndTime - fadeDuration;
-    const fadeEndTime = explosionEndTime;
+    const fadeEndTime = fadeStartTime + fadeDuration;
 
     if (elapsedTime >= fadeStartTime) {
       this.blackHole.getGroup().visible = true;
