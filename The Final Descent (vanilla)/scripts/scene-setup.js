@@ -164,10 +164,11 @@ export class IntroScene {
   }
 
   updateBlackHole(phase, elapsedTime) {
-    // Fade in black hole starting at 2.0s (during singularity phase)
-    const fadeStartTime = 2.0;
-    const fadeDuration = 0.5;
-    const fadeEndTime = fadeStartTime + fadeDuration;
+    // Fade in black hole so it's FULLY VISIBLE when explosion ends at 3.52s
+    const explosionEndTime = 3.52;
+    const fadeDuration = 0.3;
+    const fadeStartTime = explosionEndTime - fadeDuration;
+    const fadeEndTime = explosionEndTime;
 
     if (elapsedTime >= fadeStartTime) {
       this.blackHole.getGroup().visible = true;
