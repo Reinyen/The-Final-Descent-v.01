@@ -146,10 +146,12 @@ export class IntroScene {
     // Update explosion during placeholder_content phase
     if (phase.name === 'placeholder_content' && this.explosionCanvas.isActive) {
       this.explosionCanvas.update();
+    }
 
-      // Fade out canvas before explosion ends so black hole shows through
-      const fadeOutStart = 3.0;
-      const fadeOutEnd = 3.3;
+    // Fade out canvas independently of isActive to ensure it happens
+    if (phase.name === 'placeholder_content') {
+      const fadeOutStart = 2.5;
+      const fadeOutEnd = 2.8;
       if (elapsedTime >= fadeOutStart && elapsedTime <= fadeOutEnd) {
         const t = (elapsedTime - fadeOutStart) / (fadeOutEnd - fadeOutStart);
         this.explosionCanvas.canvas.style.opacity = (1 - t).toString();
@@ -175,9 +177,8 @@ export class IntroScene {
   }
 
   updateBlackHole(phase, elapsedTime) {
-    // Fade in black hole well before explosion ends to account for timing drift
-    // Explosion nominally ends at 3.52s but uses different clock
-    const fadeStartTime = 2.8;
+    // Fade in black hole well before explosion ends
+    const fadeStartTime = 2.3;
     const fadeDuration = 0.3;
     const fadeEndTime = fadeStartTime + fadeDuration;
 
