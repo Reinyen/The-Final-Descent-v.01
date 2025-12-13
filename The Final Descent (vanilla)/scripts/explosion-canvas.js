@@ -278,11 +278,11 @@ export class ExplosionCanvas {
     this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   }
 
-  drawStarCore(cx, cy, coreR, haloR, glow) {
+  drawStarCore(cx, cy, coreR, haloR, glow, alphaMultiplier = 1.0) {
     const g = this.ctx.createRadialGradient(cx, cy, 0, cx, cy, this.safeR(haloR));
-    g.addColorStop(0.00, `rgba(255,255,255,${0.95 * glow})`);
-    g.addColorStop(0.18, `rgba(255,255,255,${0.55 * glow})`);
-    g.addColorStop(0.45, `rgba(240,250,255,${0.18 * glow})`);
+    g.addColorStop(0.00, `rgba(255,255,255,${0.95 * glow * alphaMultiplier})`);
+    g.addColorStop(0.18, `rgba(255,255,255,${0.55 * glow * alphaMultiplier})`);
+    g.addColorStop(0.45, `rgba(240,250,255,${0.18 * glow * alphaMultiplier})`);
     g.addColorStop(1.00, 'rgba(0,0,0,0)');
     this.ctx.fillStyle = g;
     this.ctx.beginPath();
@@ -290,8 +290,8 @@ export class ExplosionCanvas {
     this.ctx.fill();
 
     const c = this.ctx.createRadialGradient(cx, cy, 0, cx, cy, this.safeR(coreR));
-    c.addColorStop(0.00, `rgba(255,255,255,${1.00 * glow})`);
-    c.addColorStop(0.55, `rgba(255,255,255,${0.85 * glow})`);
+    c.addColorStop(0.00, `rgba(255,255,255,${1.00 * glow * alphaMultiplier})`);
+    c.addColorStop(0.55, `rgba(255,255,255,${0.85 * glow * alphaMultiplier})`);
     c.addColorStop(1.00, 'rgba(255,255,255,0)');
     this.ctx.fillStyle = c;
     this.ctx.beginPath();
@@ -299,7 +299,7 @@ export class ExplosionCanvas {
     this.ctx.fill();
   }
 
-  drawShockwave(cx, cy, t, now) {
+  drawShockwave(cx, cy, t, now, alphaMultiplier = 1.0) {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const diag = Math.hypot(w, h);
@@ -312,7 +312,7 @@ export class ExplosionCanvas {
     const shell = Math.max(0, this.lerp(22, 320, Math.pow(tt, 1.6)));
     const inner = Math.max(0.0001, outer - shell * this.lerp(0.95, 2.35, engulf));
 
-    const alpha = (1 - tt) * 0.95;
+    const alpha = (1 - tt) * 0.95 * alphaMultiplier;
 
     const seed = this.replayNonce * 0.731 + 12.34;
     const time = now * 0.001;
@@ -434,7 +434,7 @@ export class ExplosionCanvas {
     }
 
     // Engulf flash
-    const flash = Math.pow(this.clamp01((tt - 0.72) / 0.28), 1.2);
+    const flash = Math.pow(this.clamp01((tt - 0.72) / 0.28), 1.2) * alphaMultiplier;
     if (flash > 0) {
       this.ctx.globalCompositeOperation = 'lighter';
       this.ctx.fillStyle = `rgba(255,255,255,${flash * 0.18})`;
@@ -451,7 +451,7 @@ export class ExplosionCanvas {
     this.ctx.restore();
   }
 
-  drawFireSmokeSphere(cx, cy, phaseExpand, phaseCollapse, now) {
+  drawFireSmokeSphere(cx, cy, phaseExpand, phaseCollapse, now, alphaMultiplier = 1.0) {
     this.initSprites();
 
     const maxR = Math.min(window.innerWidth, window.innerHeight) * 0.30 * 1.33;
@@ -653,7 +653,7 @@ export class ExplosionCanvas {
     this.ctx.restore();
   }
 
-  drawInfallStreaks(cx, cy, phase) {
+  drawInfallStreaks(cx, cy, phase, alphaMultiplier = 1.0) {
     const n = 120;
     const maxR = Math.min(window.innerWidth, window.innerHeight) * 0.42;
     const t = this.clamp01(phase);
@@ -672,7 +672,7 @@ export class ExplosionCanvas {
       const x2 = cx + Math.cos(a) * r2;
       const y2 = cy + Math.sin(a) * r2;
 
-      const aLine = 0.08 * (1 - t) + 0.12 * t;
+      const aLine = (0.08 * (1 - t) + 0.12 * t) * alphaMultiplier;
       this.ctx.strokeStyle = `rgba(255,255,255,${aLine * (0.25 + 0.75 * Math.random())})`;
       this.ctx.lineWidth = 1.2 + 1.8 * (1 - t) * Math.random();
       this.ctx.beginPath();
@@ -684,7 +684,7 @@ export class ExplosionCanvas {
     this.ctx.restore();
   }
 
-  drawEnergyBall(cx, cy, phase, now) {
+  drawEnergyBall(cx, cy, phase, now, alphaMultiplier = 1.0) {
     const t = this.clamp01(phase);
     if (t <= 0) return;
 
@@ -831,7 +831,7 @@ export class ExplosionCanvas {
     }
   }
 
-  drawSingularity(cx, cy, phase, now) {
+  drawSingularity(cx, cy, phase, now, alphaMultiplier = 1.0) {
     const t = this.clamp01(phase);
     const r = Math.max(0.0001, this.lerp(7, 1.2, this.easeInCubic(t)));
     const halo = Math.max(0.0001, this.lerp(52, 14, this.easeInExpo(t)));
@@ -849,7 +849,7 @@ export class ExplosionCanvas {
     this.ctx.restore();
   }
 
-  drawPulseRings(cx, cy, tNorm, now) {
+  drawPulseRings(cx, cy, tNorm, now, alphaMultiplier = 1.0) {
     const count = 5;
     const spacing = 1 / count;
     for (let i = 0; i < count; i++) {
@@ -857,16 +857,16 @@ export class ExplosionCanvas {
       const end = start + spacing * 1.05;
       const tt = (tNorm - start) / (end - start);
       if (tt <= 0 || tt >= 1) continue;
-      this.drawShockwave(cx, cy, this.clamp01(tt), now);
+      this.drawShockwave(cx, cy, this.clamp01(tt), now, alphaMultiplier);
     }
   }
 
-  vignette() {
+  vignette(alphaMultiplier = 1.0) {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const g = this.ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.1, w / 2, h / 2, Math.max(w, h) * 0.7);
     g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(0,0,0,0.65)');
+    g.addColorStop(1, `rgba(0,0,0,${0.65 * alphaMultiplier})`);
     this.ctx.fillStyle = g;
     this.ctx.fillRect(0, 0, w, h);
   }
@@ -883,14 +883,30 @@ export class ExplosionCanvas {
     const post = this.clamp01((this.T_RINGS_END + 0.5 - t) / 0.35);
     const baseGlow = this.clamp01(pre) * this.clamp01(post);
 
+    // Calculate global alpha multiplier for fade-out to reveal black hole
+    // Start fading during collapse phase (T_EXPAND=0.92s) and complete by end
+    const fadeStartTime = this.T_EXPAND; // 0.92s - start of collapse
+    const fadeDuration = this.T_RINGS_END - fadeStartTime; // ~1.6s fade duration
+    let globalAlpha = 1.0;
+
+    if (t >= fadeStartTime) {
+      const fadeT = this.clamp01((t - fadeStartTime) / fadeDuration);
+      // Ease out cubic for smooth fade
+      const easedFade = 1 - Math.pow(fadeT, 1.5);
+      globalAlpha = easedFade;
+    }
+
+    // Apply global alpha to canvas context for all subsequent draws
+    this.ctx.globalAlpha = globalAlpha;
+
     // Initial shockwave
     if (t >= 0 && t < this.T_SHOCK) {
       const tt = t / this.T_SHOCK;
       const shake = (1 - tt) * 6.0;
       const ox = Math.sin(now * 0.090) * shake * 0.35;
       const oy = Math.cos(now * 0.075) * shake * 0.35;
-      this.drawStarCore(cx + ox, cy + oy, 4.4, 68, 1.0 * baseGlow);
-      this.drawShockwave(cx + ox, cy + oy, tt, now);
+      this.drawStarCore(cx + ox, cy + oy, 4.4, 68, 1.0 * baseGlow, globalAlpha);
+      this.drawShockwave(cx + ox, cy + oy, tt, now, globalAlpha);
     }
 
     // Expansion
@@ -901,40 +917,43 @@ export class ExplosionCanvas {
     // Fire/smoke sphere
     if (t < this.T_SINGULAR) {
       const coreGlow = this.lerp(1.0, 0.55, this.clamp01(expandPhase)) * (1 - 0.35 * this.clamp01(collapsePhase));
-      this.drawStarCore(cx, cy, 3.6, 52, coreGlow * baseGlow);
-      this.drawFireSmokeSphere(cx, cy, expandPhase, collapsePhase, now);
+      this.drawStarCore(cx, cy, 3.6, 52, coreGlow * baseGlow, globalAlpha);
+      this.drawFireSmokeSphere(cx, cy, expandPhase, collapsePhase, now, globalAlpha);
     }
 
     // Infall streaks
     if (t >= this.T_EXPAND && t < this.T_SINGULAR) {
-      this.drawInfallStreaks(cx, cy, this.clamp01((t - this.T_EXPAND) / (this.T_SINGULAR - this.T_EXPAND)));
+      this.drawInfallStreaks(cx, cy, this.clamp01((t - this.T_EXPAND) / (this.T_SINGULAR - this.T_EXPAND)), globalAlpha);
     }
 
     // Singularity
     if (t >= this.T_COLLAPSE) {
-      this.drawSingularity(cx, cy, singularPhase, now);
+      this.drawSingularity(cx, cy, singularPhase, now, globalAlpha);
     }
 
     // Energy knot
     const energyStart = this.T_SINGULAR - 0.25;
     if (t >= energyStart && t < this.T_RINGS_START) {
       const ep = this.clamp01((t - energyStart) / (this.T_RINGS_START - energyStart));
-      this.drawEnergyBall(cx, cy, ep, now);
+      this.drawEnergyBall(cx, cy, ep, now, globalAlpha);
     }
 
     // Final 5 shockwaves
     if (t >= this.T_RINGS_START && t <= this.T_RINGS_END) {
       const tn = this.clamp01((t - this.T_RINGS_START) / (this.T_RINGS_END - this.T_RINGS_START));
-      this.drawPulseRings(cx, cy, tn, now);
+      this.drawPulseRings(cx, cy, tn, now, globalAlpha);
     }
 
     // Afterglow
     if (t > this.T_RINGS_END) {
       const quiet = this.clamp01((t - this.T_RINGS_END) / 0.6);
-      this.drawStarCore(cx, cy, 1.6, this.lerp(22, 10, quiet), this.lerp(0.9, 0.35, quiet));
+      this.drawStarCore(cx, cy, 1.6, this.lerp(22, 10, quiet), this.lerp(0.9, 0.35, quiet), globalAlpha);
     }
 
-    this.vignette();
+    this.vignette(globalAlpha);
+
+    // Reset global alpha
+    this.ctx.globalAlpha = 1.0;
   }
 
   destroy() {
