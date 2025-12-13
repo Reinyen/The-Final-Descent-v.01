@@ -45,9 +45,11 @@ export class ExplosionCanvas {
       height: 100%;
       pointer-events: none;
       z-index: 2;
+      opacity: 1;
+      transition: opacity 0.3s ease-out;
     `;
 
-    this.ctx = this.canvas.getContext('2d', { alpha: false });
+    this.ctx = this.canvas.getContext('2d', { alpha: true });
     if (!this.ctx) {
       console.error('[ExplosionCanvas] Could not get 2D context');
       return;
@@ -276,8 +278,7 @@ export class ExplosionCanvas {
   }
 
   clear() {
-    this.ctx.fillStyle = '#000';
-    this.ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   }
 
   drawStarCore(cx, cy, coreR, haloR, glow) {
