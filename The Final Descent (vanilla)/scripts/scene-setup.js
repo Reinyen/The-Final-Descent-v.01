@@ -164,9 +164,52 @@ export class IntroScene {
   }
 
   updateBlackHole(phase, elapsedTime) {
-    // Show black hole after placeholder content completes
-    if (phase.name === 'ui_reveal' || phase.name === 'complete') {
+    // Fade in black hole starting at 2.4s (during explosion collapse)
+    const fadeStartTime = 2.4;
+    const fadeDuration = 0.8;
+    const fadeEndTime = fadeStartTime + fadeDuration;
+
+    if (elapsedTime >= fadeStartTime) {
       this.blackHole.getGroup().visible = true;
+
+      if (elapsedTime < fadeEndTime) {
+        // Fading in
+        const t = (elapsedTime - fadeStartTime) / fadeDuration;
+        const easedT = t * t * (3 - 2 * t); // Smoothstep easing
+
+        // Scale from 0 to 1
+        const scale = easedT;
+        this.blackHole.getGroup().scale.set(scale, scale, scale);
+
+        // Fade materials
+        if (this.blackHole.eventHorizonMaterial) {
+          this.blackHole.eventHorizonMaterial.opacity = 0.95 * easedT;
+        }
+        if (this.blackHole.innerCoreMaterial) {
+          this.blackHole.innerCoreMaterial.opacity = easedT;
+        }
+        if (this.blackHole.accretionDiskMaterial) {
+          this.blackHole.accretionDiskMaterial.opacity = easedT;
+        }
+        if (this.blackHole.outerGlowMaterial) {
+          this.blackHole.outerGlowMaterial.opacity = easedT;
+        }
+      } else {
+        // Fully visible
+        this.blackHole.getGroup().scale.set(1, 1, 1);
+        if (this.blackHole.eventHorizonMaterial) {
+          this.blackHole.eventHorizonMaterial.opacity = 0.95;
+        }
+        if (this.blackHole.innerCoreMaterial) {
+          this.blackHole.innerCoreMaterial.opacity = 1.0;
+        }
+        if (this.blackHole.accretionDiskMaterial) {
+          this.blackHole.accretionDiskMaterial.opacity = 1.0;
+        }
+        if (this.blackHole.outerGlowMaterial) {
+          this.blackHole.outerGlowMaterial.opacity = 1.0;
+        }
+      }
     } else {
       this.blackHole.getGroup().visible = false;
     }
