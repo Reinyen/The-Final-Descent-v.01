@@ -146,11 +146,22 @@ export class IntroScene {
     // Update explosion during placeholder_content phase
     if (phase.name === 'placeholder_content' && this.explosionCanvas.isActive) {
       this.explosionCanvas.update();
+
+      // Fade out canvas before explosion ends so black hole shows through
+      const fadeOutStart = 3.0;
+      const fadeOutEnd = 3.3;
+      if (elapsedTime >= fadeOutStart && elapsedTime <= fadeOutEnd) {
+        const t = (elapsedTime - fadeOutStart) / (fadeOutEnd - fadeOutStart);
+        this.explosionCanvas.canvas.style.opacity = (1 - t).toString();
+      } else if (elapsedTime > fadeOutEnd) {
+        this.explosionCanvas.canvas.style.opacity = '0';
+      }
     }
 
     // Stop explosion when transitioning to ui_reveal
     if (phase.name === 'ui_reveal' && this.explosionStarted) {
       this.explosionCanvas.stop();
+      this.explosionCanvas.canvas.style.opacity = '1'; // Reset for next time
     }
   }
 
